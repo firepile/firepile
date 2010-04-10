@@ -13,10 +13,27 @@ object SimpleCL extends JavaCL {
     sclps.toList
 
   }
-  def listGPUPoweredPlatforms: List[CLPlatform] = JavaCL.listGPUPoweredPlatforms.toList
+
+  def listGPUPoweredPlatforms: List[SCLPlatform] = {
+    val clps = JavaCL.listGPUPoweredPlatforms
+    val sclps = new ListBuffer[SCLPlatform]
+
+    clps.foreach((clp: CLPlatform) => sclps += new SCLPlatform(clp))
+
+    sclps.toList
+
+  }
 
 
-  def getBestDevice: CLDevice = JavaCL.getBestDevice
-  def createContext(contextProperties: java.util.Map[CLPlatform.ContextProperties,Number], devices: CLDevice*): CLContext = JavaCL.createContext(contextProperties, devices:_*)
-    def unloadCompiler = JavaCL.unloadCompiler
+  def getBestDevice: SCLDevice = new SCLDevice(JavaCL.getBestDevice)
+  
+  def createContext(contextProperties: java.util.Map[CLPlatform.ContextProperties,Number], devices: SCLDevice*): SCLContext = { 
+    val sclds = new ListBuffer[CLDevice]
+
+    devices.foreach((cld: SCLDevice) => sclds += cld._CLDevice)
+    
+    new SCLContext(JavaCL.createContext(contextProperties, sclds.toArray:_*))
+  }
+
+  def unloadCompiler = JavaCL.unloadCompiler
 }
