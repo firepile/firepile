@@ -16,6 +16,11 @@ object Buffer {
       implicitly[ClassManifest[T]] match {
         case m if m == Manifest.Byte => fromNIOBuffer(ByteBuf.allocate(n)).asInstanceOf[Buffer[T]]
         case m if m == Manifest.Char => fromNIOBuffer(CharBuf.allocate(n)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Float => fromNIOBuffer(FloatBuf.allocate(n)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Short => fromNIOBuffer(ShortBuf.allocate(n)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Int => fromNIOBuffer(IntBuf.allocate(n)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Long => fromNIOBuffer(LongBuf.allocate(n)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Double => fromNIOBuffer(DoubleBuf.allocate(n)).asInstanceOf[Buffer[T]]
         case _ => throw new MatchError
       }
   }
@@ -41,6 +46,12 @@ object Buffer {
             case xs : IndexedSeq[_] => fromNIOBuffer(CharBuf.wrap(seqToCharSequence(xs.asInstanceOf[IndexedSeq[Char]]))).asInstanceOf[Buffer[T]]
             case xs => fromSeq(xs.asInstanceOf[Seq[Char]], CharBuf.allocate(_), _.asInstanceOf[CharBuf].put(_: Char)).asInstanceOf[Buffer[T]]
         }
+        case m if m == Manifest.Float => fromSeq(xs.asInstanceOf[Seq[Float]], FloatBuf.allocate(_), _.asInstanceOf[FloatBuf].put(_: Float)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Short => fromSeq(xs.asInstanceOf[Seq[Short]], ShortBuf.allocate(_), _.asInstanceOf[ShortBuf].put(_: Short)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Int => fromSeq(xs.asInstanceOf[Seq[Int]], IntBuf.allocate(_), _.asInstanceOf[IntBuf].put(_: Int)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Long => fromSeq(xs.asInstanceOf[Seq[Long]], LongBuf.allocate(_), _.asInstanceOf[LongBuf].put(_: Long)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Double => fromSeq(xs.asInstanceOf[Seq[Double]], DoubleBuf.allocate(_), _.asInstanceOf[DoubleBuf].put(_: Double)).asInstanceOf[Buffer[T]]
+
         case _ => throw new MatchError
       }
   }
@@ -49,15 +60,20 @@ object Buffer {
 
   def fromNIOBuffer(b: ByteBuf): Buffer[Byte] = new WrappedByteBuffer(b)
   def fromNIOBuffer(b: CharBuf): Buffer[Char] = new WrappedCharBuffer(b)
+  def fromNIOBuffer(b: FloatBuf): Buffer[Float] = new WrappedFloatBuffer(b)
+  def fromNIOBuffer(b: ShortBuf): Buffer[Short] = new WrappedShortBuffer(b)
+  def fromNIOBuffer(b: IntBuf): Buffer[Int] = new WrappedIntBuffer(b)
+  def fromNIOBuffer(b: LongBuf): Buffer[Long] = new WrappedLongBuffer(b)
+  def fromNIOBuffer(b: DoubleBuf): Buffer[Double] = new WrappedDoubleBuffer(b)
 
   def fromNIOBuffer[T: ClassManifest](b: Buf): Buffer[T] = b match {
     case b : ByteBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
     case b : CharBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
-    // case b : ShortBuf => new WrappedShortBuffer(b)
-    // case b : IntBuf => new WrappedIntBuffer(b)
-    // case b : LongBuf => new WrappedLongBuffer(b)
-    // case b : FloatBuf => new WrappedFloatBuffer(b)
-    // case b : DoubleBuf => new WrappedDoubleBuffer(b)
+    case b : FloatBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
+    case b : ShortBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
+    case b : IntBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
+    case b : LongBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
+    case b : DoubleBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
     case _ => throw new MatchError
   }
 
@@ -141,6 +157,177 @@ object Buffer {
 
       override def unwrap: CharBuf = buf
   }
+
+  class WrappedFloatBuffer(buf: FloatBuf) extends WrappedBuffer[Float, FloatBuf](buf)
+  {
+      def wrap(otherBuf: FloatBuf) = new WrappedFloatBuffer(otherBuf)
+
+      def asArray: Array[Float] = buf.array
+      def arrayOffset: Int = buf.arrayOffset
+
+      def asBuffer[U: ClassManifest]: Buffer[U] = throw new RuntimeException("unimplemented")
+
+      def asReadOnlyBuffer = wrap(buf.asReadOnlyBuffer)
+      def compact = wrap(buf.compact)
+      def duplicate = wrap(buf.duplicate)
+
+      def get: Float = buf.get
+      def get(dst: Array[Float]) = wrap(buf.get(dst))
+      def get(dst: Array[Float], offset: Int, length: Int) = wrap(buf.get(dst, offset, length))
+      def get(index: Int) = buf.get(index)
+
+      def hasArray = buf.hasArray
+      def isDirect = buf.isDirect
+      def order: java.nio.ByteOrder = buf.order
+      def put(b: Float) = wrap(buf.put(b))
+      def putArray(src: Array[Float]) = wrap(buf.put(src))
+      def putArray(src: Array[Float], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
+
+      def slice = wrap(buf.slice)
+
+      // compareTo
+      // equals
+      // hashCode
+
+      override def unwrap: FloatBuf = buf
+  }
+
+  class WrappedShortBuffer(buf: ShortBuf) extends WrappedBuffer[Short, ShortBuf](buf)
+  {
+      def wrap(otherBuf: ShortBuf) = new WrappedShortBuffer(otherBuf)
+
+      def asArray: Array[Short] = buf.array
+      def arrayOffset: Int = buf.arrayOffset
+
+      def asBuffer[U: ClassManifest]: Buffer[U] = throw new RuntimeException("unimplemented")
+
+      def asReadOnlyBuffer = wrap(buf.asReadOnlyBuffer)
+      def compact = wrap(buf.compact)
+      def duplicate = wrap(buf.duplicate)
+
+      def get: Short = buf.get
+      def get(dst: Array[Short]) = wrap(buf.get(dst))
+      def get(dst: Array[Short], offset: Int, length: Int) = wrap(buf.get(dst, offset, length))
+      def get(index: Int) = buf.get(index)
+
+      def hasArray = buf.hasArray
+      def isDirect = buf.isDirect
+      def order: java.nio.ByteOrder = buf.order
+      def put(b: Short) = wrap(buf.put(b))
+      def putArray(src: Array[Short]) = wrap(buf.put(src))
+      def putArray(src: Array[Short], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
+
+      def slice = wrap(buf.slice)
+
+      // compareTo
+      // equals
+      // hashCode
+
+      override def unwrap: ShortBuf = buf
+  }
+
+  class WrappedIntBuffer(buf: IntBuf) extends WrappedBuffer[Int, IntBuf](buf)
+  {
+      def wrap(otherBuf: IntBuf) = new WrappedIntBuffer(otherBuf)
+
+      def asArray: Array[Int] = buf.array
+      def arrayOffset: Int = buf.arrayOffset
+
+      def asBuffer[U: ClassManifest]: Buffer[U] = throw new RuntimeException("unimplemented")
+
+      def asReadOnlyBuffer = wrap(buf.asReadOnlyBuffer)
+      def compact = wrap(buf.compact)
+      def duplicate = wrap(buf.duplicate)
+
+      def get: Int = buf.get
+      def get(dst: Array[Int]) = wrap(buf.get(dst))
+      def get(dst: Array[Int], offset: Int, length: Int) = wrap(buf.get(dst, offset, length))
+      def get(index: Int) = buf.get(index)
+
+      def hasArray = buf.hasArray
+      def isDirect = buf.isDirect
+      def order: java.nio.ByteOrder = buf.order
+      def put(b: Int) = wrap(buf.put(b))
+      def putArray(src: Array[Int]) = wrap(buf.put(src))
+      def putArray(src: Array[Int], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
+
+      def slice = wrap(buf.slice)
+
+      // compareTo
+      // equals
+      // hashCode
+
+      override def unwrap: IntBuf = buf
+  }
+
+  class WrappedLongBuffer(buf: LongBuf) extends WrappedBuffer[Long, LongBuf](buf)
+  {
+      def wrap(otherBuf: LongBuf) = new WrappedLongBuffer(otherBuf)
+
+      def asArray: Array[Long] = buf.array
+      def arrayOffset: Int = buf.arrayOffset
+
+      def asBuffer[U: ClassManifest]: Buffer[U] = throw new RuntimeException("unimplemented")
+
+      def asReadOnlyBuffer = wrap(buf.asReadOnlyBuffer)
+      def compact = wrap(buf.compact)
+      def duplicate = wrap(buf.duplicate)
+
+      def get: Long = buf.get
+      def get(dst: Array[Long]) = wrap(buf.get(dst))
+      def get(dst: Array[Long], offset: Int, length: Int) = wrap(buf.get(dst, offset, length))
+      def get(index: Int) = buf.get(index)
+
+      def hasArray = buf.hasArray
+      def isDirect = buf.isDirect
+      def order: java.nio.ByteOrder = buf.order
+      def put(b: Long) = wrap(buf.put(b))
+      def putArray(src: Array[Long]) = wrap(buf.put(src))
+      def putArray(src: Array[Long], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
+
+      def slice = wrap(buf.slice)
+
+      // compareTo
+      // equals
+      // hashCode
+
+      override def unwrap: LongBuf = buf
+  }
+
+  class WrappedDoubleBuffer(buf: DoubleBuf) extends WrappedBuffer[Double, DoubleBuf](buf)
+  {
+      def wrap(otherBuf: DoubleBuf) = new WrappedDoubleBuffer(otherBuf)
+
+      def asArray: Array[Double] = buf.array
+      def arrayOffset: Int = buf.arrayOffset
+
+      def asBuffer[U: ClassManifest]: Buffer[U] = throw new RuntimeException("unimplemented")
+
+      def asReadOnlyBuffer = wrap(buf.asReadOnlyBuffer)
+      def compact = wrap(buf.compact)
+      def duplicate = wrap(buf.duplicate)
+
+      def get: Double = buf.get
+      def get(dst: Array[Double]) = wrap(buf.get(dst))
+      def get(dst: Array[Double], offset: Int, length: Int) = wrap(buf.get(dst, offset, length))
+      def get(index: Int) = buf.get(index)
+
+      def hasArray = buf.hasArray
+      def isDirect = buf.isDirect
+      def order: java.nio.ByteOrder = buf.order
+      def put(b: Double) = wrap(buf.put(b))
+      def putArray(src: Array[Double]) = wrap(buf.put(src))
+      def putArray(src: Array[Double], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
+
+      def slice = wrap(buf.slice)
+
+      // compareTo
+      // equals
+      // hashCode
+
+      override def unwrap: DoubleBuf = buf
+  }
+
 }
 
 abstract class Buffer[T: ClassManifest] protected (buf: Buf) {
