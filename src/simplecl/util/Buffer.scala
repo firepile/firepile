@@ -25,7 +25,19 @@ object Buffer {
       }
   }
 
-  def makeDirect(n: Int) = fromNIOBuffer[Byte](ByteBuf.allocateDirect(n))
+  // def makeDirect(n: Int) = fromNIOBuffer[Byte](ByteBuf.allocateDirect(n))
+  def makeDirect[T: ClassManifest](n: Int): Buffer[T] = {
+      implicitly[ClassManifest[T]] match {
+        case m if m == Manifest.Byte => fromNIOBuffer(ByteBuf.allocateDirect(n)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Char => fromNIOBuffer((ByteBuf.allocateDirect(n * 2)).asCharBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Float => fromNIOBuffer((ByteBuf.allocateDirect(n * 4)).asFloatBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Short => fromNIOBuffer((ByteBuf.allocateDirect(n * 2)).asShortBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Int => fromNIOBuffer((ByteBuf.allocateDirect(n * 4)).asIntBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Long => fromNIOBuffer((ByteBuf.allocateDirect(n * 8)).asLongBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Double => fromNIOBuffer((ByteBuf.allocateDirect(n * 8)).asDoubleBuffer).asInstanceOf[Buffer[T]]
+        case _ => throw new MatchError
+      }
+  }
 
   // def make[T: ClassManifest](a: Array[T]): Buffer[T] = ByteBuf.wrap(a)
   // def make[T: ClassManifest](a: Array[T], offset: Int, length: Int): Buffer[T] = ByteBuf.wrap(a, offset, length)

@@ -8,6 +8,12 @@ object BufferTest {
     val b = bb.rewind.get
     println(b)
 
+    val bbd = Buffer.makeDirect[Byte](10)
+    println(bb)
+    bbd.put(100)
+    val bd = bbd.rewind.get
+    println(bd.toString + " " + bbd.isDirect)
+
     val cb = Buffer.make[Char](10)
     println(cb)
     cb.put('a')
@@ -19,6 +25,14 @@ object BufferTest {
     fb.put(3.1415f)
     val f = fb.rewind.get
     println(f)
+
+    val fbd = Buffer.makeDirect[Float](10)
+    println(fbd)
+    fbd.put(3.1415f)
+    fbd.put(5.1413f)
+    val fd = fbd.rewind.get
+    val fd2 = fbd.get
+    println(fd.toString + " " + fd2.toString + " " + fbd.isDirect)
 
     val sb = Buffer.make[Short](10)
     println(sb)
