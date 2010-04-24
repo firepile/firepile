@@ -1,10 +1,11 @@
 package simplecl
 
 import com.nativelibs4java.opencl._
-import java.nio._
-//import simplecl.util.Buffer
+import java.nio.{Buffer => Buf,
+                ByteBuffer => ByteBuf}
+import simplecl.util.Buffer
 
-class SCLBuffer[B <: Buffer](clb: CLBuffer[B]) extends SCLMem(clb) {
+class SCLBuffer[B <: Buf](clb: CLBuffer[B]) extends SCLMem(clb) {
   val _CLBuffer = clb
 
   // These get to the underlying CLBuffers as certain types
@@ -22,6 +23,10 @@ class SCLBuffer[B <: Buffer](clb: CLBuffer[B]) extends SCLMem(clb) {
 
   }
 
+  // for new Buffers
+  def write[T](queue: SCLQueue, buff: Buffer[T], block: Boolean, eventsToWaitFor: CLEvent*): CLEvent = {
+    _CLBuffer.write(queue._CLQueue, buff.unwrap.asInstanceOf[B], block, eventsToWaitFor:_*)
+  }
 
   def write(queue: SCLQueue, offset: Long, length: Long, in: B, block: Boolean, eventsToWaitFor: CLEvent*): CLEvent = {
     _CLBuffer.write(queue._CLQueue, offset, length, in, block, eventsToWaitFor:_*)
@@ -33,6 +38,11 @@ class SCLBuffer[B <: Buffer](clb: CLBuffer[B]) extends SCLMem(clb) {
 
   def read(queue: SCLQueue, buff: B, block: Boolean, eventsToWaitFor: CLEvent*): CLEvent = {
     _CLBuffer.read(queue._CLQueue, buff, block, eventsToWaitFor:_*)
+  }
+
+  // for new Buffers
+  def read[T](queue: SCLQueue, buff: Buffer[T], block: Boolean, eventsToWaitFor: CLEvent*): CLEvent = {
+    _CLBuffer.read(queue._CLQueue, buff.unwrap.asInstanceOf[B], block, eventsToWaitFor:_*)
   }
 
   def read(queue: SCLQueue, offset: Long, length: Long, out: B, block: Boolean, eventsToWaitFor: CLEvent*): CLEvent = {
@@ -50,11 +60,11 @@ class SCLBuffer[B <: Buffer](clb: CLBuffer[B]) extends SCLMem(clb) {
   // TODO: mapLater
 
   
-  def readBytes(queue: SCLQueue, offset: Long, length: Long, eventsToWaitFor: CLEvent*): ByteBuffer = {
+  def readBytes(queue: SCLQueue, offset: Long, length: Long, eventsToWaitFor: CLEvent*): ByteBuf = {
     _CLBuffer.readBytes(queue._CLQueue, offset, length, eventsToWaitFor:_*)
   }
 
-  def writeBytes(queue: SCLQueue, offset: Long, length: Long, in: ByteBuffer, block: Boolean,
+  def writeBytes(queue: SCLQueue, offset: Long, length: Long, in: ByteBuf, block: Boolean,
                         eventsToWaitFor: CLEvent*) = {
     _CLBuffer.writeBytes(queue._CLQueue, offset, length, in, block, eventsToWaitFor:_*)
   }

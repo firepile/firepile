@@ -34,8 +34,7 @@ object OpenCLScalaTest {
     val memIn2 = context.createBuffer[Float](SCLMemUsage.Input, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
     val memOut = context.createBuffer[Float](SCLMemUsage.Output, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
 
-    // This is wrong
-    kernel.setArgs[FloatBuffer](memIn1, memIn2, memOut)
+    kernel.setArgs(memIn1, memIn2, memOut)
 
     // val a = FloatBuffer.allocate(dataSize * 4)
     // val b = FloatBuffer.allocate(dataSize * 4)
@@ -49,8 +48,8 @@ object OpenCLScalaTest {
     }
 
 
-    memIn1.write(queue, a.unwrap.asInstanceOf[FloatBuffer], true)
-    memIn2.write(queue, b.unwrap.asInstanceOf[FloatBuffer], true)
+    memIn1.write(queue, a, true)
+    memIn2.write(queue, b, true)
 
     // Asking for execution of the kernel with global size = dataSize, workgroup size = 1
     kernel.enqueueNDRange(queue, Array(dataSize), Array(1))
@@ -61,7 +60,7 @@ object OpenCLScalaTest {
     //val output = NIOUtils.directFloats(dataSize, ByteOrder.nativeOrder)
     val output = Buffer.makeDirect[Float](dataSize)
 
-    memOut.read(queue, output.unwrap.asInstanceOf[FloatBuffer], true)
+    memOut.read(queue, output, true)
 
     // Compute absolute and relative average errors wrt Java impl
     var totalAbsError = 0.0
