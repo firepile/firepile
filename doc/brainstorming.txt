@@ -1,0 +1,102 @@
+import simplecl._
+import java.nio.FloatBuffer
+import java.nio.ByteOrder
+import com.nativelibs4java.util.NIOUtils
+
+
+object Collectives {
+  var context: SCLContext = null
+
+  def withContext[T](c: SCLContext)(body: => T): T = {
+    val old = context
+    try {
+      context = c
+      body
+    }
+    finally {
+      context = old
+    }
+  }
+
+  implicit def createKernel[S,T](f: S => T): SCLKernel = null
+
+  def createKernel(name: String, src: String) = {
+    val program = context.createProgram(src).build
+    val kernel = program.createKernel(name)
+    kernel
+  }
+
+  var queue: SCLQueue = null
+  def withQueue[T](q: SCLQueue)(body: => T): T = {
+    val old = queue
+    try {
+      queue = q
+      body
+    }
+    finally {
+      queue = old
+    }
+  }
+
+  def withDefaultQueue[T](body: => T): T = {
+    val queue = context.createDefaultQueue
+    withQueue(queue)(body)
+  }
+
+  def makeInputBuffer[T: ClassManifest](kind: SCLMemUsage, n: Int) = 
+    makeBuffer(SCLMemUsage.Input, n)
+
+  def makeOutputBuffer[T: ClassManifest](kind: SCLMemUsage, n: Int) = 
+    makeBuffer(SCLMemUsage.Output, n)
+
+  def makeBuffer[T: ClassManifest](kind: SCLMemUsage, n: Int) = {
+    implicitly[ClassManifest[T]] match {
+      case m if m == Manifest.Float => context.createFloatBuffer(kind, n)
+      case _ => throw new MatchError
+    }
+  }
+
+  class Kernel3[S,T,U](k: SCLKernel, globalSize: Int, localSize: Int) extends Function3[S,T,U,Unit] {
+    def apply(s: S, t: T, u: T): Unit = {
+      k.setArgs(s, t, u)
+      k.enqueueNDRange(queue, Array(globalSize), Array(localSize))
+    }
+  }
+
+
+                        "__kernel void aSinB(                                                       \n" +
+                        "   __global const float* a,                                       \n" +
+                        "   __global const float* b,                                       \n" +
+                        "   __global float* output)                                        \n" +
+                        "{                                                                             \n" +
+                        "   int i = get_global_id(0);                                      \n" +
+                        "   output[i] = a[i] * sin(b[i]) + 1;                            \n" +
+                        "}                                                                             \n")
+
+
+        
+
+
+  val aSinB = (a: Float, b: Float) => a * sin(b) + 1
+
+  val a = FloatBuffer.allocate(dataSize)
+  val b = FloatBuffer.allocate(dataSize)
+
+  val output = withDevice (gpu) (a zip b).map(aSinB)
+
+        class Buffer[S] {
+          def zip(Buffer[T]): Buffer[(S,T)]
+          def map(k: Kernel[S,T]): Buffer[T]
+          def mapStencil(k: Kernel[Stencil[S],Stencil[T]]): Buffer[T]
+          def mapAll(k: Kernel[Buffer[S],Buffer[T]]): Buffer[T]
+        }
+
+        class Buffer[S] {
+          def zip(Buffer[T]): Buffer[(S,T)]
+        }
+
+  
+
+}
+
+
