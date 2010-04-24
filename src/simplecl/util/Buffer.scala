@@ -7,7 +7,8 @@ import java.nio.{Buffer => Buf,
                  IntBuffer => IntBuf,
                  LongBuffer => LongBuf,
                  FloatBuffer => FloatBuf,
-                 DoubleBuffer => DoubleBuf}
+                 DoubleBuffer => DoubleBuf,
+                 ByteOrder}
 import scala.reflect.ClassManifest
 import scala.reflect.Manifest
 
@@ -28,13 +29,13 @@ object Buffer {
   // def makeDirect(n: Int) = fromNIOBuffer[Byte](ByteBuf.allocateDirect(n))
   def makeDirect[T: ClassManifest](n: Int): Buffer[T] = {
       implicitly[ClassManifest[T]] match {
-        case m if m == Manifest.Byte => fromNIOBuffer(ByteBuf.allocateDirect(n)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Char => fromNIOBuffer((ByteBuf.allocateDirect(n * 2)).asCharBuffer).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Float => fromNIOBuffer((ByteBuf.allocateDirect(n * 4)).asFloatBuffer).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Short => fromNIOBuffer((ByteBuf.allocateDirect(n * 2)).asShortBuffer).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Int => fromNIOBuffer((ByteBuf.allocateDirect(n * 4)).asIntBuffer).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Long => fromNIOBuffer((ByteBuf.allocateDirect(n * 8)).asLongBuffer).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Double => fromNIOBuffer((ByteBuf.allocateDirect(n * 8)).asDoubleBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Byte => fromNIOBuffer(ByteBuf.allocateDirect(n).order(ByteOrder.nativeOrder)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Char => fromNIOBuffer((ByteBuf.allocateDirect(n * 2).order(ByteOrder.nativeOrder)).asCharBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Float => fromNIOBuffer((ByteBuf.allocateDirect(n * 4).order(ByteOrder.nativeOrder)).asFloatBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Short => fromNIOBuffer((ByteBuf.allocateDirect(n * 2).order(ByteOrder.nativeOrder)).asShortBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Int => fromNIOBuffer((ByteBuf.allocateDirect(n * 4).order(ByteOrder.nativeOrder)).asIntBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Long => fromNIOBuffer((ByteBuf.allocateDirect(n * 8).order(ByteOrder.nativeOrder)).asLongBuffer).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Double => fromNIOBuffer((ByteBuf.allocateDirect(n * 8).order(ByteOrder.nativeOrder)).asDoubleBuffer).asInstanceOf[Buffer[T]]
         case _ => throw new MatchError
       }
   }
@@ -124,6 +125,7 @@ object Buffer {
       def isDirect = buf.isDirect
       def order: java.nio.ByteOrder = buf.order
       def put(b: Byte) = wrap(buf.put(b))
+      def put(a: Int, b: Byte) = wrap(buf.put(a, b))
       def putArray(src: Array[Byte]) = wrap(buf.put(src))
       def putArray(src: Array[Byte], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
       // putChar ...
@@ -158,6 +160,7 @@ object Buffer {
       def isDirect = buf.isDirect
       def order: java.nio.ByteOrder = buf.order
       def put(b: Char) = wrap(buf.put(b))
+      def put(a: Int, b: Char) = wrap(buf.put(a, b))
       def putArray(src: Array[Char]) = wrap(buf.put(src))
       def putArray(src: Array[Char], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
       // putChar ...
@@ -192,6 +195,7 @@ object Buffer {
       def isDirect = buf.isDirect
       def order: java.nio.ByteOrder = buf.order
       def put(b: Float) = wrap(buf.put(b))
+      def put(a: Int, b: Float) = wrap(buf.put(a, b))
       def putArray(src: Array[Float]) = wrap(buf.put(src))
       def putArray(src: Array[Float], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
 
@@ -226,6 +230,7 @@ object Buffer {
       def isDirect = buf.isDirect
       def order: java.nio.ByteOrder = buf.order
       def put(b: Short) = wrap(buf.put(b))
+      def put(a: Int, b: Short) = wrap(buf.put(a, b))
       def putArray(src: Array[Short]) = wrap(buf.put(src))
       def putArray(src: Array[Short], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
 
@@ -260,6 +265,7 @@ object Buffer {
       def isDirect = buf.isDirect
       def order: java.nio.ByteOrder = buf.order
       def put(b: Int) = wrap(buf.put(b))
+      def put(a: Int, b: Int) = wrap(buf.put(a, b))
       def putArray(src: Array[Int]) = wrap(buf.put(src))
       def putArray(src: Array[Int], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
 
@@ -294,6 +300,7 @@ object Buffer {
       def isDirect = buf.isDirect
       def order: java.nio.ByteOrder = buf.order
       def put(b: Long) = wrap(buf.put(b))
+      def put(a: Int, b: Long) = wrap(buf.put(a, b))
       def putArray(src: Array[Long]) = wrap(buf.put(src))
       def putArray(src: Array[Long], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
 
@@ -328,6 +335,7 @@ object Buffer {
       def isDirect = buf.isDirect
       def order: java.nio.ByteOrder = buf.order
       def put(b: Double) = wrap(buf.put(b))
+      def put(a: Int, b: Double) = wrap(buf.put(a, b))
       def putArray(src: Array[Double]) = wrap(buf.put(src))
       def putArray(src: Array[Double], offset: Int, length: Int) = wrap(buf.put(src, offset, length))
 
@@ -375,6 +383,7 @@ abstract class Buffer[T: ClassManifest] protected (buf: Buf) {
     def isDirect: Boolean
     def order: java.nio.ByteOrder
     def put(b: T): Buffer[T]
+    def put(a: Int, b: T): Buffer[T]
     def putArray(src: Array[T]): Buffer[T]
     def putArray(src: Array[T], offset: Int, length: Int): Buffer[T]
     // putChar ...
