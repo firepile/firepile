@@ -2,6 +2,7 @@ import simplecl._
 import java.nio.FloatBuffer
 import java.nio.ByteOrder
 import com.nativelibs4java.util.NIOUtils
+import simplecl.util.Buffer
 
 
 object OpenCLScalaTest {
@@ -28,14 +29,18 @@ object OpenCLScalaTest {
     val kernel = program.createKernel("aSinB")
     val queue = context.createDefaultQueue()
 
-    val memIn1 = context.createFloatBuffer(SCLMemUsage.Input, dataSize * 4)
-    val memIn2 = context.createFloatBuffer(SCLMemUsage.Input, dataSize * 4)
-    val memOut = context.createFloatBuffer(SCLMemUsage.Output, dataSize * 4)
+    // Should not need to use asInstanceOf
+    val memIn1 = context.createBuffer[Float](SCLMemUsage.Input, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
+    val memIn2 = context.createBuffer[Float](SCLMemUsage.Input, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
+    val memOut = context.createBuffer[Float](SCLMemUsage.Output, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
 
-    kernel.setArgs(memIn1, memIn2, memOut)
+    // This is wrong
+    kernel.setArgs[FloatBuffer](memIn1, memIn2, memOut)
 
-    val a = FloatBuffer.allocate(dataSize * 4)
-    val b = FloatBuffer.allocate(dataSize * 4)
+    // val a = FloatBuffer.allocate(dataSize * 4)
+    // val b = FloatBuffer.allocate(dataSize * 4)
+    val a = Buffer.make[Float](dataSize)
+    val b = Buffer.make[Float](dataSize)
 
     // Fill buffers with some data
     for(i <- 0 to dataSize-1) {
@@ -43,8 +48,9 @@ object OpenCLScalaTest {
       b.put(i, i)
     }
 
-    memIn1.write(queue, a, true)
-    memIn2.write(queue, b, true)
+
+    memIn1.write(queue, a.unwrap.asInstanceOf[FloatBuffer], true)
+    memIn2.write(queue, b.unwrap.asInstanceOf[FloatBuffer], true)
 
     // Asking for execution of the kernel with global size = dataSize, workgroup size = 1
     kernel.enqueueNDRange(queue, Array(dataSize), Array(1))
@@ -52,9 +58,10 @@ object OpenCLScalaTest {
     // Wait for operations to be performed
     queue.finish
 
-    val output = NIOUtils.directFloats(dataSize, ByteOrder.nativeOrder)
+    //val output = NIOUtils.directFloats(dataSize, ByteOrder.nativeOrder)
+    val output = Buffer.makeDirect[Float](dataSize)
 
-    memOut.read(queue, output, true)
+    memOut.read(queue, output.unwrap.asInstanceOf[FloatBuffer], true)
 
     // Compute absolute and relative average errors wrt Java impl
     var totalAbsError = 0.0
@@ -64,7 +71,7 @@ object OpenCLScalaTest {
       var exp = i * Math.sin(i) + 1
       var res = output.get(i)
       var d = res - exp
-      
+    
       if(exp != 0.0)
         totalRelError += d / exp
       if(d < 0) totalAbsError += -d else totalAbsError += d

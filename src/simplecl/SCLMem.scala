@@ -8,7 +8,7 @@ class SCLMem(clm: CLMem) {
 
   def aquireGLObject(queue: SCLQueue, eventsToWaitFor: SCLEvent*): SCLEvent = {
     val a = new ArrayBuffer[CLEvent]
-    eventsToWaitFor.foreach(e => a += e._clev)
+    eventsToWaitFor.foreach(e => a += e._CLEvent)
     new SCLEvent(_CLMem.acquireGLObject(queue._CLQueue, a.toArray:_*))
   }
 
@@ -38,7 +38,7 @@ class SCLMem(clm: CLMem) {
 
   def releaseGLObject(queue: SCLQueue, eventsToWaitFor: SCLEvent*): SCLEvent = {
     val a = new ArrayBuffer[CLEvent]
-    eventsToWaitFor.foreach(e => a += e._clev)
+    eventsToWaitFor.foreach(e => a += e._CLEvent)
     new SCLEvent(_CLMem.releaseGLObject(queue._CLQueue, a.toArray:_*))
   }
 
