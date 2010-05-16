@@ -16,23 +16,23 @@ object OpenCLScalaTest {
     devices.foreach(d => println("Device found: vendor = " + d.vendor + " maxComputeUnits = " + d.maxComputeUnits + " at frequency " + d.maxClockFrequency))
 
     val src = ("\n" + 
-			"__kernel void aSinB(                                                       \n" +
-			"   __global const float* a,                                       \n" +
-			"   __global const float* b,                                       \n" +
-			"   __global float* output)                                        \n" +
-			"{                                                                             \n" +
-			"   int i = get_global_id(0);                                      \n" +
-			"   output[i] = a[i] * sin(b[i]) + 1;                            \n" +
-			"}                                                                             \n")
+			"__kernel void aSinB(                                   \n" +
+			"   __global const float* a,                            \n" +
+			"   __global const float* b,                            \n" +
+			"   __global float* output)                             \n" +
+			"{                                                      \n" +
+			"   int i = get_global_id(0);                           \n" +
+                        "   output[i] = a[i] * sin(b[i]) + 1;\n" +
+			"}                                                      \n")
 
     val program = context.createProgram(src).build
     val kernel = program.createKernel("aSinB")
     val queue = context.createDefaultQueue()
 
     // Should not need to use asInstanceOf
-    val memIn1 = context.createBuffer[Float](SCLMemUsage.Input, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
-    val memIn2 = context.createBuffer[Float](SCLMemUsage.Input, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
-    val memOut = context.createBuffer[Float](SCLMemUsage.Output, dataSize * 4, true).asInstanceOf[SCLBuffer[FloatBuffer]]
+    val memIn1 = context.createBuffer[Float](SCLMemUsage.Input, dataSize, true).asInstanceOf[SCLBuffer[FloatBuffer]]
+    val memIn2 = context.createBuffer[Float](SCLMemUsage.Input, dataSize, true).asInstanceOf[SCLBuffer[FloatBuffer]]
+    val memOut = context.createBuffer[Float](SCLMemUsage.Output, dataSize, true).asInstanceOf[SCLBuffer[FloatBuffer]]
 
     kernel.setArgs(memIn1, memIn2, memOut)
 

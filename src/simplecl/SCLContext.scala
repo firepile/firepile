@@ -40,42 +40,36 @@ class SCLContext(clc: CLContext) {
 //    new SCLBuffer[B](_CLContext.createBuffer[B](kind, buffer, copy))
 //  }
 
+  implicit def b2bb(b: Buffer[Byte]) = b.unwrap.asInstanceOf[ByteBuf]
+  implicit def b2sb(b: Buffer[Short]) = b.unwrap.asInstanceOf[ShortBuf]
+  implicit def b2cb(b: Buffer[Char]) = b.unwrap.asInstanceOf[CharBuf]
+  implicit def b2ib(b: Buffer[Int]) = b.unwrap.asInstanceOf[IntBuf]
+  implicit def b2lb(b: Buffer[Long]) = b.unwrap.asInstanceOf[LongBuf]
+  implicit def b2fb(b: Buffer[Float]) = b.unwrap.asInstanceOf[FloatBuf]
+  implicit def b2db(b: Buffer[Double]) = b.unwrap.asInstanceOf[DoubleBuf]
 
   // TODO: This need fixing
   def createBuffer[T: ClassManifest](kind: CLMem.Usage, size: Int, copy: Boolean) = {
     kind match {
       case CLMem.Usage.Input => implicitly[ClassManifest[T]] match {
-         case m if m == Manifest.Float => new SCLBuffer[FloatBuf](_CLContext.createBuffer[FloatBuf](kind, (Buffer.make[Float](size)).unwrap.asInstanceOf[FloatBuf], copy))
-                                         // new SCLBuffer[FloatBuf](_CLContext.createBuffer[FloatBuf](kind, FloatBuf.allocate(size), copy))
-         case m if m == Manifest.Byte => new SCLBuffer[ByteBuf](_CLContext.createBuffer[ByteBuf](kind, (Buffer.make[Byte](size)).unwrap.asInstanceOf[ByteBuf], copy))
-         case m if m == Manifest.Char => new SCLBuffer[CharBuf](_CLContext.createBuffer[CharBuf](kind, (Buffer.make[Char](size)).unwrap.asInstanceOf[CharBuf], copy))
-         case m if m == Manifest.Double => new SCLBuffer[DoubleBuf](_CLContext.createBuffer[DoubleBuf](kind, (Buffer.make[Double](size)).unwrap.asInstanceOf[DoubleBuf], copy))
-         case m if m == Manifest.Long => new SCLBuffer[LongBuf](_CLContext.createBuffer[LongBuf](kind, (Buffer.make[Long](size)).unwrap.asInstanceOf[LongBuf], copy))
-         case m if m == Manifest.Short => new SCLBuffer[ShortBuf](_CLContext.createBuffer[ShortBuf](kind, (Buffer.make[Short](size)).unwrap.asInstanceOf[ShortBuf], copy))
-         //case "Byte" => createBuffer[ByteBuffer](kind, ByteBuffer.allocate(size), copy)
-         //case "Char" => createBuffer[CharBuffer](kind, CharBuffer.allocate(size), copy)
-         //case "Double" => createBuffer[DoubleBuffer](kind, DoubleBuffer.allocate(size), copy)
-         //case "Float" => createBuffer[FloatBuffer](kind, FloatBuffer.allocate(size), copy)
-         //case "Long" => createBuffer[LongBuffer](kind, LongBuffer.allocate(size), copy)
-         //case "Short" => createBuffer[ShortBuffer](kind, ShortBuffer.allocate(size), copy)
-         case _ => throw new RuntimeException("Buffer type not supported")
+         case m if m == Manifest.Byte => new SCLBuffer[ByteBuf](_CLContext.createBuffer[ByteBuf](kind, (Buffer.make[Byte](size)), copy))
+         case m if m == Manifest.Short => new SCLBuffer[ShortBuf](_CLContext.createBuffer[ShortBuf](kind, (Buffer.make[Short](size)), copy))
+         case m if m == Manifest.Char => new SCLBuffer[CharBuf](_CLContext.createBuffer[CharBuf](kind, (Buffer.make[Char](size)), copy))
+         case m if m == Manifest.Int => new SCLBuffer[IntBuf](_CLContext.createBuffer[IntBuf](kind, (Buffer.make[Int](size)), copy))
+         case m if m == Manifest.Long => new SCLBuffer[LongBuf](_CLContext.createBuffer[LongBuf](kind, (Buffer.make[Long](size)), copy))
+         case m if m == Manifest.Float => new SCLBuffer[FloatBuf](_CLContext.createBuffer[FloatBuf](kind, (Buffer.make[Float](size)), copy))
+         case m if m == Manifest.Double => new SCLBuffer[DoubleBuf](_CLContext.createBuffer[DoubleBuf](kind, (Buffer.make[Double](size)), copy))
+         case m => throw new RuntimeException("Buffer type not supported " + m)
       }
       case _ => implicitly[ClassManifest[T]] match {
-         case m if m == Manifest.Float => new SCLBuffer[FloatBuf](_CLContext.createBuffer[FloatBuf](kind, (Buffer.makeDirect[Float](size)).unwrap.asInstanceOf[FloatBuf], copy))
-           // new SCLBuffer[FloatBuf](_CLContext.createBuffer[FloatBuf](kind, (Buffer.makeDirect[Float](size)).unwrap.asInstanceOf[FloatBuf], copy))
-           // new SCLBuffer[FloatBuf](_CLContext.createBuffer[FloatBuf](kind, FloatBuf.allocate(size), copy))
-         case m if m == Manifest.Byte => new SCLBuffer[ByteBuf](_CLContext.createBuffer[ByteBuf](kind, (Buffer.makeDirect[Byte](size)).unwrap.asInstanceOf[ByteBuf], copy))
-         case m if m == Manifest.Char => new SCLBuffer[CharBuf](_CLContext.createBuffer[CharBuf](kind, (Buffer.makeDirect[Char](size)).unwrap.asInstanceOf[CharBuf], copy))
-         case m if m == Manifest.Double => new SCLBuffer[DoubleBuf](_CLContext.createBuffer[DoubleBuf](kind, (Buffer.makeDirect[Double](size)).unwrap.asInstanceOf[DoubleBuf], copy))
-         case m if m == Manifest.Long => new SCLBuffer[LongBuf](_CLContext.createBuffer[LongBuf](kind, (Buffer.makeDirect[Long](size)).unwrap.asInstanceOf[LongBuf], copy))
-         case m if m == Manifest.Short => new SCLBuffer[ShortBuf](_CLContext.createBuffer[ShortBuf](kind, (Buffer.makeDirect[Short](size)).unwrap.asInstanceOf[ShortBuf], copy))
-         //case "Byte" => createBuffer[ByteBuffer](kind, ByteBuffer.allocate(size), copy)
-         //case "Char" => createBuffer[CharBuffer](kind, CharBuffer.allocate(size), copy)
-         //case "Double" => createBuffer[DoubleBuffer](kind, DoubleBuffer.allocate(size), copy)
-         //case "Float" => createBuffer[FloatBuffer](kind, FloatBuffer.allocate(size), copy)
-         //case "Long" => createBuffer[LongBuffer](kind, LongBuffer.allocate(size), copy)
-         //case "Short" => createBuffer[ShortBuffer](kind, ShortBuffer.allocate(size), copy)
-         case _ => throw new RuntimeException("Buffer type not supported")
+         case m if m == Manifest.Byte => new SCLBuffer[ByteBuf](_CLContext.createBuffer[ByteBuf](kind, (Buffer.makeDirect[Byte](size)), copy))
+         case m if m == Manifest.Short => new SCLBuffer[ShortBuf](_CLContext.createBuffer[ShortBuf](kind, (Buffer.makeDirect[Short](size)), copy))
+         case m if m == Manifest.Char => new SCLBuffer[CharBuf](_CLContext.createBuffer[CharBuf](kind, (Buffer.makeDirect[Char](size)), copy))
+         case m if m == Manifest.Int => new SCLBuffer[IntBuf](_CLContext.createBuffer[IntBuf](kind, (Buffer.makeDirect[Int](size)), copy))
+         case m if m == Manifest.Long => new SCLBuffer[LongBuf](_CLContext.createBuffer[LongBuf](kind, (Buffer.makeDirect[Long](size)), copy))
+         case m if m == Manifest.Float => new SCLBuffer[FloatBuf](_CLContext.createBuffer[FloatBuf](kind, (Buffer.makeDirect[Float](size)), copy))
+         case m if m == Manifest.Double => new SCLBuffer[DoubleBuf](_CLContext.createBuffer[DoubleBuf](kind, (Buffer.makeDirect[Double](size)), copy))
+         case m => throw new RuntimeException("Buffer type not supported " + m)
        }
      }
   }

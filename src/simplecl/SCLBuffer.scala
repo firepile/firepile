@@ -20,7 +20,6 @@ class SCLBuffer[B <: Buf](clb: CLBuffer[B]) extends SCLMem(clb) {
 
   def write(queue: SCLQueue, buff: B, block: Boolean, eventsToWaitFor: CLEvent*): CLEvent = {
     _CLBuffer.write(queue._CLQueue, buff, block, eventsToWaitFor:_*)
-
   }
 
   // for new Buffers
