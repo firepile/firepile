@@ -5,6 +5,22 @@ object Trees {
         def toCL: String
     }
 
+    def stmt(t: Tree) = {
+      t match {
+        case s @ Id(_) => Eval(s).toCL
+        case s @ Select(_,_) => Eval(s).toCL
+        case s @ IntLit(_) => Eval(s).toCL
+        case s @ LongLit(_) => Eval(s).toCL
+        case s @ FloatLit(_) => Eval(s).toCL
+        case s @ DoubleLit(_) => Eval(s).toCL
+        case s @ Un(_,_) => Eval(s).toCL
+        case s @ Bin(_,_,_) => Eval(s).toCL
+        case s @ Call(_,_) => Eval(s).toCL
+        case s @ Cast(_,_) => Eval(s).toCL
+        case s @ Assign(_,_) => Eval(s).toCL
+        case s => s.toCL
+      }
+    }
     def paren(t: Tree, s: Tree) = {
 
         def paren(t: Tree) = "(" + t.toCL + ")"
@@ -77,15 +93,30 @@ object Trees {
         def toCL = paren(this, e1) + " = " + paren(this, e2)
     }
 
+    case class Ref(e: Tree) extends Tree {
+        def toCL = "&" + paren(this, e)
+    }
+    case class Deref(e: Tree) extends Tree {
+        def toCL = "*" + paren(this, e)
+    }
+    object Select {
+        def apply(target: Tree, name: Id): Select = Select(target, name.name)
+    }
     case class Select(target: Tree, name: String) extends Tree {
-        def toCL = paren(this, target) + "." + name
+        def toCL = target match {
+            case Deref(e) => paren(this, e) + "->" + name
+            case _ => paren(this, target) + "." + name
+        }
     }
 
+    object Call {
+        def apply(fun: Tree, args: Tree*): Call = Call(fun, args.toList)
+    }
     case class Call(fun: Tree, args: List[Tree]) extends Tree {
         def toCL = paren(this, fun) + args.map((t:Tree) => t.toCL).mkString("(", ", ", ")")
     }
     case class If(cond: Tree, e1: Tree, e2: Tree) extends Tree {
-        def toCL = "if (" + cond.toCL + ") {\n" + indent(e1.toCL) + "} else {\n" + indent(e2.toCL) + "}\n"
+        def toCL = "if (" + cond.toCL + ") {\n" + indent(stmt(e1)) + "} else {\n" + indent(stmt(e2)) + "}\n"
     }
     case class Eval(e: Tree) extends Tree {
         def toCL = e.toCL + ";\n"
@@ -93,50 +124,110 @@ object Trees {
     case class Return(e: Tree) extends Tree {
         def toCL = "return " + e.toCL + ";\n"
     }
-    case class ReturnV extends Tree {
+    case object Return extends Tree {
         def toCL = "return;\n"
     }
     case class While(cond: Tree, body: Tree) extends Tree {
-        def toCL = "while (" + cond.toCL + ") {\n" + indent(body.toCL) + "}"
+        def toCL = "while (" + cond.toCL + ") {\n" + indent(stmt(body)) + "}"
     }
     case class DoWhile(body: Tree, cond: Tree) extends Tree {
-        def toCL = "do {\n" + indent(body.toCL) + "} while (" + cond.toCL + ");\n"
+        def toCL = "do {\n" + indent(stmt(body)) + "} while (" + cond.toCL + ");\n"
     }
     case class Switch(index: Tree, cases: List[Tree]) extends Tree {
         def toCL = "switch (" + index.toCL + ") {\n" +
-            cases.map((t:Tree) => indent(t.toCL)).mkString(indent("break;\n")) + "}"
+            cases.map((t:Tree) => indent(stmt(t))).mkString(indent("break;\n")) + "}"
     }
     case class Case(index: Tree, body: Tree) extends Tree {
-        def toCL = "case " + index.toCL + ": {\n" + indent(body.toCL) + "}\n"
+        def toCL = "case " + index.toCL + ": {\n" + indent(stmt(body)) + "}\n"
     }
     case class Block(decls: List[Tree], body: Tree) extends Tree {
-      def toCL = "{\n" + decls.map((t:Tree) => indent(t.toCL)).mkString("") +
+      def toCL = "{\n" + decls.map((t:Tree) => indent(stmt(t))).mkString("") +
                 indent(body.toCL) + "}"
     }
+    object Seq {
+      def apply(stmts: Tree*): Seq = Seq(stmts.toList)
+    }
     case class Seq(stmts: List[Tree]) extends Tree {
-      def toCL = stmts.map((t:Tree) => indent(t.toCL)).mkString("")
+      def toCL = stmts.map((t:Tree) => stmt(t)).mkString("")
+    }
+    object VarDef {
+        def apply(typ: Tree, name: Id): VarDef = VarDef(typ, name.name)
     }
     case class VarDef(typ: Tree, name: String) extends Tree {
         def toCL = typ.toCL + " " + name + ";\n"
     }
+    object Formal {
+        def apply(typ: Tree, name: Id): Formal = this(typ, name.name)
+    }
     case class Formal(typ: Tree, name: String) extends Tree {
         def toCL = typ.toCL + " " + name
+    }
+    object FunDef {
+        def apply(typ: Tree, name: Id, formals: List[Tree], body: Tree): FunDef = FunDef(typ, name.name, formals, body)
+        def apply(typ: Tree, name: Id, formals: List[Tree], body: Tree*): FunDef = FunDef(typ, name.name, formals, Seq(body:_*))
     }
     case class FunDef(typ: Tree, name: String, formals: List[Tree], body: Tree) extends Tree {
         def toCL = typ.toCL + " " + name + formals.map((t:Tree) => t.toCL).mkString("(", ", ", ") {\n") + indent(body.toCL) + "}\n\n"
 
+    }
+    object StructDef {
+        def apply(name: Id, fields: List[Tree]): StructDef = this(name.name, fields)
+        def apply(name: Id, fields: Tree*): StructDef = this(name.name, fields.toList)
+        def apply(name: String, fields: Tree*): StructDef = this(name, fields.toList)
     }
     case class StructDef(name: String, fields: List[Tree]) extends Tree {
         def toCL = "struct " + name + " {\n" +
                          fields.map((t:Tree) => indent(t.toCL)).mkString("") +
                         "};\n\n"
     }
+    case class ValueType(name: String) extends Tree {
+        def toCL = name
+    }
+    object StructType {
+        def apply(name: Id): StructType = StructType(name.name)
+    }
+    case class StructType(name: String) extends Tree {
+        def toCL = "struct " + name
+    }
+    case class PtrType(typ: Tree) extends Tree {
+        def toCL = typ.toCL + "*"
+    }
+
+    val IntType = ValueType("int")
+    val FloatType = ValueType("float")
+
+    implicit def int2IntLit(n: Int) = IntLit(n)
+    implicit def wrapTree(t: Tree) = new WrappedTree(t)
+
+    class WrappedTree(t1: Tree) {
+        def +(t2: Tree) = Bin(t1, "+", t2)
+        def -(t2: Tree) = Bin(t1, "-", t2)
+        def *(t2: Tree) = Bin(t1, "*", t2)
+        def /(t2: Tree) = Bin(t1, "/", t2)
+        def %(t2: Tree) = Bin(t1, "%", t2)
+        def <<(t2: Tree) = Bin(t1, "<<", t2)
+        def >>(t2: Tree) = Bin(t1, ">>", t2)
+        def <(t2: Tree) = Bin(t1, "<", t2)
+        def >(t2: Tree) = Bin(t1, ">", t2)
+        def <=(t2: Tree) = Bin(t1, "<=", t2)
+        def >=(t2: Tree) = Bin(t1, ">=", t2)
+        def ==(t2: Tree) = Bin(t1, "==", t2)
+        def !=(t2: Tree) = Bin(t1, "!=", t2)
+        def :=(t2: Tree) = Assign(t1, t2)
+        def then(t2: Tree) = Seq(t1, t2)
+    }
 
     def main(args: Array[String]) = {
-        val t = FunDef(Id("int"), "fact", List[Tree](Formal(Id("int"), "n")),
-                       Seq(List[Tree](If(Bin(Id("n"), "<=", IntLit(1)),
-                                Return(IntLit(1)),
-                                Return(Bin(Id("n"), "*", Call(Id("fact"), List[Tree](Bin(Id("n"), "-", IntLit(1))))))))))
+        val int = ValueType("int")
+        val n = Id("n")
+        val fact = Id("fact")
+        val result = Id("result")
+        val t = FunDef(int, fact, List[Tree](Formal(int, n)),
+                       Seq(VarDef(int, result),
+                           If(n <= 1,
+                              result := 1,
+                              result := n * Call(fact, n-1)),
+                           Return(result)))
         println(t.toCL)
     }
 
