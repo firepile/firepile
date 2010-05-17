@@ -28,13 +28,13 @@ object Buffer {
 
   def fromArray[T: ClassManifest](a: Array[T]): Buffer[T] = {
       implicitly[ClassManifest[T]] match {
-        case m if m == Manifest.Byte => fromNIOBuffer(ByteBuf.wrap(a)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Char => fromNIOBuffer(CharBuf.wrap(a)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Float => fromNIOBuffer(FloatBuf.wrap(a)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Short => fromNIOBuffer(ShortBuf.wrap(a)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Int => fromNIOBuffer(IntBuf.wrap(a)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Long => fromNIOBuffer(LongBuf.wrap(a)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Double => fromNIOBuffer(DoubleBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Byte => fromNIOBuffer(ByteBuf.wrap(a.asInstanceOf[Array[Byte]])).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Short => fromNIOBuffer(ShortBuf.wrap(a.asInstanceOf[Array[Short]])).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Char => fromNIOBuffer(CharBuf.wrap(a.asInstanceOf[Array[Char]])).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Int => fromNIOBuffer(IntBuf.wrap(a.asInstanceOf[Array[Int]])).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Long => fromNIOBuffer(LongBuf.wrap(a.asInstanceOf[Array[Long]])).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Float => fromNIOBuffer(FloatBuf.wrap(a.asInstanceOf[Array[Float]])).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Double => fromNIOBuffer(DoubleBuf.wrap(a.asInstanceOf[Array[Double]])).asInstanceOf[Buffer[T]]
         case _ => throw new MatchError
       }
   }
@@ -68,14 +68,14 @@ object Buffer {
   def fromSeq[T: ClassManifest](xs: Seq[T]): Buffer[T] = {
       implicitly[ClassManifest[T]] match {
         case m if m == Manifest.Byte => fromSeq(xs.asInstanceOf[Seq[Byte]], ByteBuf.allocate(_), _.asInstanceOf[ByteBuf].put(_: Byte)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Short => fromSeq(xs.asInstanceOf[Seq[Short]], ShortBuf.allocate(_), _.asInstanceOf[ShortBuf].put(_: Short)).asInstanceOf[Buffer[T]]
         case m if m == Manifest.Char => xs match {
             case xs : IndexedSeq[_] => fromNIOBuffer(CharBuf.wrap(seqToCharSequence(xs.asInstanceOf[IndexedSeq[Char]]))).asInstanceOf[Buffer[T]]
             case xs => fromSeq(xs.asInstanceOf[Seq[Char]], CharBuf.allocate(_), _.asInstanceOf[CharBuf].put(_: Char)).asInstanceOf[Buffer[T]]
         }
-        case m if m == Manifest.Float => fromSeq(xs.asInstanceOf[Seq[Float]], FloatBuf.allocate(_), _.asInstanceOf[FloatBuf].put(_: Float)).asInstanceOf[Buffer[T]]
-        case m if m == Manifest.Short => fromSeq(xs.asInstanceOf[Seq[Short]], ShortBuf.allocate(_), _.asInstanceOf[ShortBuf].put(_: Short)).asInstanceOf[Buffer[T]]
         case m if m == Manifest.Int => fromSeq(xs.asInstanceOf[Seq[Int]], IntBuf.allocate(_), _.asInstanceOf[IntBuf].put(_: Int)).asInstanceOf[Buffer[T]]
         case m if m == Manifest.Long => fromSeq(xs.asInstanceOf[Seq[Long]], LongBuf.allocate(_), _.asInstanceOf[LongBuf].put(_: Long)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Float => fromSeq(xs.asInstanceOf[Seq[Float]], FloatBuf.allocate(_), _.asInstanceOf[FloatBuf].put(_: Float)).asInstanceOf[Buffer[T]]
         case m if m == Manifest.Double => fromSeq(xs.asInstanceOf[Seq[Double]], DoubleBuf.allocate(_), _.asInstanceOf[DoubleBuf].put(_: Double)).asInstanceOf[Buffer[T]]
 
         case _ => throw new MatchError
@@ -85,20 +85,20 @@ object Buffer {
   // def make(a: Seq[Char], start: Int, end: Int): Buffer[Char] = CharBuf.wrap(a, start, end)
 
   def fromNIOBuffer(b: ByteBuf): Buffer[Byte] = new WrappedByteBuffer(b)
-  def fromNIOBuffer(b: CharBuf): Buffer[Char] = new WrappedCharBuffer(b)
-  def fromNIOBuffer(b: FloatBuf): Buffer[Float] = new WrappedFloatBuffer(b)
   def fromNIOBuffer(b: ShortBuf): Buffer[Short] = new WrappedShortBuffer(b)
+  def fromNIOBuffer(b: CharBuf): Buffer[Char] = new WrappedCharBuffer(b)
   def fromNIOBuffer(b: IntBuf): Buffer[Int] = new WrappedIntBuffer(b)
   def fromNIOBuffer(b: LongBuf): Buffer[Long] = new WrappedLongBuffer(b)
+  def fromNIOBuffer(b: FloatBuf): Buffer[Float] = new WrappedFloatBuffer(b)
   def fromNIOBuffer(b: DoubleBuf): Buffer[Double] = new WrappedDoubleBuffer(b)
 
   def fromNIOBuffer[T: ClassManifest](b: Buf): Buffer[T] = b match {
     case b : ByteBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
-    case b : CharBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
-    case b : FloatBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
     case b : ShortBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
+    case b : CharBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
     case b : IntBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
     case b : LongBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
+    case b : FloatBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
     case b : DoubleBuf => fromNIOBuffer(b).asInstanceOf[Buffer[T]]
     case _ => throw new MatchError
   }
