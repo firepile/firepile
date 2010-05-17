@@ -19,6 +19,7 @@ object OpenCLScalaTest3 {
 		val gpu = new Device(context)
 	}
 
+        /** Translate from A to Buffer[BaseType].  BaseType is hidden. */
 	trait Translator[A] {
 		type BaseType // <: ClassManifest[BaseType]
 		def manifest: ClassManifest[BaseType]
@@ -34,7 +35,7 @@ object OpenCLScalaTest3 {
 
 		def size(a: Array[Float]) = 4 * a.length
 		def align = 4
-		def copyIn(dev: Device, a: Array[Float]) = Buffer.fromSeq[Float](a)
+		def copyIn(dev: Device, a: Array[Float]) = Buffer.fromArray[Float](a)
 		def copyOut(dev: Device, b: Buffer[Float]) = {
 			if (b.hasArray) {
 				b.asArray

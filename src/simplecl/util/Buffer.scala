@@ -26,6 +26,19 @@ object Buffer {
       }
   }
 
+  def fromArray[T: ClassManifest](a: Array[T]): Buffer[T] = {
+      implicitly[ClassManifest[T]] match {
+        case m if m == Manifest.Byte => fromNIOBuffer(ByteBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Char => fromNIOBuffer(CharBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Float => fromNIOBuffer(FloatBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Short => fromNIOBuffer(ShortBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Int => fromNIOBuffer(IntBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Long => fromNIOBuffer(LongBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case m if m == Manifest.Double => fromNIOBuffer(DoubleBuf.wrap(a)).asInstanceOf[Buffer[T]]
+        case _ => throw new MatchError
+      }
+  }
+
   // def makeDirect(n: Int) = fromNIOBuffer[Byte](ByteBuf.allocateDirect(n))
   def makeDirect[T: ClassManifest](n: Int): Buffer[T] = {
       implicitly[ClassManifest[T]] match {
