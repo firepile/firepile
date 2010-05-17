@@ -1,3 +1,5 @@
+package simplecl.tests
+
 import simplecl._
 import java.nio.FloatBuffer
 import java.nio.ByteOrder
