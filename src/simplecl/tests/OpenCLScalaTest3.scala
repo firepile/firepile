@@ -9,17 +9,50 @@ import com.nativelibs4java.opencl.CLMem
 
 object OpenCLScalaTest3 {
 	object CL {
-		private val platform = SimpleCL.listPlatforms(0)
-		private val devices = platform.listAllDevices(true)
+		private val platforms = SimpleCL.listPlatforms
+		
+		private lazy val defaultGPUPlatform: Option[SCLPlatform] = {
+				platforms.flatMap {
+					p => p.listGPUDevices(true).map {
+						d => p
+					}
+				}.headOption
+		}
+		private lazy val defaultCPUPlatform: Option[SCLPlatform] = {
+				platforms.flatMap {
+					p => p.listCPUDevices(true).map {
+						d => p
+					}
+				}.headOption
+		}
+		private lazy val defaultGPU = {
+			defaultGPUPlatform match {
+				case Some(p) => p.listGPUDevices(true).headOption
+				case None => None
+			}
+		}
 
-		devices.foreach(d => println("Device found: vendor = " + d.vendor + " maxComputeUnits = " + d.maxComputeUnits + " at frequency " + d.maxClockFrequency))
+		private lazy val defaultCPU = {
+			defaultCPUPlatform match {
+				case Some(p) => p.listCPUDevices(true).headOption
+				case None => None
+			}
+		}
 
-		private val context = platform.createContext(null, devices(0))
+		private lazy val bestDevice: SCLDevice = new SCLDevice(platforms(0).bestDevice)
 
-		val gpu = new Device(context)
+		private lazy val gpuContext = (defaultGPUPlatform, defaultGPU) match {
+			case (Some(p), Some(d)) => Some(p.createContext(null, d))
+			case _ => None
+		}
+
+		lazy val gpu = gpuContext match {
+			case Some(c) => new Device(c)
+			case None => null
+		}
 	}
 
-        /** Translate from A to Buffer[BaseType].  BaseType is hidden. */
+	/** Translate from A to Buffer[BaseType].  BaseType is hidden. */
 	trait Translator[A] {
 		type BaseType // <: ClassManifest[BaseType]
 		def manifest: ClassManifest[BaseType]
@@ -28,25 +61,75 @@ object OpenCLScalaTest3 {
 		def copyIn(dev: Device, a: A): Buffer[BaseType]
 		def copyOut(dev: Device, b: Buffer[BaseType]): A
 	}
-
-	implicit object FAT extends Translator[Array[Float]] { 
-		type BaseType = Float
-		def manifest = Manifest.Float
-
-		def size(a: Array[Float]) = 4 * a.length
+	
+	abstract class PT[A: ClassManifest] extends Translator[A] {
+		type BaseType = A
+		val manifest = implicitly[ClassManifest[A]] 
+		
+		def copyIn(dev: Device, a: A): Buffer[A] = {
+			val b = Buffer.make[A](1)
+			b.put(a)
+			b
+		}
+		
+		def copyOut(dev: Device, b: Buffer[A]): A = b.get
+	}
+	
+	implicit object BT extends PT[Byte] {
+		def size(a: Byte) = 1
+		def align = 1
+	}
+	implicit object ST extends PT[Short] {
+		def size(a: Short) = 2
+		def align = 2
+	}
+	implicit object CT extends PT[Char] {
+		def size(a: Char) = 2
+		def align = 2
+	}
+	implicit object IT extends PT[Int] {
+		def size(a: Int) = 4
 		def align = 4
-		def copyIn(dev: Device, a: Array[Float]) = Buffer.fromArray[Float](a)
-		def copyOut(dev: Device, b: Buffer[Float]) = {
+	}
+	implicit object LT extends PT[Long] {
+		def size(a: Long) = 8
+		def align = 8
+	}
+	implicit object FT extends PT[Float] { 
+		def size(a: Float) = 4
+		def align = 4
+	}
+	implicit object DT extends PT[Double] { 
+		def size(a: Double) = 8
+		def align = 8
+	}
+
+	abstract class AT[A: ClassManifest](t: PT[A]) extends Translator[Array[A]] { 
+		type BaseType = A
+		val manifest = t.manifest
+
+		def size(a: Array[A]) = if (a.length == 0) 0 else t.size(a(0)) * a.length
+		def align = t.align
+		def copyIn(dev: Device, a: Array[A]) = Buffer.fromArray[A](a)
+		def copyOut(dev: Device, b: Buffer[A]) = {
 			if (b.hasArray) {
 				b.asArray
 			}
 			else {
-				val a = Array.ofDim[Float](b.capacity)
+				val a = Array.ofDim[A](b.capacity)
 				b.get(a)
 				a
 			}
 		}
 	}
+
+	implicit object BAT extends AT[Byte](BT) { } 
+	implicit object SAT extends AT[Short](ST) { } 
+	implicit object CAT extends AT[Char](CT) { } 
+	implicit object IAT extends AT[Int](IT) { } 
+	implicit object LAT extends AT[Long](LT) { } 
+	implicit object FAT extends AT[Float](FT) { } 
+	implicit object DAT extends AT[Double](DT) { } 
 
 	trait Future[B] {
 		def force: B
@@ -89,6 +172,7 @@ object OpenCLScalaTest3 {
 			new Future[Buffer[B]] {
 				def force = {
 						dev.queue.enqueueWaitForEvents(readEvent)
+                                                dev.queue.finish
 						bufOut
 				}
 			}
