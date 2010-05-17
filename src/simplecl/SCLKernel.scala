@@ -15,9 +15,10 @@ class SCLKernel(clk: CLKernel) {
 //    args.foreach(b => underlyingBufs += b._underlyingBuffer)
 //    _CLKernel.setArgs(underlyingBufs.toArray:_*)
 //  }
-
-  def setArgs[B <: Buffer](args: SCLBuffer[B]*): Unit = {
-    val underlyingBufs = new ArrayBuffer[CLBuffer[B]]
+  
+  
+  def setArgs(args: SCLBuffer[_]*): Unit = {
+    val underlyingBufs = new ArrayBuffer[CLBuffer[_]]
 
     args.foreach(b => underlyingBufs += b._CLBuffer)
     _CLKernel.setArgs(underlyingBufs.toArray:_*)

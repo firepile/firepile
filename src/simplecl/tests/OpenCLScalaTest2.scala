@@ -35,7 +35,7 @@ object OpenCLScalaTest2 {
     val memOut = context.createBuffer[Byte](SCLMemUsage.Output, dataSize, true).asInstanceOf[SCLBuffer[ByteBuffer]]
 
     // This is wrong
-    kernel.setArgs[ByteBuffer](memIn, memOut)
+    kernel.setArgs(memIn, memOut)
 
     // val a = Buffer.fromSeq[Byte](List(0xaf.toByte, 0xfa.toByte, 0xaf.toByte, 0xfa.toByte, 0xaf.toByte, 0xfa.toByte, 0xaf.toByte, 0xfa.toByte, 0xaf.toByte, 0xfa.toByte))
 

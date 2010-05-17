@@ -158,8 +158,7 @@ object OpenCLScalaTest3 {
 			val writeEvent = memIn.write(dev.queue, input, true)
 			println("writeEvent = " + writeEvent)
 
-			// HACK
-			code.setArgs(memIn.asInstanceOf[SCLBuffer[java.nio.FloatBuffer]], memOut.asInstanceOf[SCLBuffer[java.nio.FloatBuffer]])
+			code.setArgs(memIn, memOut)
 
 			val runEvent = code.enqueueNDRange(dev.queue, Array(totalNumberOfItems), Array(numberOfItemsPerGroup), writeEvent)
 			println("runEvent = " + runEvent)
