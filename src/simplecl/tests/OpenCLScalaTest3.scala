@@ -148,30 +148,23 @@ object OpenCLScalaTest3 {
 	class RunnableBufKernel1[A: ClassManifest, B: ClassManifest](code: SCLKernel, input: Buffer[A]) extends RunnableKernel1[Buffer[A], Buffer[B]] {
 		def run(dev: Device, totalNumberOfItems: Int, numberOfItemsPerGroup: Int) = {
 			val length = totalNumberOfItems // input.capacity
-			println("length = " + length)
 
 			val memIn = dev.global.allocForRead[A](length)
-			println("memIn = " + memIn)
 			val memOut = dev.global.allocForWrite[B](length)
-			println("memOut = " + memOut)
 
 			val writeEvent = memIn.write(dev.queue, input, true)
-			println("writeEvent = " + writeEvent)
 
 			code.setArgs(memIn, memOut)
 
 			val runEvent = code.enqueueNDRange(dev.queue, Array(totalNumberOfItems), Array(numberOfItemsPerGroup), writeEvent)
-			println("runEvent = " + runEvent)
 
 			val bufOut = Buffer.makeDirect[B](length)
-			println("bufOut = " + bufOut)
 			val readEvent = memOut.read(dev.queue, bufOut, true, runEvent)
-			println("readEvent = " + readEvent)
 
 			new Future[Buffer[B]] {
 				def force = {
 						dev.queue.enqueueWaitForEvents(readEvent)
-                                                dev.queue.finish
+
 						bufOut
 				}
 			}
@@ -237,9 +230,20 @@ object OpenCLScalaTest3 {
 		def allocForRead[A: ClassManifest](n: Int) = alloc[A](SCLMemUsage.Input, n)
 		def allocForWrite[A: ClassManifest](n: Int) = alloc[A](SCLMemUsage.Output, n)
 	}
+	
+	def time[A](body: => A): A = {
+			val t0 = System.currentTimeMillis
+			try {
+				body
+			}
+			finally {
+				val t1 = System.currentTimeMillis
+				println("time " + (t1 - t0) / 1000.)
+			}
+	}
 
-	def main(args: Array[String])  = {
-		val dataSize = 1000
+	def main(args: Array[String]) = {
+		val dataSize = if (args.length > 0) args(0).toInt else 1000
 
 		val src = ("\n" + 
 				"__kernel void copyVec(                         \n" +
@@ -259,30 +263,14 @@ object OpenCLScalaTest3 {
 
 		val a = Array.tabulate(dataSize)(_.toFloat)
 
-		val result = CL.gpu.spawn(dataSize) { kernel(a) }
-
-		val c: Array[Float] = result.force
-
-		// Compute absolute and relative average errors wrt Java impl
-		var totalAbsError = 0.0
-		var totalRelError = 0.0
-
-		for(i <- 0 to dataSize-1) {
-			var exp = i * Math.sin(i) + 1
-			var res = c(i)
-			var d = res - exp
-
-			if(exp != 0.0)
-				totalRelError += d / exp
-				if(d < 0) totalAbsError += -d else totalAbsError += d
+		val c = time {
+			val result = CL.gpu.spawn(dataSize) { kernel(a) }
+			result.force
 		}
-
-		var avgAbsError = totalAbsError / dataSize
-		var avgRelError = totalRelError / dataSize
-
-		println("Average absolute error = " + avgAbsError)
-		println("Average relative error = " + avgRelError)
-
+		
+//		println("len = " + c.length)
+//		for (i <- 0 until c.length)
+//			println(i + ": " + c(i))
 	}
 }
 
