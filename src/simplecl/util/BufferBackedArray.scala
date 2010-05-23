@@ -1,78 +1,125 @@
+package simplecl.util
+
 object BufferBackedArray {
   import java.nio.ByteBuffer 
+  import java.nio.ByteOrder 
   import scala.collection.mutable.ArrayLike
   import scala.collection.mutable.Builder
 
-  abstract class Marshal[A: ClassManifest] {
+  // TODO: need two kinds of Marshal, one for primitives and tuples of
+  // primitives, one for arrays
+  // For the former, can compute size without a witness.
+  // For the latter, need the witness.
+  //
+  // As a consequence:
+  // Can't pass an Array[Array[Int]] since the 1-d arrays are not necessarily
+  // the same size.
+  // But, can pass an Array[Int]
+  //
+  // BBArray only needs the former type of Marshal
+  // Translating for passing to Kernels needs the second type of Marshal.
+
+  def marshal[A: Marshal] = implicitly[Marshal[A]]
+  def fixedSizeMarshal[A: FixedSizeMarshal] = implicitly[FixedSizeMarshal[A]]
+
+  trait FixedSizeMarshal[A] extends Marshal[A] {
+    def size(a: A): Int = size
     def size: Int
+  }
+
+  /*
+  def fsm[A: Marshal](a: A) = {
+    val m = implicitly[Marshal[A]]
+    new FixedSizeMarshal[A] {
+      def size: Int = size(a)
+      override def size(a: A) = m.size(a)
+      override def align = m.align
+      override def put(buf:ByteBuffer, i: Int, x: A) = m.put(buf, i, x)
+      override def get(buf:ByteBuffer, i: Int) = m.get(buf, i)
+    }
+  }
+  */
+
+  trait Marshal[A] {
+    def size(a: A): Int
     def align: Int
     // require(align <= size)
 
     def put(buf: ByteBuffer, i: Int, x: A): Unit
     def get(buf: ByteBuffer, i: Int): A
+
+    def put(x: A): ByteBuffer = {
+      val n = size(x)
+      val b = ByteBuffer.allocate(n).order(ByteOrder.nativeOrder)
+      put(b, 0, x)
+      b
+    }
+    def get(b: ByteBuffer): A = {
+      get(b, 0)
+    }
   }
 
-  implicit object ZM extends Marshal[Boolean] {
+  implicit object ZM extends FixedSizeMarshal[Boolean] {
     val size = 1
     val align = 1
     def put(buf:ByteBuffer, i: Int, x: Boolean) = buf.put(i, if (x) 1 else 0)
     def get(buf:ByteBuffer, i: Int) = if (buf.get(i) == 0) false else true
   }
 
-  implicit object BM extends Marshal[Byte] {
+  implicit object BM extends FixedSizeMarshal[Byte] {
     val size = 1
     val align = 1
     def put(buf:ByteBuffer, i: Int, x: Byte) = buf.put(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.get(i)
   }
 
-  implicit object SM extends Marshal[Short] {
+  implicit object SM extends FixedSizeMarshal[Short] {
     val size = 2
     val align = 2
     def put(buf:ByteBuffer, i: Int, x: Short) = buf.putShort(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getShort(i)
   }
 
-  implicit object CM extends Marshal[Char] {
+  implicit object CM extends FixedSizeMarshal[Char] {
     val size = 2
     val align = 2
     def put(buf:ByteBuffer, i: Int, x: Char) = buf.putChar(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getChar(i)
   }
 
-  implicit object IM extends Marshal[Int] {
+  implicit object IM extends FixedSizeMarshal[Int] {
     val size = 4
     val align = 4
     def put(buf:ByteBuffer, i: Int, x: Int) = buf.putInt(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getInt(i)
   }
 
-  implicit object LM extends Marshal[Long] {
+  implicit object LM extends FixedSizeMarshal[Long] {
     val size = 8
     val align = 8
     def put(buf:ByteBuffer, i: Int, x: Long) = buf.putLong(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getLong(i)
   }
 
-  implicit object FM extends Marshal[Float] {
+  implicit object FM extends FixedSizeMarshal[Float] {
     val size = 4
     val align = 4
     def put(buf:ByteBuffer, i: Int, x: Float) = buf.putFloat(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getFloat(i)
   }
 
-  implicit object DM extends Marshal[Double] {
+  implicit object DM extends FixedSizeMarshal[Double] {
     val size = 8
     val align = 8
     def put(buf:ByteBuffer, i: Int, x: Double) = buf.putDouble(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getDouble(i)
   }
 
-  implicit def tuple2Marshal[A: Marshal,B:Marshal] = new T2M[A,B]
+  implicit def tuple2Marshal[A: FixedSizeMarshal,B:FixedSizeMarshal] = new T2M[A,B]
 
-  class T2M[A: Marshal,B:Marshal] extends Marshal[Tuple2[A,B]] {
-    val ma = implicitly[Marshal[A]]
-    val mb = implicitly[Marshal[B]]
+  class T2M[A: FixedSizeMarshal,B:FixedSizeMarshal] extends FixedSizeMarshal[Tuple2[A,B]] {
+    val ma = implicitly[FixedSizeMarshal[A]]
+    val mb = implicitly[FixedSizeMarshal[B]]
 
     lazy val size = (ma.size max mb.align) + mb.size
     lazy val align = ma.align max mb.align
@@ -95,14 +142,14 @@ object BufferBackedArray {
     }
   }
 
-  implicit def tuple3Marshal[A: Marshal,B:Marshal,C:Marshal] = new T3M[A,B,C]
+  implicit def tuple3Marshal[A: FixedSizeMarshal,B:FixedSizeMarshal,C:FixedSizeMarshal] = new T3M[A,B,C]
 
-  class T3M[A: Marshal,B:Marshal,C:Marshal] extends Marshal[Tuple3[A,B,C]] {
-    val ma = implicitly[Marshal[A]]
-    val mb = implicitly[Marshal[B]]
-    val mc = implicitly[Marshal[C]]
+  class T3M[A: FixedSizeMarshal,B:FixedSizeMarshal,C:FixedSizeMarshal] extends FixedSizeMarshal[Tuple3[A,B,C]] {
+    val ma = implicitly[FixedSizeMarshal[A]]
+    val mb = implicitly[FixedSizeMarshal[B]]
+    val mc = implicitly[FixedSizeMarshal[C]]
 
-    lazy val size = (ma.size max mb.align) + (mb.size max mc.align) + mc.align
+    lazy val size = (ma.size max mb.align) + (mb.size max mc.align) + mc.size
     lazy val align = ma.align max mb.align max mc.align
 
     // println("tuple._1 size = " + ma.size)
@@ -125,25 +172,26 @@ object BufferBackedArray {
     }
   }
 
-  implicit def bbarrayCBFrom[A: Marshal, From] = new scala.collection.generic.CanBuildFrom[From,A,BBArray[A]] {
-    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[Marshal[A]].size)
-    def apply(from: From): Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[Marshal[A]].size)
+  import scala.collection.generic.CanBuildFrom
+  implicit def bbarrayCBFrom[A: FixedSizeMarshal, From] = new CanBuildFrom[From,A,BBArray[A]] {
+    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
+    def apply(from: From): Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
   }
-  implicit def bbarrayCBFromArray[A: Marshal] = new scala.collection.generic.CanBuildFrom[Array[_],A,BBArray[A]] {
-    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[Marshal[A]].size)
-    def apply(from: Array[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](from.length*implicitly[Marshal[A]].size)
+  implicit def bbarrayCBFromArray[A: FixedSizeMarshal] = new CanBuildFrom[Array[_],A,BBArray[A]] {
+    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
+    def apply(from: Array[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](from.length*implicitly[FixedSizeMarshal[A]].size)
   }
-  implicit def bbarrayCBFromBBArray[A: Marshal] = new scala.collection.generic.CanBuildFrom[BBArray[_],A,BBArray[A]] {
-    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[Marshal[A]].size)
-    def apply(from: BBArray[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](from.length*implicitly[Marshal[A]].size)
+  implicit def bbarrayCBFromBBArray[A: FixedSizeMarshal] = new CanBuildFrom[BBArray[_],A,BBArray[A]] {
+    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
+    def apply(from: BBArray[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](from.length*implicitly[FixedSizeMarshal[A]].size)
   }
 
-  class BBArrayBuilder[A: Marshal](private var b: ByteBuffer) extends Builder[A, BBArray[A]] {
-    def this(n: Int) = this(ByteBuffer.allocate(n))
+  class BBArrayBuilder[A: FixedSizeMarshal](private var b: ByteBuffer) extends Builder[A, BBArray[A]] {
+    def this(n: Int) = this(ByteBuffer.allocate(n).order(ByteOrder.nativeOrder))
 
     override def +=(elem: A) = {
       val pos = b.position
-      val m = implicitly[Marshal[A]]
+      val m = implicitly[FixedSizeMarshal[A]]
 
       // Grow!
       // println("cap " + b.capacity)
@@ -170,18 +218,29 @@ object BufferBackedArray {
     }
   }
 
-  class BBArray[A: Marshal](private val buf: ByteBuffer) extends ArrayLike[A, BBArray[A]] {
-    def this(n: Int) = this(ByteBuffer.allocate(n * implicitly[Marshal[A]].size)) // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[Marshal[A]].size)))
+  object BBArray {
+    def fromArray[A: FixedSizeMarshal](a: Array[A]) = {
+      val cbf = implicitly[CanBuildFrom[Array[A], A, BBArray[A]]]
+      var bb = cbf(a)
+      for (ai <- a) bb += ai
+      bb.result
+    }
+  }
+
+  class BBArray[A: FixedSizeMarshal](private val buf: ByteBuffer) extends ArrayLike[A, BBArray[A]] {
+    def this(n: Int) = this(ByteBuffer.allocate(n * implicitly[FixedSizeMarshal[A]].size).order(ByteOrder.nativeOrder)) // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
+
+    def buffer: ByteBuffer = buf
 
     // println("created array with buffer of " + buf.limit + " bytes")
 
     override def newBuilder: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*marshal.size)
 
-    lazy val marshal = implicitly[Marshal[A]]
+    lazy val marshal = implicitly[FixedSizeMarshal[A]]
 
     def apply(i: Int): A = marshal.get(buf, i*marshal.size)
-    def length: Int = buf.limit / marshal.size
     def update(i: Int, x: A): Unit = marshal.put(buf, i*marshal.size, x)
+    def length: Int = buf.limit / marshal.size
   }
 
   def time[T](key: String)(body: => T): T = {
