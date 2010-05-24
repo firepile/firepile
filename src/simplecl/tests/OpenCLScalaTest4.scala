@@ -281,14 +281,21 @@ object OpenCLScalaTest4 {
     }
   }
 
+  class BlockArrayDist1[A:FixedSizeMarshal,T <: { def length: Int }](n: Int = 32) extends Dist1[T] {
+    def apply(a: T) = new Disted {
+      val totalNumberOfItems = a.length
+      override val numberOfItemsPerGroup = n
+    }
+  }
+
   class SimpleGlobalArrayEffect1[A:FixedSizeMarshal, T <: { def length: Int }] extends Effect1[T] {
     def apply(a: T) = new Effect {
       val outputSize = a.length * fixedSizeMarshal[A].size
     }
   }
 
-  class SimpleLocalArrayEffect1[A:FixedSizeMarshal](n:Int) extends Effect1[Array[A]] {
-    def apply(a: Array[A]) = new Effect {
+  class SimpleLocalArrayEffect1[A:FixedSizeMarshal, T <: { def length: Int }](n:Int) extends Effect1[T] {
+    def apply(a: T) = new Effect {
       val outputSize = a.length * fixedSizeMarshal[A].size
       override val localBufferSizes = List[Int](n)
     }
@@ -346,6 +353,13 @@ object OpenCLScalaTest4 {
     trait BBArrayMapKernel2[A1,A2,B] extends Kernel2[BBArray[A1],BBArray[A2],BBArray[B]]
     trait BBArrayMapKernel3[A1,A2,A3,B] extends Kernel3[BBArray[A1],BBArray[A2],BBArray[A3],BBArray[B]]
 
+    trait ArrayReduceKernel1[A,B] extends Kernel1[Array[A],B]
+    trait ArrayReduceKernel2[A1,A2,B] extends Kernel2[Array[A1],Array[A2],B]
+    trait ArrayReduceKernel3[A1,A2,A3,B] extends Kernel3[Array[A1],Array[A2],Array[A3],B]
+    trait BBArrayReduceKernel1[A,B] extends Kernel1[BBArray[A],B]
+    trait BBArrayReduceKernel2[A1,A2,B] extends Kernel2[BBArray[A1],BBArray[A2],B]
+    trait BBArrayReduceKernel3[A1,A2,A3,B] extends Kernel3[BBArray[A1],BBArray[A2],BBArray[A3],B]
+
     class Spawner1[A](a1:Array[A]) {
       def lazyzip[A2](a2:Array[A2]) = new Spawner2(a1,a2)
       def map[B](k: ArrayMapKernel1[A,B]) = k(a1)
@@ -364,24 +378,82 @@ object OpenCLScalaTest4 {
 
   val floatX2 = (a:Float) => a * 2.0f
   val aSinB = (a:Float,b:Float) => a * Math.sin(b).toFloat + 1.0f
+  val sum = (a:BBArray[Float]) => {
+    var sum = 0f
+    for (ai <- a) {
+      sum += ai
+    }
+    sum
+  }
 
-  def compileMapKernel(src: Object, name: String): String = src match {
+  def compileMapKernel1(src: Function1[_,_], name: String): String = src match {
     case f if f == floatX2 => ("\n" +
               "__kernel void " + name + "(            \n" +
               "   __global const float* input,        \n" +
               "   __global float* output)             \n" +
               "{                                      \n" +
               "   int i = get_global_id(0);           \n" +
-              "   output[i] = input[i] * 2.0f;        \n" +
+              "   output[i] = input[i] * 2.f;         \n" +
               "}                                      \n")
+  }
+
+  def compileMapKernel2(src: Function2[_,_,_], name: String): String = src match {
     case f if f == aSinB => ("\n" +
               "__kernel void " + name + "(            \n" +
-              "   __global const float* input,        \n" +
+              "   __global const float* a,            \n" +
+              "   __global const float* b,            \n" +
               "   __global float* output)             \n" +
               "{                                      \n" +
               "   int i = get_global_id(0);           \n" +
-              "   output[i] = input[i] * 2.0f;        \n" +
+              "   output[i] = a[i] * sin(b[i]) + 1.f; \n" +
               "}                                      \n")
+  }
+
+  def compileReduceKernel1(src: Function1[_,_], name: String): String = src match {
+    case f if f == sum => ("\n" +
+"#define T float                                                                    \n" +
+"#define blockSize 128                                                              \n" +
+"#define nIsPow2 1                                                                  \n" +
+"__kernel void " + name + "(                                                        \n" +
+"  __global T *g_idata,                                                             \n" +
+"  __global T *g_odata,                                                             \n" +
+"  unsigned int n,                                                                  \n" +
+"  __local T* sdata) {                                                              \n" +
+"   // perform first level of reduction,                                            \n" +
+"   // reading from global memory, writing to shared memory                         \n" +
+"   unsigned int tid = get_local_id(0);                                             \n" +
+"   unsigned int i = get_group_id(0)*(get_local_size(0)*2) + get_local_id(0);       \n" +
+"                                                                                   \n" +
+"   sdata[tid] = (i < n) ? g_idata[i] : 0;                                          \n" +
+"   if (i + get_local_size(0) < n)                                                  \n" +
+"       sdata[tid] += g_idata[i+get_local_size(0)];                                 \n" +
+"                                                                                   \n" +
+"   barrier(CLK_LOCAL_MEM_FENCE);                                                   \n" +
+"                                                                                   \n" +
+"   // do reduction in shared mem                                                   \n" +
+"   #pragma unroll 1                                                                \n" +
+"   for(unsigned int s=get_local_size(0)/2; s>32; s>>=1)                            \n" +
+"   {                                                                               \n" +
+"       if (tid < s)                                                                \n" +
+"       {                                                                           \n" +
+"           sdata[tid] += sdata[tid + s];                                           \n" +
+"       }                                                                           \n" +
+"       barrier(CLK_LOCAL_MEM_FENCE);                                               \n" +
+"   }                                                                               \n" +
+"                                                                                   \n" +
+"   if (tid < 32)                                                                   \n" +
+"   {                                                                               \n" +
+"       if (blockSize >=  64) { sdata[tid] += sdata[tid + 32]; }                    \n" +
+"       if (blockSize >=  32) { sdata[tid] += sdata[tid + 16]; }                    \n" +
+"       if (blockSize >=  16) { sdata[tid] += sdata[tid +  8]; }                    \n" +
+"       if (blockSize >=   8) { sdata[tid] += sdata[tid +  4]; }                    \n" +
+"       if (blockSize >=   4) { sdata[tid] += sdata[tid +  2]; }                    \n" +
+"       if (blockSize >=   2) { sdata[tid] += sdata[tid +  1]; }                    \n" +
+"   }                                                                               \n" +
+"                                                                                   \n" +
+"   // write result for this block to global mem                                    \n" +
+"   if (tid == 0) g_odata[get_group_id(0)] = sdata[0];                              \n" +
+" }                                                                                 \n")
   }
 
   var next = 0
@@ -392,7 +464,7 @@ object OpenCLScalaTest4 {
 
   implicit def f2arrayMapk1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: A => B): ArrayMapKernel1[A,B] = {
     val kernelName = freshName("theKernel")
-    val src = compileMapKernel(f, kernelName)
+    val src = compileMapKernel1(f, kernelName)
     implicit val Ma = fixedSizeMarshal[A].manifest
     implicit val Mb = fixedSizeMarshal[B].manifest
     implicit val ma = AT[A]
@@ -407,7 +479,7 @@ object OpenCLScalaTest4 {
 
   implicit def f2bbarrayMapk1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: A => B): BBArrayMapKernel1[A,B] = {
     val kernelName = freshName("theKernel")
-    val src = compileMapKernel(f, kernelName)
+    val src = compileMapKernel1(f, kernelName)
     implicit val ma = BBAT[A]
     implicit val mb = BBAT[B]
     val kernel = CL.gpu.compile1[BBArray[A], BBArray[B]](kernelName, src,
@@ -417,6 +489,35 @@ object OpenCLScalaTest4 {
       def apply(a: BBArray[A]) = kernel(a)
     }
   }
+
+  implicit def f2bbarrayReducek1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: BBArray[A] => B): BBArrayReduceKernel1[A,B] = {
+    val kernelName = freshName("theKernel")
+    val src = compileMapKernel1(f, kernelName)
+    implicit val ma = BBAT[A]
+    val numThreads = 32
+    val kernel = CL.gpu.compile1[BBArray[A], B](kernelName, src,
+                                                new BlockArrayDist1[A,BBArray[A]](numThreads),
+                                                new SimpleLocalArrayEffect1[A,BBArray[A]](numThreads * fixedSizeMarshal[A].size))
+    new BBArrayReduceKernel1[A,B] {
+      def apply(a: BBArray[A]) = kernel(a)
+    }
+  }
+
+/*
+  implicit def f2bbarrayMapk2[A1:FixedSizeMarshal,A2:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2) => B): BBArrayMapKernel2[A1,A2,B] = {
+    val kernelName = freshName("theKernel")
+    val src = compileMapKernel1(f, kernelName)
+    implicit val ma1 = BBAT[A1]
+    implicit val ma2 = BBAT[A2]
+    implicit val mb = BBAT[B]
+    val kernel = CL.gpu.compile1[BBArray[A1], BBArray[A2], BBArray[B1]](kernelName, src,
+                                                         new SimpleArrayDist1[A1,BBArray[A1]],
+                                                         new SimpleGlobalArrayEffect1[A,BBArray[A]])
+    new BBArrayMapKernel1[A,B] {
+      def apply(a: BBArray[A]) = kernel(a)
+    }
+  }
+*/
 
   class Mem(dev: Device) {
     lazy val context = dev.context
@@ -443,15 +544,6 @@ object OpenCLScalaTest4 {
 
     val dataSize = if (args.length > 0) args(0).toInt else 1000
 
-    val src = "\n" +
-              "__kernel void copyVec(                         \n" +
-              "   __global const float* input,                \n" +
-              "   __global float* output)                     \n" +
-              "{                                              \n" +
-              "   int i = get_global_id(0);                   \n" +
-              "   output[i] = input[i] * 2.0f;                \n" +
-              "}                                              \n"
-
     val a = Array.tabulate(dataSize)(_.toFloat)
     
     println("sequential");
@@ -461,12 +553,22 @@ object OpenCLScalaTest4 {
       }
     }
 
-    val ak: Kernel1[Array[Float],Array[Float]] = floatX2
+    class ArrayKernelWrapper[A](a: Array[A]) {
+      def mapKernel[B](k: ArrayMapKernel1[A,B]) = k(a)
+      def reduceKernel[B](k: ArrayReduceKernel1[A,B]) = k(a)
+    }
+    class BBArrayKernelWrapper[A](a: BBArray[A]) {
+      def mapKernel[B](k: BBArrayMapKernel1[A,B]) = k(a)
+      def reduceKernel[B](k: BBArrayReduceKernel1[A,B]) = k(a)
+    }
+
+    implicit def wrapArray[A](a: Array[A]) = new ArrayKernelWrapper[A](a)
+    implicit def wrapBBArray[A](a: BBArray[A]) = new BBArrayKernelWrapper[A](a)
 
     println("cl array");
     {
       val c = time {
-        val result = CL.gpu.spawn { ak(a) }
+        val result = CL.gpu.spawn { a.mapKernel(floatX2) }
         result.force
       }
       assert(a.length == c.length)
@@ -477,12 +579,11 @@ object OpenCLScalaTest4 {
     }
 
     val b = BBArray.fromArray(a)
-    val bk: Kernel1[BBArray[Float],BBArray[Float]] = floatX2
 
     println("cl bbarray");
     {
       val d = time {
-        val result = CL.gpu.spawn { bk(b) }
+        val result = CL.gpu.spawn { b.mapKernel(floatX2) }
         result.force
       }
       assert(b.length == d.length)
@@ -490,6 +591,15 @@ object OpenCLScalaTest4 {
         println(b(i) + " " + d(i))
         assert((b(i)*2.f - d(i)).abs < 1e-6)
       }
+    }
+
+    println("cl bbarray sum");
+    {
+      val c = time {
+        val result = CL.gpu.spawn { b.reduceKernel(sum) }
+        result.force
+      }
+      println("sum = " + c)
     }
 
     // New usage:
