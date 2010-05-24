@@ -255,7 +255,6 @@ object OpenCLScalaTest4 {
     }
   }
 
-  // Need to map input to a Dist
   trait Effect {
     def outputSize: Int
     def localBufferSizes: List[Int] = Nil
@@ -339,17 +338,85 @@ object OpenCLScalaTest4 {
     def spawn[A1,A2,A3,B](k: InstantiatedKernel3[A1,A2,A3,B]) = k.run(this)
   }
 
-  implicit def f2k1[A,B](f: A => B): Kernel1[A,B] = throw new RuntimeException("compile the kernel")
-  implicit def f2k2[A1,A2,B](f: (A1,A2) => B): Kernel2[A1,A2,B] = throw new RuntimeException("compile the kernel")
-  implicit def f2k3[A1,A2,A3,B](f: (A1,A2,A3) => B): Kernel3[A1,A2,A3,B] = throw new RuntimeException("compile the kernel")
+    // Kernels that were compiled from functions on single elements
+    trait ArrayMapKernel1[A,B] extends Kernel1[Array[A],Array[B]]
+    trait ArrayMapKernel2[A1,A2,B] extends Kernel2[Array[A1],Array[A2],Array[B]]
+    trait ArrayMapKernel3[A1,A2,A3,B] extends Kernel3[Array[A1],Array[A2],Array[A3],Array[B]]
+    trait BBArrayMapKernel1[A,B] extends Kernel1[BBArray[A],BBArray[B]]
+    trait BBArrayMapKernel2[A1,A2,B] extends Kernel2[BBArray[A1],BBArray[A2],BBArray[B]]
+    trait BBArrayMapKernel3[A1,A2,A3,B] extends Kernel3[BBArray[A1],BBArray[A2],BBArray[A3],BBArray[B]]
 
-  implicit def f2bk1[A,B](f: A => B): Kernel1[BBArray[A],BBArray[B]] = throw new RuntimeException("compile the kernel")
-  implicit def f2bk2[A1,A2,B](f: (A1,A2) => B): Kernel2[BBArray[A1],BBArray[A2],BBArray[B]] = throw new RuntimeException("compile the kernel")
-  implicit def f2bk3[A1,A2,A3,B](f: (A1,A2,A3) => B): Kernel3[BBArray[A1],BBArray[A2],BBArray[A3],BBArray[B]] = throw new RuntimeException("compile the kernel")
+    class Spawner1[A](a1:Array[A]) {
+      def lazyzip[A2](a2:Array[A2]) = new Spawner2(a1,a2)
+      def map[B](k: ArrayMapKernel1[A,B]) = k(a1)
+    }
+    class Spawner2[A1,A2](a1:Array[A1],a2:Array[A2]) {
+      def lazyzip[A3](a3:Array[A3]) = new Spawner3(a1,a2,a3)
+      def zipMap[B](k: ArrayMapKernel2[A1,A2,B]) = k(a1,a2)
+    }
+    class Spawner3[A1,A2,A3](a1:Array[A1],a2:Array[A2],a3:Array[A3]) {
+      def zipMap[B](k: ArrayMapKernel3[A1,A2,A3,B]) = k(a1,a2,a3)
+    }
 
-  implicit def f2ak1[A,B](f: A => B): Kernel1[Array[A],Array[B]] = throw new RuntimeException("compile the kernel")
-  implicit def f2ak2[A1,A2,B](f: (A1,A2) => B): Kernel2[Array[A1],Array[A2],Array[B]] = throw new RuntimeException("compile the kernel")
-  implicit def f2ak3[A1,A2,A3,B](f: (A1,A2,A3) => B): Kernel3[Array[A1],Array[A2],Array[A3],Array[B]] = throw new RuntimeException("compile the kernel")
+    implicit def S1[A](a:Array[A]) = new Spawner1[A](a)
+    implicit def S2[A1,A2](a:Pair[Array[A1],Array[A2]]) = new Spawner2[A1,A2](a._1,a._2)
+    implicit def S3[A1,A2,A3](a:Triple[Array[A1],Array[A2],Array[A3]]) = new Spawner3[A1,A2,A3](a._1,a._2,a._3)
+
+  val floatX2 = (a:Float) => a * 2.0f
+  val aSinB = (a:Float,b:Float) => a * Math.sin(b).toFloat + 1.0f
+
+  def compileMapKernel(src: Object, name: String): String = src match {
+    case f if f == floatX2 => ("\n" +
+              "__kernel void " + name + "(            \n" +
+              "   __global const float* input,        \n" +
+              "   __global float* output)             \n" +
+              "{                                      \n" +
+              "   int i = get_global_id(0);           \n" +
+              "   output[i] = input[i] * 2.0f;        \n" +
+              "}                                      \n")
+    case f if f == aSinB => ("\n" +
+              "__kernel void " + name + "(            \n" +
+              "   __global const float* input,        \n" +
+              "   __global float* output)             \n" +
+              "{                                      \n" +
+              "   int i = get_global_id(0);           \n" +
+              "   output[i] = input[i] * 2.0f;        \n" +
+              "}                                      \n")
+  }
+
+  var next = 0
+  def freshName(base: String = "tmp") = { 
+    next += 1
+    base + next
+  }
+
+  implicit def f2arrayMapk1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: A => B): ArrayMapKernel1[A,B] = {
+    val kernelName = freshName("theKernel")
+    val src = compileMapKernel(f, kernelName)
+    implicit val Ma = fixedSizeMarshal[A].manifest
+    implicit val Mb = fixedSizeMarshal[B].manifest
+    implicit val ma = AT[A]
+    implicit val mb = AT[B]
+    val kernel = CL.gpu.compile1[Array[A], Array[B]](kernelName, src,
+                                                     new SimpleArrayDist1[A,Array[A]],
+                                                     new SimpleGlobalArrayEffect1[A,Array[A]])
+    new ArrayMapKernel1[A,B] {
+      def apply(a: Array[A]) = kernel(a)
+    }
+  }
+
+  implicit def f2bbarrayMapk1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: A => B): BBArrayMapKernel1[A,B] = {
+    val kernelName = freshName("theKernel")
+    val src = compileMapKernel(f, kernelName)
+    implicit val ma = BBAT[A]
+    implicit val mb = BBAT[B]
+    val kernel = CL.gpu.compile1[BBArray[A], BBArray[B]](kernelName, src,
+                                                         new SimpleArrayDist1[A,BBArray[A]],
+                                                         new SimpleGlobalArrayEffect1[A,BBArray[A]])
+    new BBArrayMapKernel1[A,B] {
+      def apply(a: BBArray[A]) = kernel(a)
+    }
+  }
 
   class Mem(dev: Device) {
     lazy val context = dev.context
@@ -385,8 +452,6 @@ object OpenCLScalaTest4 {
               "   output[i] = input[i] * 2.0f;                \n" +
               "}                                              \n"
 
-
-    val akernel = CL.gpu.compile1[Array[Float], Array[Float]]("copyVec", src, new SimpleArrayDist1[Float,Array[Float]], new SimpleGlobalArrayEffect1[Float,Array[Float]])
     val a = Array.tabulate(dataSize)(_.toFloat)
     
     println("sequential");
@@ -396,10 +461,12 @@ object OpenCLScalaTest4 {
       }
     }
 
+    val ak: Kernel1[Array[Float],Array[Float]] = floatX2
+
     println("cl array");
     {
       val c = time {
-        val result = CL.gpu.spawn { akernel(a) }
+        val result = CL.gpu.spawn { ak(a) }
         result.force
       }
       assert(a.length == c.length)
@@ -409,13 +476,13 @@ object OpenCLScalaTest4 {
       }
     }
 
-    val bkernel = CL.gpu.compile1[BBArray[Float], BBArray[Float]]("copyVec", src, new SimpleArrayDist1[Float,BBArray[Float]], new SimpleGlobalArrayEffect1[Float,BBArray[Float]])
     val b = BBArray.fromArray(a)
+    val bk: Kernel1[BBArray[Float],BBArray[Float]] = floatX2
 
     println("cl bbarray");
     {
       val d = time {
-        val result = CL.gpu.spawn { bkernel(b) }
+        val result = CL.gpu.spawn { bk(b) }
         result.force
       }
       assert(b.length == d.length)
@@ -424,27 +491,6 @@ object OpenCLScalaTest4 {
         assert((b(i)*2.f - d(i)).abs < 1e-6)
       }
     }
-
-    // Kernels that were compiled from functions on single elements
-    trait UnitKernel1[A,B] extends Kernel1[Array[A],Array[B]]
-    trait UnitKernel2[A1,A2,B] extends Kernel2[Array[A1],Array[A2],Array[B]]
-    trait UnitKernel3[A1,A2,A3,B] extends Kernel3[Array[A1],Array[A2],Array[A3],Array[B]]
-
-    class Spawner1[A](a:Array[A]) {
-      def lazyzip[A2](a2:Array[A2]) = new Spawner2(a,a2)
-      def map[B](k: UnitKernel1[A,B]) = k(a)
-    }
-    class Spawner2[A1,A2](a1:Array[A1],a2:Array[A2]) {
-      def lazyzip[A3](a3:Array[A3]) = new Spawner3(a,a2,a3)
-      def zipMap[B](k: UnitKernel2[A1,A2,B]) = k(a1,a2)
-    }
-    class Spawner3[A1,A2,A3](a1:Array[A1],a2:Array[A2],a3:Array[A3]) {
-      def zipMap[B](k: UnitKernel3[A1,A2,A3,B]) = k(a1,a2,a3)
-    }
-
-    implicit def S1[A](a:Array[A]) = new Spawner1[A](a)
-    implicit def S2[A1,A2](a:Pair[Array[A1],Array[A2]]) = new Spawner2[A1,A2](a._1,a._2)
-    implicit def S3[A1,A2,A3](a:Triple[Array[A1],Array[A2],Array[A3]]) = new Spawner3[A1,A2,A3](a._1,a._2,a._3)
 
     // New usage:
   /*

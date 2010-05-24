@@ -25,20 +25,10 @@ object BufferBackedArray {
   trait FixedSizeMarshal[A] extends Marshal[A] {
     def size(a: A): Int = size
     def size: Int
-  }
 
-  /*
-  def fsm[A: Marshal](a: A) = {
-    val m = implicitly[Marshal[A]]
-    new FixedSizeMarshal[A] {
-      def size: Int = size(a)
-      override def size(a: A) = m.size(a)
-      override def align = m.align
-      override def put(buf:ByteBuffer, i: Int, x: A) = m.put(buf, i, x)
-      override def get(buf:ByteBuffer, i: Int) = m.get(buf, i)
-    }
+    // Needed to make arrays work avoiding passing around both a Marshal and a ClassManifest.
+    def manifest: ClassManifest[A]
   }
-  */
 
   trait Marshal[A] {
     def size(a: A): Int
@@ -64,6 +54,7 @@ object BufferBackedArray {
     val align = 1
     def put(buf:ByteBuffer, i: Int, x: Boolean) = buf.put(i, if (x) 1 else 0)
     def get(buf:ByteBuffer, i: Int) = if (buf.get(i) == 0) false else true
+    val manifest = Predef.manifest[Boolean]
   }
 
   implicit object BM extends FixedSizeMarshal[Byte] {
@@ -71,6 +62,7 @@ object BufferBackedArray {
     val align = 1
     def put(buf:ByteBuffer, i: Int, x: Byte) = buf.put(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.get(i)
+    val manifest = Predef.manifest[Byte]
   }
 
   implicit object SM extends FixedSizeMarshal[Short] {
@@ -78,6 +70,7 @@ object BufferBackedArray {
     val align = 2
     def put(buf:ByteBuffer, i: Int, x: Short) = buf.putShort(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getShort(i)
+    val manifest = Predef.manifest[Short]
   }
 
   implicit object CM extends FixedSizeMarshal[Char] {
@@ -85,6 +78,7 @@ object BufferBackedArray {
     val align = 2
     def put(buf:ByteBuffer, i: Int, x: Char) = buf.putChar(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getChar(i)
+    val manifest = Predef.manifest[Char]
   }
 
   implicit object IM extends FixedSizeMarshal[Int] {
@@ -92,6 +86,7 @@ object BufferBackedArray {
     val align = 4
     def put(buf:ByteBuffer, i: Int, x: Int) = buf.putInt(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getInt(i)
+    val manifest = Predef.manifest[Int]
   }
 
   implicit object LM extends FixedSizeMarshal[Long] {
@@ -99,6 +94,7 @@ object BufferBackedArray {
     val align = 8
     def put(buf:ByteBuffer, i: Int, x: Long) = buf.putLong(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getLong(i)
+    val manifest = Predef.manifest[Long]
   }
 
   implicit object FM extends FixedSizeMarshal[Float] {
@@ -106,6 +102,7 @@ object BufferBackedArray {
     val align = 4
     def put(buf:ByteBuffer, i: Int, x: Float) = buf.putFloat(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getFloat(i)
+    val manifest = Predef.manifest[Float]
   }
 
   implicit object DM extends FixedSizeMarshal[Double] {
@@ -113,6 +110,7 @@ object BufferBackedArray {
     val align = 8
     def put(buf:ByteBuffer, i: Int, x: Double) = buf.putDouble(i, x)
     def get(buf:ByteBuffer, i: Int) = buf.getDouble(i)
+    val manifest = Predef.manifest[Double]
   }
 
   implicit def tuple2Marshal[A: FixedSizeMarshal,B:FixedSizeMarshal] = new T2M[A,B]
@@ -140,6 +138,8 @@ object BufferBackedArray {
         val snd: B = mb.get(buf, i + (ma.size max mb.align))
         (fst, snd)
     }
+
+    val manifest = classManifest[Tuple2[A,B]]
   }
 
   implicit def tuple3Marshal[A: FixedSizeMarshal,B:FixedSizeMarshal,C:FixedSizeMarshal] = new T3M[A,B,C]
@@ -170,6 +170,8 @@ object BufferBackedArray {
         val thd: C = mc.get(buf, i + (ma.size max mb.align) + (mb.size max mc.align))
         (fst, snd, thd)
     }
+
+    val manifest = classManifest[Tuple3[A,B,C]]
   }
 
   import scala.collection.generic.CanBuildFrom
