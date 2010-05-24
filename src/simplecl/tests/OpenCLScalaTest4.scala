@@ -10,6 +10,8 @@ import java.nio.{Buffer=>NIOBuffer}
 import java.nio.ByteOrder
 
 import scala.reflect.Manifest
+import scala.collection.mutable.ArraySeq
+
 import com.nativelibs4java.opencl.CLMem
 import com.nativelibs4java.opencl.CLEvent
 
@@ -266,37 +268,31 @@ object OpenCLScalaTest4 {
     override def toString = "Disted {n=" + totalNumberOfItems + "/" + numberOfItemsPerGroup + "}"
   }
 
-  type AppliedDist = Function1[Device,(Disted,Effect)]
-  type Dist1[A] = Function1[A,AppliedDist]
-  type Dist2[A1,A2] = Function2[A1,A2,AppliedDist]
-  type Dist3[A1,A2,A3] = Function3[A1,A2,A3,AppliedDist]
+  type Dist1[A] = Function1[A,Disted]
+  type Dist2[A1,A2] = Function2[A1,A2,Disted]
+  type Dist3[A1,A2,A3] = Function3[A1,A2,A3,Disted]
 
-  class SimpleGlobalArrayDist1[A:FixedSizeMarshal] extends Dist1[Array[A]] {
-    def apply(a: Array[A]) = (dev: Device) => (new Disted {
+  type Effect1[A] = Function1[A,Effect]
+  type Effect2[A1,A2] = Function2[A1,A2,Effect]
+  type Effect3[A1,A2,A3] = Function3[A1,A2,A3,Effect]
+
+  class SimpleArrayDist1[A:FixedSizeMarshal,T <: { def length: Int }] extends Dist1[T] {
+    def apply(a: T) = new Disted {
       val totalNumberOfItems = a.length
-    },
-    new Effect {
-      val outputSize = a.length * fixedSizeMarshal[A].size
-    })
+    }
   }
 
-  class SimpleGlobalBBArrayDist1[A:FixedSizeMarshal] extends Dist1[BBArray[A]] {
-    def apply(a: BBArray[A]) = (dev: Device) => (new Disted {
-      val totalNumberOfItems = a.length
-    },
-    new Effect {
+  class SimpleGlobalArrayEffect1[A:FixedSizeMarshal, T <: { def length: Int }] extends Effect1[T] {
+    def apply(a: T) = new Effect {
       val outputSize = a.length * fixedSizeMarshal[A].size
-    })
+    }
   }
 
-  class SimpleLocalArrayDist1[A:FixedSizeMarshal] extends Dist1[Array[A]] {
-    def apply(a: Array[A]) = (dev: Device) => (new Disted {
-      val totalNumberOfItems = a.length
-    },
-    new Effect {
+  class SimpleLocalArrayEffect1[A:FixedSizeMarshal](n:Int) extends Effect1[Array[A]] {
+    def apply(a: Array[A]) = new Effect {
       val outputSize = a.length * fixedSizeMarshal[A].size
-      override val localBufferSizes = List[Int](dev.device.localMemSize.toInt)
-    })
+      override val localBufferSizes = List[Int](n)
+    }
   }
 
   class Device(val platform: SCLPlatform, val device: SCLDevice, val context: SCLContext) {
@@ -306,7 +302,7 @@ object OpenCLScalaTest4 {
       (d: Disted, e: Effect) => new BufKernel1(code, d, e)
     }
 
-    def compile1[A: Marshal, B: Marshal](name: String, src: String, dist: Dist1[A]) = {
+    def compile1[A: Marshal, B: Marshal](name: String, src: String, dist: Dist1[A], effect: Effect1[A]) = {
       val transA = implicitly[Marshal[A]];
       val transB = implicitly[Marshal[B]];
 
@@ -316,7 +312,8 @@ object OpenCLScalaTest4 {
         def apply(input: A) = new InstantiatedKernel1[A,B] {
           def run(dev: Device) = {
             val bufIn: ByteBuffer = transA.put(input)
-            val (d: Disted, e: Effect) = dist(input)(dev)
+            val d: Disted = dist(input)
+            val e: Effect = effect(input)
             val k = kernel(d, e)
             val f = k(bufIn).run(dev)
 
@@ -389,7 +386,7 @@ object OpenCLScalaTest4 {
               "}                                              \n"
 
 
-    val akernel = CL.gpu.compile1[Array[Float], Array[Float]]("copyVec", src, new SimpleGlobalArrayDist1[Float])
+    val akernel = CL.gpu.compile1[Array[Float], Array[Float]]("copyVec", src, new SimpleArrayDist1[Float,Array[Float]], new SimpleGlobalArrayEffect1[Float,Array[Float]])
     val a = Array.tabulate(dataSize)(_.toFloat)
     
     println("sequential");
@@ -412,7 +409,7 @@ object OpenCLScalaTest4 {
       }
     }
 
-    val bkernel = CL.gpu.compile1[BBArray[Float], BBArray[Float]]("copyVec", src, new SimpleGlobalBBArrayDist1[Float])
+    val bkernel = CL.gpu.compile1[BBArray[Float], BBArray[Float]]("copyVec", src, new SimpleArrayDist1[Float,BBArray[Float]], new SimpleGlobalArrayEffect1[Float,BBArray[Float]])
     val b = BBArray.fromArray(a)
 
     println("cl bbarray");
