@@ -8,33 +8,16 @@ import java.nio.Buffer
 class SCLKernel(clk: CLKernel) {
   val _CLKernel: CLKernel = clk
 
-   // ONLY WORKS FOR CLFLOATBUFFER
-//  def setArgs(args: SCLFloatBuffer*): Unit = {
-//    val underlyingBufs = new ArrayBuffer[CLFloatBuffer]
-//
-//    args.foreach(b => underlyingBufs += b._underlyingBuffer)
-//    _CLKernel.setArgs(underlyingBufs.toArray:_*)
-//  }
-  
-  
-  def setArgs(args: SCLBuffer[_]*): Unit = {
-    val underlyingBufs = new ArrayBuffer[CLBuffer[_]]
-
-    args.foreach(b => underlyingBufs += b._CLBuffer)
-    _CLKernel.setArgs(underlyingBufs.toArray:_*)
+  def setArgs(args: Object*): Unit = {
+    val unwrapped = (args.map {
+        case b: SCLBuffer[_] => b._CLBuffer
+        case o: Object => o
+    })
+    _CLKernel.setArgs(unwrapped:_*)
   }
 
-
-//  def setArgs[B <: java.nio.Buffer](args: SCLBuffer[B]*): Unit = {
-//   val underlyingBufs = new ArrayBuffer[CLBuffer[B]]
-
-//    args.foreach(b => underlyingBufs += b._CLBuffer)
-//    _CLKernel.setArgs(underlyingBufs.toArray:_*)
-//  }
-
-
   def enqueueNDRange(queue: SCLQueue, globalWorkSizes: Array[Int], localWorkSizes: Array[Int], eventsToWaitFor: CLEvent*) = {
-  _CLKernel.enqueueNDRange(queue._CLQueue, globalWorkSizes, localWorkSizes, eventsToWaitFor:_*)
+    _CLKernel.enqueueNDRange(queue._CLQueue, globalWorkSizes, localWorkSizes, eventsToWaitFor:_*)
   }
 }
 

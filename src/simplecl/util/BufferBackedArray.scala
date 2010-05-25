@@ -113,9 +113,9 @@ object BufferBackedArray {
     val manifest = Predef.manifest[Double]
   }
 
-  implicit def tuple2Marshal[A: FixedSizeMarshal,B:FixedSizeMarshal] = new T2M[A,B]
+  implicit def tuple2Marshal[A: FixedSizeMarshal, B:FixedSizeMarshal] = new T2M[A,B]
 
-  class T2M[A: FixedSizeMarshal,B:FixedSizeMarshal] extends FixedSizeMarshal[Tuple2[A,B]] {
+  class T2M[A: FixedSizeMarshal, B:FixedSizeMarshal] extends FixedSizeMarshal[Tuple2[A,B]] {
     val ma = implicitly[FixedSizeMarshal[A]]
     val mb = implicitly[FixedSizeMarshal[B]]
 
@@ -142,9 +142,9 @@ object BufferBackedArray {
     val manifest = classManifest[Tuple2[A,B]]
   }
 
-  implicit def tuple3Marshal[A: FixedSizeMarshal,B:FixedSizeMarshal,C:FixedSizeMarshal] = new T3M[A,B,C]
+  implicit def tuple3Marshal[A: FixedSizeMarshal, B:FixedSizeMarshal, C:FixedSizeMarshal] = new T3M[A,B,C]
 
-  class T3M[A: FixedSizeMarshal,B:FixedSizeMarshal,C:FixedSizeMarshal] extends FixedSizeMarshal[Tuple3[A,B,C]] {
+  class T3M[A: FixedSizeMarshal, B:FixedSizeMarshal, C:FixedSizeMarshal] extends FixedSizeMarshal[Tuple3[A,B,C]] {
     val ma = implicitly[FixedSizeMarshal[A]]
     val mb = implicitly[FixedSizeMarshal[B]]
     val mc = implicitly[FixedSizeMarshal[C]]
@@ -227,6 +227,14 @@ object BufferBackedArray {
       for (ai <- a) bb += ai
       bb.result
     }
+    def tabulate[A: FixedSizeMarshal](n: Int)(f: Int => A) = {
+      val b = new BBArray[A](n)
+      for (i <- 0 until n) {
+        b(i) = f(i)
+      }
+      b
+    }
+    def ofDim[A: FixedSizeMarshal](n: Int) = new BBArray[A](n)
   }
 
   class BBArray[A: FixedSizeMarshal](private val buf: ByteBuffer) extends ArrayLike[A, BBArray[A]] {

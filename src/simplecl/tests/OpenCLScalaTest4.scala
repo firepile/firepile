@@ -14,6 +14,7 @@ import scala.collection.mutable.ArraySeq
 
 import com.nativelibs4java.opencl.CLMem
 import com.nativelibs4java.opencl.CLEvent
+import com.nativelibs4java.opencl.CLKernel.LocalSize
 
 object OpenCLScalaTest4 {
   object CL {
@@ -123,34 +124,58 @@ object OpenCLScalaTest4 {
 
   trait Kernel {
   }
-  trait Kernel1[A,B] extends Function1[A,InstantiatedKernel1[A,B]] with Kernel {
+  trait Kernel1[A,B] extends Function1[A,InstantiatedKernel[B]] with Kernel {
   }
-  trait Kernel2[A1,A2,B] extends Function2[A1,A2,InstantiatedKernel2[A1,A2,B]] with Kernel {
+  trait Kernel2[A1,A2,B] extends Function2[A1,A2,InstantiatedKernel[B]] with Kernel {
   }
-  trait Kernel3[A1,A2,A3,B] extends Function3[A1,A2,A3,InstantiatedKernel3[A1,A2,A3,B]] with Kernel {
+  trait Kernel3[A1,A2,A3,B] extends Function3[A1,A2,A3,InstantiatedKernel[B]] with Kernel {
   }
 
   trait InstantiatedKernel[B] {
     def run(dev: Device): Future[B]
   }
-  trait InstantiatedKernel1[A,B] extends InstantiatedKernel[B] { }
-  trait InstantiatedKernel2[A1,A2,B] extends InstantiatedKernel[B] { }
-  trait InstantiatedKernel3[A1,A2,A3,B] extends InstantiatedKernel[B] { }
-
 
   class BufKernel1(code: SCLKernel, val dist: Disted, val effect: Effect) extends Kernel1[ByteBuffer,ByteBuffer] {
-    def apply(a: ByteBuffer) = new InstantiatedBufKernel1(code, a, dist, effect)
+    def apply(a: ByteBuffer) = new InstantiatedBufKernel(code, dist, effect, a)
   }
-  /*
-  class BufKernel2(code: SCLKernel, val dist: Disted, effect: Effect) extends Kernel2[ByteBuffer,ByteBuffer,ByteBuffer] {
-    def apply(a1: ByteBuffer, a2: ByteBuffer) = new InstantiatedBufKernel2(code, a1, a2, dist, effect)
+  class BufKernel2(code: SCLKernel, val dist: Disted, val effect: Effect) extends Kernel2[ByteBuffer,ByteBuffer,ByteBuffer] {
+    def apply(a1: ByteBuffer, a2: ByteBuffer) = new InstantiatedBufKernel(code, dist, effect, a1, a2)
   }
-  class BufKernel3(code: SCLKernel, val dist: Disted, effect: Effect) extends Kernel3[ByteBuffer,ByteBuffer,ByteBuffer,ByteBuffer] {
-    def apply(a1: ByteBuffer, a2: ByteBuffer, a3: ByteBuffer) = new InstantiatedBufKernel3(code, a1, a2, a3, dist, effect)
+  class BufKernel3(code: SCLKernel, val dist: Disted, val effect: Effect) extends Kernel3[ByteBuffer,ByteBuffer,ByteBuffer,ByteBuffer] {
+    def apply(a1: ByteBuffer, a2: ByteBuffer, a3: ByteBuffer) = new InstantiatedBufKernel(code, dist, effect, a1, a2, a3)
   }
-  */
 
-  abstract class InstantiatedBufKernel {
+  val printBuffers = false
+
+  def printBuffer(a: => ByteBuffer) = if (printBuffers) {
+    var bb = a.asFloatBuffer.duplicate
+    var i = 0
+    while (bb.hasRemaining) {
+      println(i + ": " + bb.get)
+      i += 1
+    }
+  }
+
+  class InstantiatedBufKernel(code: SCLKernel, val disted: Disted, val effect: Effect, buffers: ByteBuffer*) extends InstantiatedKernel[ByteBuffer] {
+    def run(dev: Device) = {
+      val d = disted
+      val e = effect
+      val memIn = buffers.map(a => dev.global.allocForRead[Byte](a.limit))
+      val memOut = dev.global.allocForWrite[Byte](e.outputSize)
+
+      val writeEvents = (buffers zip memIn).map{ case (a,mem) => mem.write(dev.queue, Buffer.fromNIOBuffer[Byte](a), false) }
+
+      val args = memIn.toList ::: memOut :: e.localBufferSizes.map(size => dev.local.allocForReadWrite[Byte](size))
+      println(args)
+      code.setArgs(args:_*)
+
+      // println(args)
+
+      val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup), writeEvents:_*)
+
+      readBackResult(dev, e.outputSize, runEvent, memOut)
+    }
+
     def readBackResult(dev: Device, outputLength: Int, runEvent: CLEvent, memOut: SCLBuffer[_]) = {
       new Future[ByteBuffer] {
         def force = {
@@ -165,84 +190,6 @@ object OpenCLScalaTest4 {
           bufOut
         }
       }
-    }
-  }
-
-  val printBuffers = false
-
-  def printBuffer(a: => ByteBuffer) = if (printBuffers) {
-    var bb = a.asFloatBuffer.duplicate
-    var i = 0
-    while (bb.hasRemaining) {
-      println(i + ": " + bb.get)
-      i += 1
-    }
-  }
-
-  class InstantiatedBufKernel1(code: SCLKernel, a: ByteBuffer, val disted: Disted, val effect: Effect) extends InstantiatedBufKernel with InstantiatedKernel1[ByteBuffer, ByteBuffer] {
-    def run(dev: Device) = {
-      val d = disted
-      val e = effect
-      val memIn = dev.global.allocForRead[Byte](a.limit)
-      val memOut = dev.global.allocForWrite[Byte](e.outputSize)
-
-      if (printBuffers) println(d)
-      if (printBuffers) println(e)
-      if (printBuffers) println("input " + a.limit)
-      printBuffer(a)
-
-      val writeEvent = memIn.write(dev.queue, Buffer.fromNIOBuffer[Byte](a), false)
-
-      val args = memIn :: memOut :: e.localBufferSizes.map(size => dev.local.allocForReadWrite[Byte](size))
-      code.setArgs(args:_*)
-
-      // println(args)
-
-      val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup), writeEvent)
-
-      readBackResult(dev, e.outputSize, runEvent, memOut)
-    }
-  }
-
-  class InstantiatedBufKernel2(code: SCLKernel, a1: ByteBuffer, a2: ByteBuffer, val disted: Disted, val effect: Effect) extends InstantiatedBufKernel with InstantiatedKernel2[ByteBuffer, ByteBuffer, ByteBuffer] {
-    def run(dev: Device) = {
-      val d = disted
-      val e = effect
-      val memIn1 = dev.global.allocForRead[Byte](a1.limit)
-      val memIn2 = dev.global.allocForRead[Byte](a2.limit)
-      val memOut = dev.global.allocForWrite[Byte](e.outputSize)
-
-      val writeEvent1 = memIn1.write(dev.queue, Buffer.fromNIOBuffer[Byte](a1), false)
-      val writeEvent2 = memIn2.write(dev.queue, Buffer.fromNIOBuffer[Byte](a2), false)
-
-      val args = memIn1 :: memIn2 :: memOut :: e.localBufferSizes.map(size => dev.local.allocForReadWrite[Byte](size))
-      code.setArgs(args:_*)
-
-      val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup), writeEvent1, writeEvent2)
-
-      readBackResult(dev, e.outputSize, runEvent, memOut)
-    }
-  }
-
-  class InstantiatedBufKernel3(code: SCLKernel, a1: ByteBuffer, a2: ByteBuffer, a3: ByteBuffer, val disted: Disted, val effect: Effect) extends InstantiatedBufKernel with InstantiatedKernel3[ByteBuffer, ByteBuffer, ByteBuffer, ByteBuffer] {
-    def run(dev: Device) = {
-      val d = disted
-      val e = effect
-      val memIn1 = dev.global.allocForRead[Byte](a1.limit)
-      val memIn2 = dev.global.allocForRead[Byte](a2.limit)
-      val memIn3 = dev.global.allocForRead[Byte](a3.limit)
-      val memOut = dev.global.allocForWrite[Byte](e.outputSize)
-
-      val writeEvent1 = memIn1.write(dev.queue, Buffer.fromNIOBuffer[Byte](a1), false)
-      val writeEvent2 = memIn2.write(dev.queue, Buffer.fromNIOBuffer[Byte](a2), false)
-      val writeEvent3 = memIn2.write(dev.queue, Buffer.fromNIOBuffer[Byte](a3), false)
-
-      val args = memIn1 :: memIn2 :: memIn3 :: memOut :: e.localBufferSizes.map(size => dev.local.allocForReadWrite[Byte](size))
-      code.setArgs(args:_*)
-
-      val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup), writeEvent1, writeEvent2, writeEvent3)
-
-      readBackResult(dev, e.outputSize, runEvent, memOut)
     }
   }
 
@@ -301,11 +248,30 @@ object OpenCLScalaTest4 {
     }
   }
 
+  class SimpleLocalArrayWithOutputEffect1[A:FixedSizeMarshal, T <: { def length: Int }](numThreads: Int, n:Int) extends Effect1[T] {
+    def apply(a: T) = new Effect {
+      val outputSize = (a.length / numThreads) * fixedSizeMarshal[A].size
+      override val localBufferSizes = List[Int](n)
+    }
+  }
+
   class Device(val platform: SCLPlatform, val device: SCLDevice, val context: SCLContext) {
     private def compileBuffer1(name: String, src: String): (Disted,Effect) => BufKernel1 = {
       val program = context.createProgram(src).build
       val code = program.createKernel(name)
       (d: Disted, e: Effect) => new BufKernel1(code, d, e)
+    }
+
+    private def compileBuffer2(name: String, src: String): (Disted,Effect) => BufKernel2 = {
+      val program = context.createProgram(src).build
+      val code = program.createKernel(name)
+      (d: Disted, e: Effect) => new BufKernel2(code, d, e)
+    }
+
+    private def compileBuffer3(name: String, src: String): (Disted,Effect) => BufKernel3 = {
+      val program = context.createProgram(src).build
+      val code = program.createKernel(name)
+      (d: Disted, e: Effect) => new BufKernel3(code, d, e)
     }
 
     def compile1[A: Marshal, B: Marshal](name: String, src: String, dist: Dist1[A], effect: Effect1[A]) = {
@@ -315,7 +281,7 @@ object OpenCLScalaTest4 {
       val kernel: (Disted,Effect) => BufKernel1 = compileBuffer1(name, src)
 
       new Kernel1[A,B] {
-        def apply(input: A) = new InstantiatedKernel1[A,B] {
+        def apply(input: A) = new InstantiatedKernel[B] {
           def run(dev: Device) = {
             val bufIn: ByteBuffer = transA.put(input)
             val d: Disted = dist(input)
@@ -337,12 +303,10 @@ object OpenCLScalaTest4 {
 
     lazy val queue = context.createDefaultQueue()
 
-    lazy val global: Mem = new Mem(this)
-    lazy val local: Mem = new Mem(this)
+    lazy val global = new GlobalMem(this)
+    lazy val local = new LocalMem(this)
 
-    def spawn[A,B](k: InstantiatedKernel1[A,B]) = k.run(this)
-    def spawn[A1,A2,B](k: InstantiatedKernel2[A1,A2,B]) = k.run(this)
-    def spawn[A1,A2,A3,B](k: InstantiatedKernel3[A1,A2,A3,B]) = k.run(this)
+    def spawn[B](k: InstantiatedKernel[B]) = k.run(this)
   }
 
     // Kernels that were compiled from functions on single elements
@@ -376,14 +340,38 @@ object OpenCLScalaTest4 {
     implicit def S2[A1,A2](a:Pair[Array[A1],Array[A2]]) = new Spawner2[A1,A2](a._1,a._2)
     implicit def S3[A1,A2,A3](a:Triple[Array[A1],Array[A2],Array[A3]]) = new Spawner3[A1,A2,A3](a._1,a._2,a._3)
 
+    trait Id {
+      type Tuple
+      def global: Tuple
+      def local: Tuple
+      def group: Tuple
+    }
+
+    class Id1(val global: Int, val local: Int, val group: Int) { type Tuple = Int }
+    class Id2(val global: (Int,Int), val local: (Int,Int), val group: (Int,Int)) { type Tuple = (Int,Int) }
+    class Id3(val global: (Int,Int,Int), val local: (Int,Int,Int), val group: (Int,Int,Int)) { type Tuple = (Int,Int,Int) }
+
   val floatX2 = (a:Float) => a * 2.0f
   val aSinB = (a:Float,b:Float) => a * Math.sin(b).toFloat + 1.0f
+  /*
+  val sum = (id: Id1, size: Id1)(a:BBArray[Float]) => {
+    val localResult = new BBArray.ofDim[Float](size.group)
+    var sum = 0f
+    for (ai <- id.group) {
+      sum += ai
+    }
+    sum
+  }
+  */
   val sum = (a:BBArray[Float]) => {
+    val localResult = BBArray.ofDim[Float](1)
     var sum = 0f
     for (ai <- a) {
       sum += ai
     }
     sum
+    localResult(0) = sum
+    localResult
   }
 
   def compileMapKernel1(src: Function1[_,_], name: String): String = src match {
@@ -415,12 +403,12 @@ object OpenCLScalaTest4 {
 "#define blockSize 128                                                              \n" +
 "#define nIsPow2 1                                                                  \n" +
 "__kernel void " + name + "(                                                        \n" +
-"  __global T *g_idata,                                                             \n" +
+"  __global const T *g_idata,                                                       \n" +
 "  __global T *g_odata,                                                             \n" +
-"  unsigned int n,                                                                  \n" +
 "  __local T* sdata) {                                                              \n" +
 "   // perform first level of reduction,                                            \n" +
 "   // reading from global memory, writing to shared memory                         \n" +
+"   unsigned int n = get_global_size(0);                                            \n" +
 "   unsigned int tid = get_local_id(0);                                             \n" +
 "   unsigned int i = get_group_id(0)*(get_local_size(0)*2) + get_local_id(0);       \n" +
 "                                                                                   \n" +
@@ -490,11 +478,26 @@ object OpenCLScalaTest4 {
     }
   }
 
+  implicit def f2bbarrayPartialReducek1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: BBArray[A] => BBArray[B]): BBArrayReduceKernel1[A,BBArray[B]] = {
+    val kernelName = freshName("theKernel")
+    val src = compileReduceKernel1(f, kernelName)
+    implicit val ma = BBAT[A]
+    val numThreads = 128 // CL.gpu.device.localMemSize.toInt / 4
+    println("numThreads = " + numThreads)
+    val kernel = CL.gpu.compile1[BBArray[A], BBArray[B]](kernelName, src,
+                                                new BlockArrayDist1[A,BBArray[A]](numThreads),
+                                                new SimpleLocalArrayWithOutputEffect1[A,BBArray[A]](numThreads, numThreads * fixedSizeMarshal[A].size))
+    new BBArrayReduceKernel1[A,BBArray[B]] {
+      def apply(a: BBArray[A]) = kernel(a)
+    }
+  }
+
   implicit def f2bbarrayReducek1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: BBArray[A] => B): BBArrayReduceKernel1[A,B] = {
     val kernelName = freshName("theKernel")
-    val src = compileMapKernel1(f, kernelName)
+    val src = compileReduceKernel1(f, kernelName)
     implicit val ma = BBAT[A]
-    val numThreads = 32
+    val numThreads = 128 // CL.gpu.device.localMemSize.toInt / 4
+    println("numThreads = " + numThreads)
     val kernel = CL.gpu.compile1[BBArray[A], B](kernelName, src,
                                                 new BlockArrayDist1[A,BBArray[A]](numThreads),
                                                 new SimpleLocalArrayEffect1[A,BBArray[A]](numThreads * fixedSizeMarshal[A].size))
@@ -519,13 +522,20 @@ object OpenCLScalaTest4 {
   }
 */
 
-  class Mem(dev: Device) {
-    lazy val context = dev.context
-    private def alloc[A: ClassManifest](usage: CLMem.Usage, n: Int): SCLBuffer[_<:NIOBuffer] = context.createBuffer[A](usage, n, true)
-    def alloc[A: ClassManifest](n: Int): SCLBuffer[_<:NIOBuffer] = allocForReadWrite[A](n)
+  trait Mem[Buf] {
+    protected def alloc[A: ClassManifest](usage: CLMem.Usage, n: Int): Buf
+
     def allocForReadWrite[A: ClassManifest](n: Int) = alloc[A](SCLMemUsage.InputOutput, n)
     def allocForRead[A: ClassManifest](n: Int) = alloc[A](SCLMemUsage.Input, n)
     def allocForWrite[A: ClassManifest](n: Int) = alloc[A](SCLMemUsage.Output, n)
+  }
+
+  class GlobalMem(dev: Device) extends Mem[SCLBuffer[_<:NIOBuffer]] {
+    protected def alloc[A: ClassManifest](usage: CLMem.Usage, n: Int): SCLBuffer[_<:NIOBuffer] = dev.context.createBuffer[A](usage, n, true)
+  }
+
+  class LocalMem(dev: Device) extends Mem[LocalSize] {
+    protected def alloc[A: ClassManifest](usage: CLMem.Usage, n: Int): LocalSize = new LocalSize(n)
   }
 
   def time[A](body: => A): A = {
@@ -593,13 +603,19 @@ object OpenCLScalaTest4 {
       }
     }
 
+    val b2 = BBArray.tabulate(512)(_.toFloat)
+
     println("cl bbarray sum");
     {
-      val c = time {
-        val result = CL.gpu.spawn { b.reduceKernel(sum) }
+      val c: BBArray[Float] = time {
+        val result = CL.gpu.spawn { b2.reduceKernel(sum) }
         result.force
       }
-      println("sum = " + c)
+      println("c = " + c)
+      val result = c.sum
+      val correct = (1 until b2.length).sum
+      println("sum = " + result)
+      println("correct sum = " + correct)
     }
 
     // New usage:
