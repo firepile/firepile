@@ -175,10 +175,12 @@ object BufferBackedArray {
   }
 
   import scala.collection.generic.CanBuildFrom
+  /*
   implicit def bbarrayCBFrom[A: FixedSizeMarshal, From] = new CanBuildFrom[From,A,BBArray[A]] {
     def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
     def apply(from: From): Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
   }
+  */
   implicit def bbarrayCBFromArray[A: FixedSizeMarshal] = new CanBuildFrom[Array[_],A,BBArray[A]] {
     def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
     def apply(from: Array[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](from.length*implicitly[FixedSizeMarshal[A]].size)

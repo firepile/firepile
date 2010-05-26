@@ -135,13 +135,13 @@ object OpenCLScalaTest4 {
     def run(dev: Device): Future[B]
   }
 
-  class BufKernel1(code: SCLKernel, val dist: Disted, val effect: Effect) extends Kernel1[ByteBuffer,ByteBuffer] {
+  class BufKernel1(code: SCLKernel, val dist: Dist, val effect: Effect) extends Kernel1[ByteBuffer,ByteBuffer] {
     def apply(a: ByteBuffer) = new InstantiatedBufKernel(code, dist, effect, a)
   }
-  class BufKernel2(code: SCLKernel, val dist: Disted, val effect: Effect) extends Kernel2[ByteBuffer,ByteBuffer,ByteBuffer] {
+  class BufKernel2(code: SCLKernel, val dist: Dist, val effect: Effect) extends Kernel2[ByteBuffer,ByteBuffer,ByteBuffer] {
     def apply(a1: ByteBuffer, a2: ByteBuffer) = new InstantiatedBufKernel(code, dist, effect, a1, a2)
   }
-  class BufKernel3(code: SCLKernel, val dist: Disted, val effect: Effect) extends Kernel3[ByteBuffer,ByteBuffer,ByteBuffer,ByteBuffer] {
+  class BufKernel3(code: SCLKernel, val dist: Dist, val effect: Effect) extends Kernel3[ByteBuffer,ByteBuffer,ByteBuffer,ByteBuffer] {
     def apply(a1: ByteBuffer, a2: ByteBuffer, a3: ByteBuffer) = new InstantiatedBufKernel(code, dist, effect, a1, a2, a3)
   }
 
@@ -156,9 +156,9 @@ object OpenCLScalaTest4 {
     }
   }
 
-  class InstantiatedBufKernel(code: SCLKernel, val disted: Disted, val effect: Effect, buffers: ByteBuffer*) extends InstantiatedKernel[ByteBuffer] {
+  class InstantiatedBufKernel(code: SCLKernel, val dist: Dist, val effect: Effect, buffers: ByteBuffer*) extends InstantiatedKernel[ByteBuffer] {
     def run(dev: Device) = {
-      val d = disted
+      val d = dist
       val e = effect
       val memIn = buffers.map(a => dev.global.allocForRead[Byte](a.limit))
       val memOut = dev.global.allocForWrite[Byte](e.outputSize)
@@ -208,28 +208,28 @@ object OpenCLScalaTest4 {
     override def toString = "Effect {out=" + outputSize + "}"
   }
 
-  trait Disted {
+  trait Dist {
     def totalNumberOfItems: Int
     def numberOfItemsPerGroup: Int = 1
-    override def toString = "Disted {n=" + totalNumberOfItems + "/" + numberOfItemsPerGroup + "}"
+    override def toString = "Dist {n=" + totalNumberOfItems + "/" + numberOfItemsPerGroup + "}"
   }
 
-  type Dist1[A] = Function1[A,Disted]
-  type Dist2[A1,A2] = Function2[A1,A2,Disted]
-  type Dist3[A1,A2,A3] = Function3[A1,A2,A3,Disted]
+  type Dist1[A] = Function1[A,Dist]
+  type Dist2[A1,A2] = Function2[A1,A2,Dist]
+  type Dist3[A1,A2,A3] = Function3[A1,A2,A3,Dist]
 
   type Effect1[A] = Function1[A,Effect]
   type Effect2[A1,A2] = Function2[A1,A2,Effect]
   type Effect3[A1,A2,A3] = Function3[A1,A2,A3,Effect]
 
   class SimpleArrayDist1[A:FixedSizeMarshal,T <: { def length: Int }] extends Dist1[T] {
-    def apply(a: T) = new Disted {
+    def apply(a: T) = new Dist {
       val totalNumberOfItems = a.length
     }
   }
 
   class BlockArrayDist1[A:FixedSizeMarshal,T <: { def length: Int }](n: Int = 32) extends Dist1[T] {
-    def apply(a: T) = new Disted {
+    def apply(a: T) = new Dist {
       val totalNumberOfItems = a.length
       override val numberOfItemsPerGroup = n
     }
@@ -250,41 +250,41 @@ object OpenCLScalaTest4 {
 
   class SimpleLocalArrayWithOutputEffect1[A:FixedSizeMarshal, T <: { def length: Int }](numThreads: Int, n:Int) extends Effect1[T] {
     def apply(a: T) = new Effect {
-      val outputSize = (a.length / numThreads) * fixedSizeMarshal[A].size
+      val outputSize = ((a.length + numThreads - 1) / numThreads) * fixedSizeMarshal[A].size
       override val localBufferSizes = List[Int](n)
     }
   }
 
   class Device(val platform: SCLPlatform, val device: SCLDevice, val context: SCLContext) {
-    private def compileBuffer1(name: String, src: String): (Disted,Effect) => BufKernel1 = {
+    private def compileBuffer1(name: String, src: String): (Dist,Effect) => BufKernel1 = {
       val program = context.createProgram(src).build
       val code = program.createKernel(name)
-      (d: Disted, e: Effect) => new BufKernel1(code, d, e)
+      (d: Dist, e: Effect) => new BufKernel1(code, d, e)
     }
 
-    private def compileBuffer2(name: String, src: String): (Disted,Effect) => BufKernel2 = {
+    private def compileBuffer2(name: String, src: String): (Dist,Effect) => BufKernel2 = {
       val program = context.createProgram(src).build
       val code = program.createKernel(name)
-      (d: Disted, e: Effect) => new BufKernel2(code, d, e)
+      (d: Dist, e: Effect) => new BufKernel2(code, d, e)
     }
 
-    private def compileBuffer3(name: String, src: String): (Disted,Effect) => BufKernel3 = {
+    private def compileBuffer3(name: String, src: String): (Dist,Effect) => BufKernel3 = {
       val program = context.createProgram(src).build
       val code = program.createKernel(name)
-      (d: Disted, e: Effect) => new BufKernel3(code, d, e)
+      (d: Dist, e: Effect) => new BufKernel3(code, d, e)
     }
 
     def compile1[A: Marshal, B: Marshal](name: String, src: String, dist: Dist1[A], effect: Effect1[A]) = {
       val transA = implicitly[Marshal[A]];
       val transB = implicitly[Marshal[B]];
 
-      val kernel: (Disted,Effect) => BufKernel1 = compileBuffer1(name, src)
+      val kernel: (Dist,Effect) => BufKernel1 = compileBuffer1(name, src)
 
       new Kernel1[A,B] {
         def apply(input: A) = new InstantiatedKernel[B] {
           def run(dev: Device) = {
             val bufIn: ByteBuffer = transA.put(input)
-            val d: Disted = dist(input)
+            val d: Dist = dist(input)
             val e: Effect = effect(input)
             val k = kernel(d, e)
             val f = k(bufIn).run(dev)
@@ -308,6 +308,19 @@ object OpenCLScalaTest4 {
 
     def spawn[B](k: InstantiatedKernel[B]) = k.run(this)
   }
+
+
+    class ArrayKernelWrapper[A](a: Array[A]) {
+      def mapKernel[B](k: ArrayMapKernel1[A,B]) = k(a)
+      def reduceKernel[B](k: ArrayReduceKernel1[A,B]) = k(a)
+    }
+    class BBArrayKernelWrapper[A](a: BBArray[A]) {
+      def mapKernel[B](k: BBArrayMapKernel1[A,B]) = k(a)
+      def reduceKernel[B](k: BBArrayReduceKernel1[A,B]) = k(a)
+    }
+
+    implicit def wrapArray[A](a: Array[A]) = new ArrayKernelWrapper[A](a)
+    implicit def wrapBBArray[A](a: BBArray[A]) = new BBArrayKernelWrapper[A](a)
 
     // Kernels that were compiled from functions on single elements
     trait ArrayMapKernel1[A,B] extends Kernel1[Array[A],Array[B]]
@@ -340,19 +353,183 @@ object OpenCLScalaTest4 {
     implicit def S2[A1,A2](a:Pair[Array[A1],Array[A2]]) = new Spawner2[A1,A2](a._1,a._2)
     implicit def S3[A1,A2,A3](a:Triple[Array[A1],Array[A2],Array[A3]]) = new Spawner3[A1,A2,A3](a._1,a._2,a._3)
 
-    trait Id {
-      type Tuple
-      def global: Tuple
-      def local: Tuple
-      def group: Tuple
-    }
-
-    class Id1(val global: Int, val local: Int, val group: Int) { type Tuple = Int }
-    class Id2(val global: (Int,Int), val local: (Int,Int), val group: (Int,Int)) { type Tuple = (Int,Int) }
-    class Id3(val global: (Int,Int,Int), val local: (Int,Int,Int), val group: (Int,Int,Int)) { type Tuple = (Int,Int,Int) }
-
   val floatX2 = (a:Float) => a * 2.0f
   val aSinB = (a:Float,b:Float) => a * Math.sin(b).toFloat + 1.0f
+
+/*
+  type Point1 = Int
+  case class Point2(val x: Int, val y: Int) extends Tuple2[Int,Int](x, y) {
+    def +(i: Int, j: Int)(implicit config: Config2) = Point2((x+i)%config.localThreadIdSpace._1,(y+j)%config.localThreadIdSpace._2)
+    def -(i: Int, j: Int)(implicit config: Config2) = Point2((x-i)%config.localThreadIdSpace._1,(y-j)%config.localThreadIdSpace._2)
+    def +(p: Point2)(implicit config: Config2) = Point2((x+p.x)%config.localThreadIdSpace._1,(y+p.y)%config.localThreadIdSpace._2)
+    def -(p: Point2)(implicit config: Config2) = Point2((x-p.x)%config.localThreadIdSpace._1,(y-p.y)%config.localThreadIdSpace._2)
+  }
+  case class Point3(val x: Int, val y: Int, val z: Int) extends Tuple3[Int,Int,Int](x, y) {
+    def +(i: Int, j: Int, k: Int) = Point3(x+i,y+j,z+k)
+    def -(i: Int, j: Int, k: Int) = Point3(x-i,y-j,z-k)
+    def +(p: Point3) = Point3(x+p.x,y+p.y,z+p.z)
+    def -(p: Point3) = Point3(x-p.x,y-p.y,z-p.z)
+  }
+
+  trait Id[IS <: IndexSpace] {
+    type Tuple = IS#Tuple
+    val indexSpace: IS = config
+    val config: IS
+
+    val threadIdSpace = indexSpace.threadIdSpace
+    val blockIdSpace = indexSpace.blockIdSpace
+    val localThreadIdSpace = indexSpace.localThreadIdSpace
+
+    val global = thread
+    def thread: Tuple
+    def block: Tuple
+    def localThread: Tuple
+  }
+
+  class Id1(val config: Config1, val block: Int, val localThread: Int) extends Id[Config1] {
+    val thread = block * config.localThreadIdSpace + localThread
+  }
+  class Id2(val config: Config2, val block: (Int,Int), val localThread: (Int,Int)) extends Id[Config2] {
+    val thread = (block._1 * config.localThreadIdSpace._1 + localThread._1,
+                  block._2 * config.localThreadIdSpace._2 + localThread._2)
+  }
+  class Id3(val config: Config3, val block: (Int,Int,Int), val localThread: (Int,Int,Int)) extends Id[Config3] {
+    val thread = (block._1 * config.localThreadIdSpace._1 + localThread._1,
+                  block._2 * config.localThreadIdSpace._2 + localThread._2,
+                  block._3 * config.localThreadIdSpace._3 + localThread._3)
+  }
+
+  /** Index space */
+  trait IndexSpace {
+    type Tuple
+    /** Space of global thread ids; must be blockIdSpace * localThreadIdSpace */
+    def threadIdSpace: Tuple
+    /** Space of block (work group) ids */
+    def blockIdSpace: Tuple
+    /** Space of local thread (work item) ids witin a block.  All blocks have the same local space. */
+    def localThreadIdSpace: Tuple
+
+    def threadIds: Seq[Tuple]
+    def blockIds: Seq[Tuple]
+    def localThreadIds: Seq[Tuple]
+  }
+  class Config1(val blockIdSpace: Int, val localThreadIdSpace: Int) extends IndexSpace {
+    type Tuple = Int
+    def threadIdSpace = blockIdSpace * localThreadIdSpace
+
+    def numThreads = threadIdSpace
+    def numBlocks = blockIdSpace
+    def numThreadsPerBlock = localThreadIdSpace
+
+    def threadIds: Seq[Tuple] = 0 until threadIdSpace
+    def blockIds: Seq[Tuple] = 0 until blockIdSpace
+    def localThreadIds: Seq[Tuple] = 0 until localThreadIdSpace
+  }
+  class Config2(val blockIdSpace: (Int,Int), val localThreadIdSpace: (Int,Int)) extends IndexSpace {
+    type Tuple = (Int,Int)
+    def threadIdSpace = (blockIdSpace._1 * localThreadIdSpace._1, blockIdSpace._2 * localThreadIdSpace._2)
+
+    def threadIds = for (i1 <- 0 until threadIdSpace._1; i2 <- 0 until threadIdSpace._2) yield (i1,i2)
+    def blockIds = for (i1 <- 0 until blockIdSpace._1; i2 <- 0 until blockIdSpace._2) yield (i1,i2)
+    def localThreadIds = for (i1 <- 0 until localThreadIdSpace._1; i2 <- 0 until localThreadIdSpace._2) yield (i1,i2)
+  }
+  class Config3(val blockIdSpace: (Int,Int,Int), val localThreadIdSpace: (Int,Int,Int)) extends IndexSpace {
+    type Tuple = (Int,Int,Int)
+    def threadIdSpace = (blockIdSpace._1 * localThreadIdSpace._1, blockIdSpace._2 * localThreadIdSpace._2, blockIdSpace._3 * localThreadIdSpace._3)
+
+    def threadIds = for (i1 <- 0 until threadIdSpace._1; i2 <- 0 until threadIdSpace._2; i3 <- 0 until threadIdSpace._3) yield (i1,i2,i3)
+    def blockIds = for (i1 <- 0 until blockIdSpace._1; i2 <- 0 until blockIdSpace._2; i3 <- 0 until blockIdSpace._3) yield (i1,i2,i3)
+    def localThreadIds = for (i1 <- 0 until localThreadIdSpace._1; i2 <- 0 until localThreadIdSpace._2; i3 <- 0 until localThreadIdSpace._3) yield (i1,i2,i3)
+  }
+
+  class size(n: Int) extends StaticAnnotation
+
+  // Want a data structure indexed by thread id with which we can access local data in another instance of the kernel
+  abstract class Local[IS <: IndexSpace,A](var value: A) extends Function1[IS#Tuple, A] with Barrier {
+    def apply(i: IS#Tuple): A = throw new MarkerException("Local.apply")
+    def update(i: IS#Tuple, x: A): Unit = throw new MarkerException("Local.update")
+    // def value_=(x: A) = { value = x }
+    // def :=(x: A) = { value = x }
+
+    // def ++(i: IS#Tuple): A = apply(id.localThread+i)
+    // def --(i: IS#Tuple): A = apply(id.localThread-i)
+  }
+
+  implicit def local2a[A](x: Local[_,A]): A = x.value
+  implicit def a2local[A,IS <: IndexSpace](x: A)(implicit config: IS) = Local[IS,A](x)
+
+  case class Local1[A](value: A) extends Local[Config1,A](value)
+  case class Local2[A](value: A) extends Local[Config2,A](value) with Function2[Int,Int,A] {
+    def apply(i: Int, j: Int): A = super.apply((i,j))
+    def update(i: Int, j: Int, x: A): Unit = super.apply((i,j))
+  }
+  case class Local3[A](value: A) extends Local[Config3,A](value) with Function3[Int,Int,Int,A] {
+    def apply(i: Int, j: Int, k: Int): A = super.apply((i,j,k))
+    def update(i: Int, j: Int, k: Int, x: A): Unit = super.update((i,j,k), x)
+  }
+
+  type Array1[A] = Array[A]
+  case class Array2[A](value: Array[A], val length0: Int) extends Function2[Int,Int,A] {
+    def apply(i: Int, j: Int) = value(i+length0+j)
+    def update(i: Int, j: Int, x: A) = { value(i+length0+j) = x }
+    def length1 = value.length / length0
+  }
+  case class Array3[A](value: Array[A], val length0: Int, val length1: Int) extends Function3[Int,Int,Int,A] {
+    def apply(i: Int, j: Int, k: Int) = value((i+length0+j)*length1+k)
+    def update(i: Int, j: Int, k: Int, x: A) = { value((i+length0+j)*length1+k) = x }
+    def length2 = value.length / length0 / length1
+  }
+
+  // should really just write reduce once and do:
+  // a.reduceKernel(_+_) which spawns the reduce on the gpu but completes it locally
+  // need to specialize compilation of the reduce kernel to do +
+  // so use the OpenCL reduceSum as a template filling in + using a #define
+  // OR:
+  // actually compile reduceSum written in Scala, inlining the closure passed into it
+
+  // Need basic local arrays
+  // Need basic output arrays
+  // Need threadId indexed arrays
+  // Need localThreadId indexed arrays
+
+  // rename local to blockLocal
+  // rename private to threadLocal
+
+  def reduceSum(id: Id1, config: Config1)(sdata: Local1[Float], output: Local1[Float])(input: BBArray[Float]) = {
+    val n = input.length
+    val i = id.block * (config.numThreadsPerBlock * 2) + id.localThread
+
+    sdata = if (i < n) input(i) else 0
+    if (i + config.numThreadsPerBlock < n)
+        sdata += input(i+config.numThreadsPerBlock)
+
+    sdata.barrier
+
+    s = config.numThreadPerBlock / 2
+    while (s > 32) {
+        sdata += sdata(id.localThread+s)
+        sdata.barrier
+        s /= 2
+    }
+
+    sdata.barrier
+
+    if (id.localThread < 32) {
+      config.numThreadsPerBlock match {
+        case x if x >= 64 => sdata += sdata(id.localThread+32)   // sdata ++ 32
+        case x if x >= 32 => sdata += sdata(id.localThread+16)   // sdata ++ 16
+        case x if x >= 16 => sdata += sdata(id.localThread+8)    // sdata ++ 8
+        case x if x >=  8 => sdata += sdata(id.localThread+4)    // sdata ++ 4
+        case x if x >=  4 => sdata += sdata(id.localThread+2)    // sdata ++ 2
+        case x if x >=  2 => sdata += sdata(id.localThread+1)    // sdata ++ 1
+      }
+    }
+
+    if (id.localThread == 0)
+      output = sdata
+  }
+  */
+
   /*
   val sum = (id: Id1, size: Id1)(a:BBArray[Float]) => {
     val localResult = new BBArray.ofDim[Float](size.group)
@@ -429,6 +606,7 @@ object OpenCLScalaTest4 {
 "       barrier(CLK_LOCAL_MEM_FENCE);                                               \n" +
 "   }                                                                               \n" +
 "                                                                                   \n" +
+"   // Question: why isn't a barrier needed here?                                   \n" +
 "   if (tid < 32)                                                                   \n" +
 "   {                                                                               \n" +
 "       if (blockSize >=  64) { sdata[tid] += sdata[tid + 32]; }                    \n" +
@@ -534,7 +712,13 @@ object OpenCLScalaTest4 {
     protected def alloc[A: ClassManifest](usage: CLMem.Usage, n: Int): SCLBuffer[_<:NIOBuffer] = dev.context.createBuffer[A](usage, n, true)
   }
 
-  class LocalMem(dev: Device) extends Mem[LocalSize] {
+  class MarkerException(msg: String) extends RuntimeException(msg)
+
+  trait Barrier {
+    def barrier: Unit = throw new MarkerException("barrier")
+  }
+
+  class LocalMem(dev: Device) extends Mem[LocalSize] with Barrier {
     protected def alloc[A: ClassManifest](usage: CLMem.Usage, n: Int): LocalSize = new LocalSize(n)
   }
 
@@ -562,18 +746,6 @@ object OpenCLScalaTest4 {
         a.map(_ * 2.0f)
       }
     }
-
-    class ArrayKernelWrapper[A](a: Array[A]) {
-      def mapKernel[B](k: ArrayMapKernel1[A,B]) = k(a)
-      def reduceKernel[B](k: ArrayReduceKernel1[A,B]) = k(a)
-    }
-    class BBArrayKernelWrapper[A](a: BBArray[A]) {
-      def mapKernel[B](k: BBArrayMapKernel1[A,B]) = k(a)
-      def reduceKernel[B](k: BBArrayReduceKernel1[A,B]) = k(a)
-    }
-
-    implicit def wrapArray[A](a: Array[A]) = new ArrayKernelWrapper[A](a)
-    implicit def wrapBBArray[A](a: BBArray[A]) = new BBArrayKernelWrapper[A](a)
 
     println("cl array");
     {
