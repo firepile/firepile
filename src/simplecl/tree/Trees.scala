@@ -170,6 +170,13 @@ object Trees {
         def toCL = typ.toCL + " " + name + formals.map((t:Tree) => t.toCL).mkString("(", ", ", ") {\n") + indent(body.toCL) + "}\n\n"
 
     }
+    object KernelFunDef {
+        def apply(name: Id, formals: List[Tree], body: Tree): KernelFunDef = KernelFunDef(name.name, formals, body)
+        def apply(name: Id, formals: List[Tree], body: Tree*): KernelFunDef = KernelFunDef(name.name, formals, Seq(body:_*))
+    }
+    case class KernelFunDef(name: String, formals: List[Tree], body: Tree) extends Tree {
+        def toCL = "__kernel void " + name + formals.map((t:Tree) => t.toCL).mkString("(", ", ", ") {\n") + indent(body.toCL) + "}\n\n"
+    }
     object StructDef {
         def apply(name: Id, fields: List[Tree]): StructDef = this(name.name, fields)
         def apply(name: Id, fields: Tree*): StructDef = this(name.name, fields.toList)
@@ -183,20 +190,52 @@ object Trees {
     case class ValueType(name: String) extends Tree {
         def toCL = name
     }
+    case class MemType(name: String, typ: Tree) extends Tree {
+        def toCL = "__" + name + " " + typ.toCL
+    }
+    case class ConstType(typ: Tree) extends Tree {
+        def toCL = "const " + typ.toCL
+    }
     object StructType {
         def apply(name: Id): StructType = StructType(name.name)
     }
     case class StructType(name: String) extends Tree {
         def toCL = "struct " + name
     }
+    object ArrayDef {
+        def apply(name: Id, typ: Tree, size: Tree): ArrayDef = this(name.name, typ, size)
+    }
+    case class ArrayDef(name: String, typ: Tree, size: Tree) extends Tree {
+        def toCL = typ.toCL + " " + name + "[" + size.toCL + "];\n"
+    }
     case class PtrType(typ: Tree) extends Tree {
         def toCL = typ.toCL + "*"
     }
+    case class Label(name: String) extends Tree {
+        def toCL = name + ":\n"
+    }
+    case class GoTo(target: String) extends Tree {
+        def toCL = "goto " + target + "\n"
+    }
+    case class GetLocalId(typ: Tree) extends Tree {
+        def toCL = "get_local_id(" + typ.toCL + ")"
+    }
+    case class GetGlobalId(typ: Tree) extends Tree {
+        def toCL = "get_global_id(" + typ.toCL + ")"
+    }
+
 
     val IntType = ValueType("int")
     val FloatType = ValueType("float")
+    val LongType = ValueType("long")
+    val DoubleType = ValueType("double")
+    val CharType = ValueType("char")
+    
 
     implicit def int2IntLit(n: Int) = IntLit(n)
+    implicit def float2FloatLit(n: Float) = FloatLit(n)
+    implicit def long2LongLit(n: Long) = LongLit(n)
+    implicit def double2DoubleLit(n: Double) = DoubleLit(n)
     implicit def wrapTree(t: Tree) = new WrappedTree(t)
 
     class WrappedTree(t1: Tree) {
@@ -218,18 +257,41 @@ object Trees {
     }
 
     def main(args: Array[String]) = {
+//        val int = ValueType("int")
+//        val n = Id("n")
+//        val fact = Id("fact")
+//        val result = Id("result")
+//        val t = KernelFunDef(fact, List[Tree](MemType("global",Formal(int, n))),
+//                       Seq(VarDef(int, result),
+//                           If(n <= 1,
+//                              result := 1,
+//                              result := n * Call(fact, n-1)),
+//                           Return(result)))
+//        println(t.toCL)
+//    }
+
+        val float = ValueType("float")
         val int = ValueType("int")
-        val n = Id("n")
-        val fact = Id("fact")
-        val result = Id("result")
-        val t = FunDef(int, fact, List[Tree](Formal(int, n)),
-                       Seq(VarDef(int, result),
-                           If(n <= 1,
-                              result := 1,
-                              result := n * Call(fact, n-1)),
-                           Return(result)))
-        println(t.toCL)
+        val i = Id("i")
+        val aSinB = Id("aSinB")
+        val sin = Id("sin")
+        val a = Id("a")
+        val b = Id("b")
+        val checking = Id("justChecking")
+        val output = Id("output")
+        val f = KernelFunDef(aSinB, List[Tree](MemType("global",Formal(ConstType(PtrType(float)),a)),
+                                                MemType("global",Formal(ConstType(PtrType(float)),b)),
+                                                MemType("global",Formal(PtrType(float),output))),
+                      Seq(VarDef(int, i),
+//                          Label("BACK"),
+                          i := GetGlobalId(0),
+//                          ArrayDef(checking, int, 20),
+//                          GoTo("BACK"),
+                          ArrayAccess(output,i) := ArrayAccess(a,i) * Call(sin,ArrayAccess(b,i)) + 1))
+        println(f.toCL)
     }
+
+
 
     def indent(s: String) = {
         var t = ""
