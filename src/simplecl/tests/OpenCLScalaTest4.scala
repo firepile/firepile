@@ -61,7 +61,7 @@ object OpenCLScalaTest4 {
     }
   }
 
-  class AT[A](marshal: FixedSizeMarshal[A], manifest: ClassManifest[A]) extends Marshal[Array[A]] {
+  class ArrayMarshal[A](marshal: FixedSizeMarshal[A], manifest: ClassManifest[A]) extends Marshal[Array[A]] {
     def size(a: Array[A]) = {
       if (a.length == 0) 0 else marshal.size(a(0)) * a.length
     }
@@ -97,9 +97,9 @@ object OpenCLScalaTest4 {
     }
   }
 
-  implicit def AT[A](implicit marshal: FixedSizeMarshal[A], manifest: ClassManifest[A]): AT[A] = new AT[A](marshal, manifest)
+  implicit def ArrayMarshal[A](implicit marshal: FixedSizeMarshal[A], manifest: ClassManifest[A]): ArrayMarshal[A] = new ArrayMarshal[A](marshal, manifest)
 
-  class BBAT[A: FixedSizeMarshal] extends Marshal[BBArray[A]] {
+  class BBArrayMarshal[A: FixedSizeMarshal] extends Marshal[BBArray[A]] {
     def size(a: BBArray[A]) = a.length * fixedSizeMarshal[A].size
     def align = fixedSizeMarshal[A].align
     override def put(buf:ByteBuffer, i: Int, x: BBArray[A]) = {
@@ -118,7 +118,7 @@ object OpenCLScalaTest4 {
     override def get(b: ByteBuffer) = new BBArray(b)
   }
 
-  implicit def BBAT[A: FixedSizeMarshal]: BBAT[A] = new BBAT[A]
+  implicit def BBArrayMarshal[A: FixedSizeMarshal]: BBArrayMarshal[A] = new BBArrayMarshal[A]
 
   trait Future[B] { def force: B }
 
@@ -161,17 +161,34 @@ object OpenCLScalaTest4 {
       val d = dist
       val e = effect
       val memIn = buffers.map(a => dev.global.allocForRead[Byte](a.limit))
+      val lenIn = buffers.map(a => dev.global.allocForRead[Byte](fixedSizeMarshal[Int].size))
       val memOut = dev.global.allocForWrite[Byte](e.outputSize)
+      val lenOut = dev.global.allocForRead[Byte](fixedSizeMarshal[Int].size)
 
       val writeEvents = (buffers zip memIn).map{ case (a,mem) => mem.write(dev.queue, Buffer.fromNIOBuffer[Byte](a), false) }
+      val writeLenEvents = (buffers zip lenIn).map{ case (a,mem) => mem.write(dev.queue, {
+          val b = ByteBuffer.allocate(fixedSizeMarshal[Int].size).order(ByteOrder.nativeOrder)
+          b.putInt(a.limit)
+          Buffer.fromNIOBuffer[Byte](b)
+        }, false) }
 
-      val args = memIn.toList ::: memOut :: e.localBufferSizes.map(size => dev.local.allocForReadWrite[Byte](size))
+      val writeOutLenEvent = lenOut.write(dev.queue, {
+          val b = ByteBuffer.allocate(fixedSizeMarshal[Int].size).order(ByteOrder.nativeOrder)
+          b.putInt(e.outputSize)
+          Buffer.fromNIOBuffer[Byte](b)
+        }, false)
+
+      val localMem: List[LocalSize] = e.localBufferSizes.map(size => dev.local.allocForReadWrite[Byte](size))
+      val args0: List[SCLBuffer[_]] = (memIn zip lenIn).flatMap[SCLBuffer[_], Seq[SCLBuffer[_]]]{ case (mem,n) => mem::n::Nil }.toList
+      val args1: List[SCLBuffer[_]] = memOut :: lenOut :: Nil
+      val args = args0 ::: args1 ::: localMem
       println(args)
       code.setArgs(args:_*)
 
       // println(args)
 
-      val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup), writeEvents:_*)
+      val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup),
+                (writeEvents.toList ::: writeLenEvents.toList ::: writeOutLenEvent :: Nil):_*)
 
       readBackResult(dev, e.outputSize, runEvent, memOut)
     }
@@ -230,7 +247,8 @@ object OpenCLScalaTest4 {
 
   class BlockArrayDist1[A:FixedSizeMarshal,T <: { def length: Int }](n: Int = 32) extends Dist1[T] {
     def apply(a: T) = new Dist {
-      val totalNumberOfItems = a.length
+      // Round up to next block size
+      val totalNumberOfItems = (a.length + n - 1) / n * n
       override val numberOfItemsPerGroup = n
     }
   }
@@ -309,14 +327,13 @@ object OpenCLScalaTest4 {
     def spawn[B](k: InstantiatedKernel[B]) = k.run(this)
   }
 
-
     class ArrayKernelWrapper[A](a: Array[A]) {
       def mapKernel[B](k: ArrayMapKernel1[A,B]) = k(a)
-      def reduceKernel[B](k: ArrayReduceKernel1[A,B]) = k(a)
+      def reduceKernel(k: ArrayReduceKernel1[A]) = k(a)
     }
     class BBArrayKernelWrapper[A](a: BBArray[A]) {
       def mapKernel[B](k: BBArrayMapKernel1[A,B]) = k(a)
-      def reduceKernel[B](k: BBArrayReduceKernel1[A,B]) = k(a)
+      def reduceKernel(k: BBArrayReduceKernel1[A]) = k(a)
     }
 
     implicit def wrapArray[A](a: Array[A]) = new ArrayKernelWrapper[A](a)
@@ -330,12 +347,8 @@ object OpenCLScalaTest4 {
     trait BBArrayMapKernel2[A1,A2,B] extends Kernel2[BBArray[A1],BBArray[A2],BBArray[B]]
     trait BBArrayMapKernel3[A1,A2,A3,B] extends Kernel3[BBArray[A1],BBArray[A2],BBArray[A3],BBArray[B]]
 
-    trait ArrayReduceKernel1[A,B] extends Kernel1[Array[A],B]
-    trait ArrayReduceKernel2[A1,A2,B] extends Kernel2[Array[A1],Array[A2],B]
-    trait ArrayReduceKernel3[A1,A2,A3,B] extends Kernel3[Array[A1],Array[A2],Array[A3],B]
-    trait BBArrayReduceKernel1[A,B] extends Kernel1[BBArray[A],B]
-    trait BBArrayReduceKernel2[A1,A2,B] extends Kernel2[BBArray[A1],BBArray[A2],B]
-    trait BBArrayReduceKernel3[A1,A2,A3,B] extends Kernel3[BBArray[A1],BBArray[A2],BBArray[A3],B]
+    trait ArrayReduceKernel1[A] extends Kernel1[Array[A],A]
+    trait BBArrayReduceKernel1[A] extends Kernel1[BBArray[A],A]
 
     class Spawner1[A](a1:Array[A]) {
       def lazyzip[A2](a2:Array[A2]) = new Spawner2(a1,a2)
@@ -358,15 +371,32 @@ object OpenCLScalaTest4 {
 
   trait IdSpace[Pt <: Point[Pt]] extends Iterable[Pt] {
     def extent: Pt
+    def length: Int
+    def index(p: Pt): Int
   }
   class IdSpace1(val extent: Point1) extends IdSpace[Point1] {
     def iterator = (for (i <- 0 until extent.x) yield Point1(i)).toIterator
+    def length = extent.x
+    def index(p: Point1) = {
+      val q = p | this
+      q.x
+    }
   }
   class IdSpace2(val extent: Point2) extends IdSpace[Point2] {
     def iterator = (for (i1 <- 0 until extent.x; i2 <- 0 until extent.y) yield Point2(i1, i2)).toIterator
+    def length = extent.x * extent.y
+    def index(p: Point2) = {
+      val q = p | this
+      q.x * extent.x + q.y
+    }
   }
   class IdSpace3(val extent: Point3) extends IdSpace[Point3] {
     def iterator = (for (i1 <- 0 until extent.x; i2 <- 0 until extent.y; i3 <- 0 until extent.z) yield Point3(i1, i2, i3)).toIterator
+    def length = extent.x * extent.y * extent.z
+    def index(p: Point3) = {
+      val q = p | this
+      (q.x * extent.x + q.y) * extent.y + q.z
+    }
   }
 
   trait Point[Pt <: Point[Pt]] {
@@ -387,9 +417,13 @@ object OpenCLScalaTest4 {
     def %(p: Pt): Pt
 
     def scale(b: Pt, n: Pt, t: Pt): Pt = b * n + t
+
+    def |(s: IdSpace[Pt]): Pt
   }
   case class Point1(x: Int) extends Point[Point1] {
     def rank = 1
+
+    def toInt = x
 
     def +(i: Int) = Point1(x+i)
     def -(i: Int) = Point1(x-i)
@@ -402,9 +436,13 @@ object OpenCLScalaTest4 {
     def *(p: Point1) = Point1(x*p.x)
     def /(p: Point1) = Point1(x/p.x)
     def %(p: Point1) = Point1(x%p.x)
+
+    def |(s: IdSpace[Point1]) = Point1(x % s.extent.x)
   }
   case class Point2(x: Int, y: Int) extends Point[Point2] {
     def rank = 2
+
+    def toTuple2 = (x,y)
 
     def +(i: Int) = Point2(x+i,y+i)
     def -(i: Int) = Point2(x-i,y-i)
@@ -423,9 +461,13 @@ object OpenCLScalaTest4 {
     def *(p: Point2) = Point2(x*p.x, y*p.y)
     def /(p: Point2) = Point2(x/p.x, y/p.y)
     def %(p: Point2) = Point2(x%p.x, y%p.y)
+
+    def |(s: IdSpace[Point2]) = Point2(x % s.extent.x, y % s.extent.y)
   }
   case class Point3(x: Int, y: Int, z: Int) extends Point[Point3] {
     def rank = 3
+
+    def toTuple3 = (x,y,z)
 
     def +(i: Int) = Point3(x+i,y+i,z+i)
     def -(i: Int) = Point3(x-i,y-i,z-i)
@@ -444,13 +486,18 @@ object OpenCLScalaTest4 {
     def *(p: Point3) = Point3(x*p.x,y*p.y,z*p.z)
     def /(p: Point3) = Point3(x/p.x,y/p.y,z/p.z)
     def %(p: Point3) = Point3(x%p.x,y%p.y,z%p.z)
+
+    def |(s: IdSpace[Point3]) = Point3(x % s.extent.x, y % s.extent.y, z % s.extent.z)
   }
 
   implicit def int2point1(p: Int) = Point1(p)
   implicit def int2point2(p: (Int,Int)) = Point2(p._1,p._2)
   implicit def int2point3(p: (Int,Int,Int)) = Point3(p._1,p._2,p._3)
+  implicit def point12int(p: Point1) = p.x
+  implicit def point22int(p: Point2) = (p.x,p.y)
+  implicit def point32int(p: Point3) = (p.x,p.y,p.z)
 
-  class Ident[Pt <: Point[Pt]](val config: Config[Pt], val block: Pt, localThread: Pt) {
+  class Ident[Pt <: Point[Pt]](val config: Config[Pt], val block: Pt, val localThread: Pt) {
     def thread: Pt = block * config.localThreadIdSpace.extent + localThread
     def global = thread
   }
@@ -475,6 +522,10 @@ object OpenCLScalaTest4 {
     /** Return the block ID of a given global thread ID */
     def blockIdOfThread(p: Pt) = p / blockIdSpace.extent
     def localThreadIdOfThread(p: Pt) = p % blockIdSpace.extent
+
+    def numThreads = threadIdSpace.length
+    def numBlocks = blockIdSpace.length
+    def numThreadsPerBlock = localThreadIdSpace.length
   }
 
   class Config1(val maxBlock: Point1, val maxLocalThread: Point1) extends Config[Point1] {
@@ -496,92 +547,55 @@ object OpenCLScalaTest4 {
     def localThreadIdSpace = new IdSpace3(maxLocalThread)
   }
 
-  /*
-  // Want a data structure indexed by thread id with which we can access local data in another instance of the kernel
-  abstract class Local[Cfg <: Config,A](var value: A) extends Function1[Cfg#Pt, A] with Barrier {
-    def apply(i: Cfg#Tuple): A = throw new MarkerException("Local.apply")
-    def update(i: Cfg#Tuple, x: A): Unit = throw new MarkerException("Local.update")
-    // def value_=(x: A) = { value = x }
-    // def :=(x: A) = { value = x }
-
-    // def ++(i: Cfg#Tuple): A = apply(id.localThread+i)
-    // def --(i: Cfg#Tuple): A = apply(id.localThread-i)
+  class Indexed[Pt <: Point[Pt], A: ClassManifest](space: IdSpace[Pt]) {
+    private val backing: Array[A] = Array.ofDim[A](space.length)
+    def apply(p: Pt): A = backing(space.index(p))
+    def update(p: Pt, x: A): Unit = { backing(space.index(p)) = x }
   }
+  class LocalThreadIndexed[Pt <: Point[Pt], A: ClassManifest](config: Config[Pt]) extends Indexed[Pt,A](config.localThreadIdSpace) with Barrier
+  class LocalThreadIndexed1[A: ClassManifest](config: Config1) extends LocalThreadIndexed[Point1, A](config)
+  class LocalThreadIndexed2[A: ClassManifest](config: Config2) extends LocalThreadIndexed[Point2, A](config)
+  class LocalThreadIndexed3[A: ClassManifest](config: Config3) extends LocalThreadIndexed[Point3, A](config)
 
-  implicit def local2a[A](x: Local[_,A]): A = x.value
-  implicit def a2local[A,Cfg <: Config](x: A)(implicit config: Cfg) = Local[Cfg,A](x)
+  class BlockIndexed[Pt <: Point[Pt], A: ClassManifest](config: Config[Pt]) extends Indexed[Pt,A](config.blockIdSpace)
+  class BlockIndexed1[A: ClassManifest](config: Config1) extends BlockIndexed[Point1, A](config)
+  class BlockIndexed2[A: ClassManifest](config: Config2) extends BlockIndexed[Point2, A](config)
+  class BlockIndexed3[A: ClassManifest](config: Config3) extends BlockIndexed[Point3, A](config)
 
-  case class Local1[A](value: A) extends Local[Config1,A](value)
-  case class Local2[A](value: A) extends Local[Config2,A](value) with Function2[Int,Int,A] {
-    def apply(i: Int, j: Int): A = super.apply((i,j))
-    def update(i: Int, j: Int, x: A): Unit = super.apply((i,j))
-  }
-  case class Local3[A](value: A) extends Local[Config3,A](value) with Function3[Int,Int,Int,A] {
-    def apply(i: Int, j: Int, k: Int): A = super.apply((i,j,k))
-    def update(i: Int, j: Int, k: Int, x: A): Unit = super.update((i,j,k), x)
-  }
-
-  type Array1[A] = Array[A]
-  case class Array2[A](value: Array[A], val length0: Int) extends Function2[Int,Int,A] {
-    def apply(i: Int, j: Int) = value(i+length0+j)
-    def update(i: Int, j: Int, x: A) = { value(i+length0+j) = x }
-    def length1 = value.length / length0
-  }
-  case class Array3[A](value: Array[A], val length0: Int, val length1: Int) extends Function3[Int,Int,Int,A] {
-    def apply(i: Int, j: Int, k: Int) = value((i+length0+j)*length1+k)
-    def update(i: Int, j: Int, k: Int, x: A) = { value((i+length0+j)*length1+k) = x }
-    def length2 = value.length / length0 / length1
-  }
-
-  // should really just write reduce once and do:
-  // a.reduceKernel(_+_) which spawns the reduce on the gpu but completes it locally
-  // need to specialize compilation of the reduce kernel to do +
-  // so use the OpenCL reduceSum as a template filling in + using a #define
-  // OR:
-  // actually compile reduceSum written in Scala, inlining the closure passed into it
-
-  // Need basic local arrays
-  // Need basic output arrays
-  // Need threadId indexed arrays
-  // Need localThreadId indexed arrays
-
-  // rename local to blockLocal
-  // rename private to threadLocal
-
-  def reduceSum(id: Id1, config: Config1)(sdata: Local1[Float], output: Local1[Float])(input: BBArray[Float]) = {
+  def reduceSum(id: Id1, config: Config1)(sdata: LocalThreadIndexed1[Float], output: BlockIndexed1[Float])(input: BBArray[Float]) = {
     val n = input.length
     val i = id.block * (config.numThreadsPerBlock * 2) + id.localThread
+    val tid = id.localThread
 
-    sdata = if (i < n) input(i) else 0
+    sdata(tid) = if (i < n) input(i) else 0
     if (i + config.numThreadsPerBlock < n)
-        sdata += input(i+config.numThreadsPerBlock)
+        sdata(tid) += input(i+config.numThreadsPerBlock)
 
     sdata.barrier
 
-    s = config.numThreadPerBlock / 2
+    var s = config.numThreadsPerBlock / 2
     while (s > 32) {
-        sdata += sdata(id.localThread+s)
+        sdata(tid) += sdata(tid+s)
         sdata.barrier
         s /= 2
     }
 
     sdata.barrier
 
-    if (id.localThread < 32) {
+    if (tid < 32) {
       config.numThreadsPerBlock match {
-        case x if x >= 64 => sdata += sdata(id.localThread+32)   // sdata ++ 32
-        case x if x >= 32 => sdata += sdata(id.localThread+16)   // sdata ++ 16
-        case x if x >= 16 => sdata += sdata(id.localThread+8)    // sdata ++ 8
-        case x if x >=  8 => sdata += sdata(id.localThread+4)    // sdata ++ 4
-        case x if x >=  4 => sdata += sdata(id.localThread+2)    // sdata ++ 2
-        case x if x >=  2 => sdata += sdata(id.localThread+1)    // sdata ++ 1
+        case x if x >= 64 => sdata(tid) += sdata(tid+32)
+        case x if x >= 32 => sdata(tid) += sdata(tid+16)
+        case x if x >= 16 => sdata(tid) += sdata(tid+8)
+        case x if x >=  8 => sdata(tid) += sdata(tid+4)
+        case x if x >=  4 => sdata(tid) += sdata(tid+2)
+        case x if x >=  2 => sdata(tid) += sdata(tid+1)
       }
     }
 
-    if (id.localThread == 0)
-      output = sdata
+    if (tid == 0)
+      output(id.block) = sdata(tid)
   }
-  */
 
   /*
   val sum = (id: Id1, size: Id1)(a:BBArray[Float]) => {
@@ -608,7 +622,9 @@ object OpenCLScalaTest4 {
     case f if f == floatX2 => ("\n" +
               "__kernel void " + name + "(            \n" +
               "   __global const float* input,        \n" +
-              "   __global float* output)             \n" +
+              "   int input_len,                      \n" +
+              "   __global float* output,             \n" +
+              "   int output_len)                     \n" +
               "{                                      \n" +
               "   int i = get_global_id(0);           \n" +
               "   output[i] = input[i] * 2.f;         \n" +
@@ -619,64 +635,59 @@ object OpenCLScalaTest4 {
     case f if f == aSinB => ("\n" +
               "__kernel void " + name + "(            \n" +
               "   __global const float* a,            \n" +
+              "   int a_len,                          \n" +
               "   __global const float* b,            \n" +
-              "   __global float* output)             \n" +
+              "   int b_len,                          \n" +
+              "   __global float* output,             \n" +
+              "   int output_len)                     \n" +
               "{                                      \n" +
               "   int i = get_global_id(0);           \n" +
               "   output[i] = a[i] * sin(b[i]) + 1.f; \n" +
               "}                                      \n")
   }
 
-  def compileReduceKernel1(src: Function1[_,_], name: String): String = src match {
-    case f if f == sum => ("\n" +
+  val sumFloat: (Float,Float) => Float = (_+_)
+
+  def compileReduceKernel1(src: Function2[_,_,_], name: String): String = src match {
+    case f if f == sumFloat => ("\n" +
 "#define T float                                                                    \n" +
 "#define blockSize 128                                                              \n" +
-"#define nIsPow2 1                                                                  \n" +
+"#define f(a,b) (a+b)                                                               \n" +
 "__kernel void " + name + "(                                                        \n" +
-"  __global const T *g_idata,                                                       \n" +
-"  __global T *g_odata,                                                             \n" +
-"  __local T* sdata) {                                                              \n" +
+"  __global const T *g_idata, /* thread indexed */                                  \n" +
+"  const int g_idata_length,                                                       \n" +
+"  __global T *g_odata,       /* block indexed */                                   \n" +
+"  const int g_odata_length,                                                       \n" +
+"  __local T* sdata) {        /* local thread indexed */                            \n" +
 "   // perform first level of reduction,                                            \n" +
-"   // reading from global memory, writing to shared memory                         \n" +
-"   unsigned int n = get_global_size(0);                                            \n" +
+"   // reading from global memory, writing to local memory                          \n" +
+"   unsigned int n = g_idata_length;                                            \n" +
 "   unsigned int tid = get_local_id(0);                                             \n" +
-"   unsigned int i = get_group_id(0)*(get_local_size(0)*2) + get_local_id(0);       \n" +
+"   unsigned int i = get_global_id(0); // get_group_id(0)*get_local_size(0) + get_local_id(0);           \n" +
 "                                                                                   \n" +
-"   sdata[tid] = (i < n) ? g_idata[i] : 0;                                          \n" +
-"   if (i + get_local_size(0) < n)                                                  \n" +
-"       sdata[tid] += g_idata[i+get_local_size(0)];                                 \n" +
+"   sdata[tid] = (i < n) ? g_idata[i] : 0;                                                               \n" +
 "                                                                                   \n" +
 "   barrier(CLK_LOCAL_MEM_FENCE);                                                   \n" +
 "                                                                                   \n" +
 "   // do reduction in shared mem                                                   \n" +
 "   #pragma unroll 1                                                                \n" +
-"   for(unsigned int s=get_local_size(0)/2; s>32; s>>=1)                            \n" +
+"   for(unsigned int s=get_local_size(0)/2; s>0; s>>=1)                             \n" +
 "   {                                                                               \n" +
 "       if (tid < s)                                                                \n" +
 "       {                                                                           \n" +
-"           sdata[tid] += sdata[tid + s];                                           \n" +
+"           sdata[tid] = f(sdata[tid], sdata[tid+s]);                                             \n" +
 "       }                                                                           \n" +
 "       barrier(CLK_LOCAL_MEM_FENCE);                                               \n" +
 "   }                                                                               \n" +
 "                                                                                   \n" +
-"   // Question: why isn't a barrier needed here?                                   \n" +
-"   if (tid < 32)                                                                   \n" +
-"   {                                                                               \n" +
-"       if (blockSize >=  64) { sdata[tid] += sdata[tid + 32]; }                    \n" +
-"       if (blockSize >=  32) { sdata[tid] += sdata[tid + 16]; }                    \n" +
-"       if (blockSize >=  16) { sdata[tid] += sdata[tid +  8]; }                    \n" +
-"       if (blockSize >=   8) { sdata[tid] += sdata[tid +  4]; }                    \n" +
-"       if (blockSize >=   4) { sdata[tid] += sdata[tid +  2]; }                    \n" +
-"       if (blockSize >=   2) { sdata[tid] += sdata[tid +  1]; }                    \n" +
-"   }                                                                               \n" +
-"                                                                                   \n" +
 "   // write result for this block to global mem                                    \n" +
-"   if (tid == 0) g_odata[get_group_id(0)] = sdata[0];                              \n" +
-" }                                                                                 \n")
+"   if (tid == 0)                                                                   \n" +
+"       g_odata[get_group_id(0)] = sdata[0];                                        \n" +
+"}                                                                                  \n")
   }
 
   var next = 0
-  def freshName(base: String = "tmp") = { 
+  def freshName(base: String = "tmp") = {
     next += 1
     base + next
   }
@@ -686,8 +697,8 @@ object OpenCLScalaTest4 {
     val src = compileMapKernel1(f, kernelName)
     implicit val Ma = fixedSizeMarshal[A].manifest
     implicit val Mb = fixedSizeMarshal[B].manifest
-    implicit val ma = AT[A]
-    implicit val mb = AT[B]
+    implicit val ma = ArrayMarshal[A]
+    implicit val mb = ArrayMarshal[B]
     val kernel = CL.gpu.compile1[Array[A], Array[B]](kernelName, src,
                                                      new SimpleArrayDist1[A,Array[A]],
                                                      new SimpleGlobalArrayEffect1[A,Array[A]])
@@ -699,8 +710,8 @@ object OpenCLScalaTest4 {
   implicit def f2bbarrayMapk1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: A => B): BBArrayMapKernel1[A,B] = {
     val kernelName = freshName("theKernel")
     val src = compileMapKernel1(f, kernelName)
-    implicit val ma = BBAT[A]
-    implicit val mb = BBAT[B]
+    implicit val ma = BBArrayMarshal[A]
+    implicit val mb = BBArrayMarshal[B]
     val kernel = CL.gpu.compile1[BBArray[A], BBArray[B]](kernelName, src,
                                                          new SimpleArrayDist1[A,BBArray[A]],
                                                          new SimpleGlobalArrayEffect1[A,BBArray[A]])
@@ -709,49 +720,32 @@ object OpenCLScalaTest4 {
     }
   }
 
-  implicit def f2bbarrayPartialReducek1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: BBArray[A] => BBArray[B]): BBArrayReduceKernel1[A,BBArray[B]] = {
+  implicit def f2bbarrayPartialReducek1[A:FixedSizeMarshal](f: (A,A) => A): BBArrayReduceKernel1[A] = {
     val kernelName = freshName("theKernel")
     val src = compileReduceKernel1(f, kernelName)
-    implicit val ma = BBAT[A]
+    implicit val ma = BBArrayMarshal[A]
     val numThreads = 128 // CL.gpu.device.localMemSize.toInt / 4
     println("numThreads = " + numThreads)
-    val kernel = CL.gpu.compile1[BBArray[A], BBArray[B]](kernelName, src,
-                                                new BlockArrayDist1[A,BBArray[A]](numThreads),
-                                                new SimpleLocalArrayWithOutputEffect1[A,BBArray[A]](numThreads, numThreads * fixedSizeMarshal[A].size))
-    new BBArrayReduceKernel1[A,BBArray[B]] {
-      def apply(a: BBArray[A]) = kernel(a)
+    val d = new BlockArrayDist1[A,BBArray[A]](numThreads)
+    val e = new SimpleLocalArrayWithOutputEffect1[A,BBArray[A]](numThreads, numThreads * fixedSizeMarshal[A].size)
+    println(d)
+    println(e)
+    val kernel = CL.gpu.compile1[BBArray[A], BBArray[A]](kernelName, src, d, e)
+    new BBArrayReduceKernel1[A] {
+      def apply(a: BBArray[A]) = new InstantiatedKernel[A] {
+        def run(dev: Device): Future[A] = {
+          val future: Future[BBArray[A]] = kernel(a).run(dev)
+          new Future[A] {
+            def force: A = {
+              val result = future.force
+              println("reduce result = " + result)
+              result.reduceLeft(f)
+            }
+          }
+        }
+      }
     }
   }
-
-  implicit def f2bbarrayReducek1[A:FixedSizeMarshal,B:FixedSizeMarshal](f: BBArray[A] => B): BBArrayReduceKernel1[A,B] = {
-    val kernelName = freshName("theKernel")
-    val src = compileReduceKernel1(f, kernelName)
-    implicit val ma = BBAT[A]
-    val numThreads = 128 // CL.gpu.device.localMemSize.toInt / 4
-    println("numThreads = " + numThreads)
-    val kernel = CL.gpu.compile1[BBArray[A], B](kernelName, src,
-                                                new BlockArrayDist1[A,BBArray[A]](numThreads),
-                                                new SimpleLocalArrayEffect1[A,BBArray[A]](numThreads * fixedSizeMarshal[A].size))
-    new BBArrayReduceKernel1[A,B] {
-      def apply(a: BBArray[A]) = kernel(a)
-    }
-  }
-
-/*
-  implicit def f2bbarrayMapk2[A1:FixedSizeMarshal,A2:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2) => B): BBArrayMapKernel2[A1,A2,B] = {
-    val kernelName = freshName("theKernel")
-    val src = compileMapKernel1(f, kernelName)
-    implicit val ma1 = BBAT[A1]
-    implicit val ma2 = BBAT[A2]
-    implicit val mb = BBAT[B]
-    val kernel = CL.gpu.compile1[BBArray[A1], BBArray[A2], BBArray[B1]](kernelName, src,
-                                                         new SimpleArrayDist1[A1,BBArray[A1]],
-                                                         new SimpleGlobalArrayEffect1[A,BBArray[A]])
-    new BBArrayMapKernel1[A,B] {
-      def apply(a: BBArray[A]) = kernel(a)
-    }
-  }
-*/
 
   trait Mem[Buf] {
     protected def alloc[A: ClassManifest](usage: CLMem.Usage, n: Int): Buf
@@ -792,7 +786,7 @@ object OpenCLScalaTest4 {
     val dataSize = if (args.length > 0) args(0).toInt else 1000
 
     val a = Array.tabulate(dataSize)(_.toFloat)
-    
+
     println("sequential");
     {
       val c = time {
@@ -832,14 +826,12 @@ object OpenCLScalaTest4 {
 
     println("cl bbarray sum");
     {
-      val c: BBArray[Float] = time {
-        val result = CL.gpu.spawn { b2.reduceKernel(sum) }
+      val c: Float = time {
+        val result = CL.gpu.spawn { b2.reduceKernel(sumFloat) }
         result.force
       }
       println("c = " + c)
-      val result = c.sum
-      val correct = (1 until b2.length).sum
-      println("sum = " + result)
+      val correct = b2.sum
       println("correct sum = " + correct)
     }
 
