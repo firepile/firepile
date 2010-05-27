@@ -356,107 +356,160 @@ object OpenCLScalaTest4 {
   val floatX2 = (a:Float) => a * 2.0f
   val aSinB = (a:Float,b:Float) => a * Math.sin(b).toFloat + 1.0f
 
-/*
-  type Point1 = Int
-  case class Point2(val x: Int, val y: Int) extends Tuple2[Int,Int](x, y) {
-    def +(i: Int, j: Int)(implicit config: Config2) = Point2((x+i)%config.localThreadIdSpace._1,(y+j)%config.localThreadIdSpace._2)
-    def -(i: Int, j: Int)(implicit config: Config2) = Point2((x-i)%config.localThreadIdSpace._1,(y-j)%config.localThreadIdSpace._2)
-    def +(p: Point2)(implicit config: Config2) = Point2((x+p.x)%config.localThreadIdSpace._1,(y+p.y)%config.localThreadIdSpace._2)
-    def -(p: Point2)(implicit config: Config2) = Point2((x-p.x)%config.localThreadIdSpace._1,(y-p.y)%config.localThreadIdSpace._2)
+  trait IdSpace[Pt <: Point[Pt]] extends Iterable[Pt] {
+    def extent: Pt
   }
-  case class Point3(val x: Int, val y: Int, val z: Int) extends Tuple3[Int,Int,Int](x, y) {
+  class IdSpace1(val extent: Point1) extends IdSpace[Point1] {
+    def iterator = (for (i <- 0 until extent.x) yield Point1(i)).toIterator
+  }
+  class IdSpace2(val extent: Point2) extends IdSpace[Point2] {
+    def iterator = (for (i1 <- 0 until extent.x; i2 <- 0 until extent.y) yield Point2(i1, i2)).toIterator
+  }
+  class IdSpace3(val extent: Point3) extends IdSpace[Point3] {
+    def iterator = (for (i1 <- 0 until extent.x; i2 <- 0 until extent.y; i3 <- 0 until extent.z) yield Point3(i1, i2, i3)).toIterator
+  }
+
+  trait Point[Pt <: Point[Pt]] {
+    this: Pt =>
+
+    def rank: Int
+
+    def +(i: Int): Pt
+    def -(i: Int): Pt
+    def /(i: Int): Pt
+    def %(i: Int): Pt
+    def *(i: Int): Pt
+
+    def +(p: Pt): Pt
+    def -(p: Pt): Pt
+    def *(p: Pt): Pt
+    def /(p: Pt): Pt
+    def %(p: Pt): Pt
+
+    def scale(b: Pt, n: Pt, t: Pt): Pt = b * n + t
+  }
+  case class Point1(x: Int) extends Point[Point1] {
+    def rank = 1
+
+    def +(i: Int) = Point1(x+i)
+    def -(i: Int) = Point1(x-i)
+    def /(i: Int) = Point1(x/i)
+    def %(i: Int) = Point1(x%i)
+    def *(i: Int) = Point1(x*i)
+
+    def +(p: Point1) = Point1(x+p.x)
+    def -(p: Point1) = Point1(x-p.x)
+    def *(p: Point1) = Point1(x*p.x)
+    def /(p: Point1) = Point1(x/p.x)
+    def %(p: Point1) = Point1(x%p.x)
+  }
+  case class Point2(x: Int, y: Int) extends Point[Point2] {
+    def rank = 2
+
+    def +(i: Int) = Point2(x+i,y+i)
+    def -(i: Int) = Point2(x-i,y-i)
+    def /(i: Int) = Point2(x/i, y/i)
+    def %(i: Int) = Point2(x%i, y%i)
+    def *(i: Int) = Point2(x*i, y*i)
+
+    def +(i: Int, j: Int) = Point2(x+i,y+j)
+    def -(i: Int, j: Int) = Point2(x-i,y-j)
+    def *(i: Int, j: Int) = Point2(x*i,y*j)
+    def /(i: Int, j: Int) = Point2(x/i,y/j)
+    def %(i: Int, j: Int) = Point2(x%i,y%j)
+
+    def +(p: Point2) = Point2(x+p.x,y+p.y)
+    def -(p: Point2) = Point2(x-p.x,y-p.y)
+    def *(p: Point2) = Point2(x*p.x, y*p.y)
+    def /(p: Point2) = Point2(x/p.x, y/p.y)
+    def %(p: Point2) = Point2(x%p.x, y%p.y)
+  }
+  case class Point3(x: Int, y: Int, z: Int) extends Point[Point3] {
+    def rank = 3
+
+    def +(i: Int) = Point3(x+i,y+i,z+i)
+    def -(i: Int) = Point3(x-i,y-i,z-i)
+    def /(i: Int) = Point3(x/i, y/i, z/i)
+    def %(i: Int) = Point3(x%i, y%i, z%i)
+    def *(i: Int) = Point3(x*i, y*i, z*i)
+
     def +(i: Int, j: Int, k: Int) = Point3(x+i,y+j,z+k)
     def -(i: Int, j: Int, k: Int) = Point3(x-i,y-j,z-k)
+    def *(i: Int, j: Int, k: Int) = Point3(x*i,y*j,z*k)
+    def /(i: Int, j: Int, k: Int) = Point3(x/i,y/j,z/k)
+    def %(i: Int, j: Int, k: Int) = Point3(x%i,y%j,z%k)
+
     def +(p: Point3) = Point3(x+p.x,y+p.y,z+p.z)
     def -(p: Point3) = Point3(x-p.x,y-p.y,z-p.z)
+    def *(p: Point3) = Point3(x*p.x,y*p.y,z*p.z)
+    def /(p: Point3) = Point3(x/p.x,y/p.y,z/p.z)
+    def %(p: Point3) = Point3(x%p.x,y%p.y,z%p.z)
   }
 
-  trait Id[IS <: IndexSpace] {
-    type Tuple = IS#Tuple
-    val indexSpace: IS = config
-    val config: IS
+  implicit def int2point1(p: Int) = Point1(p)
+  implicit def int2point2(p: (Int,Int)) = Point2(p._1,p._2)
+  implicit def int2point3(p: (Int,Int,Int)) = Point3(p._1,p._2,p._3)
 
-    val threadIdSpace = indexSpace.threadIdSpace
-    val blockIdSpace = indexSpace.blockIdSpace
-    val localThreadIdSpace = indexSpace.localThreadIdSpace
-
-    val global = thread
-    def thread: Tuple
-    def block: Tuple
-    def localThread: Tuple
+  class Ident[Pt <: Point[Pt]](val config: Config[Pt], val block: Pt, localThread: Pt) {
+    def thread: Pt = block * config.localThreadIdSpace.extent + localThread
+    def global = thread
   }
 
-  class Id1(val config: Config1, val block: Int, val localThread: Int) extends Id[Config1] {
-    val thread = block * config.localThreadIdSpace + localThread
-  }
-  class Id2(val config: Config2, val block: (Int,Int), val localThread: (Int,Int)) extends Id[Config2] {
-    val thread = (block._1 * config.localThreadIdSpace._1 + localThread._1,
-                  block._2 * config.localThreadIdSpace._2 + localThread._2)
-  }
-  class Id3(val config: Config3, val block: (Int,Int,Int), val localThread: (Int,Int,Int)) extends Id[Config3] {
-    val thread = (block._1 * config.localThreadIdSpace._1 + localThread._1,
-                  block._2 * config.localThreadIdSpace._2 + localThread._2,
-                  block._3 * config.localThreadIdSpace._3 + localThread._3)
-  }
+  class Id1(config: Config1, block: Point1, localThread: Point1) extends Ident[Point1](config, block, localThread)
+  class Id2(config: Config2, block: Point2, localThread: Point2) extends Ident[Point2](config, block, localThread)
+  class Id3(config: Config3, block: Point3, localThread: Point3) extends Ident[Point3](config, block, localThread)
 
   /** Index space */
-  trait IndexSpace {
-    type Tuple
+  trait Config[Pt <: Point[Pt]] {
     /** Space of global thread ids; must be blockIdSpace * localThreadIdSpace */
-    def threadIdSpace: Tuple
+    def threadIdSpace: IdSpace[Pt]
     /** Space of block (work group) ids */
-    def blockIdSpace: Tuple
+    def blockIdSpace: IdSpace[Pt]
     /** Space of local thread (work item) ids witin a block.  All blocks have the same local space. */
-    def localThreadIdSpace: Tuple
+    def localThreadIdSpace: IdSpace[Pt]
 
-    def threadIds: Seq[Tuple]
-    def blockIds: Seq[Tuple]
-    def localThreadIds: Seq[Tuple]
-  }
-  class Config1(val blockIdSpace: Int, val localThreadIdSpace: Int) extends IndexSpace {
-    type Tuple = Int
-    def threadIdSpace = blockIdSpace * localThreadIdSpace
+    def threadIds = threadIdSpace.iterator
+    def blockIds = blockIdSpace.iterator
+    def localThreadIds = localThreadIdSpace.iterator
 
-    def numThreads = threadIdSpace
-    def numBlocks = blockIdSpace
-    def numThreadsPerBlock = localThreadIdSpace
-
-    def threadIds: Seq[Tuple] = 0 until threadIdSpace
-    def blockIds: Seq[Tuple] = 0 until blockIdSpace
-    def localThreadIds: Seq[Tuple] = 0 until localThreadIdSpace
-  }
-  class Config2(val blockIdSpace: (Int,Int), val localThreadIdSpace: (Int,Int)) extends IndexSpace {
-    type Tuple = (Int,Int)
-    def threadIdSpace = (blockIdSpace._1 * localThreadIdSpace._1, blockIdSpace._2 * localThreadIdSpace._2)
-
-    def threadIds = for (i1 <- 0 until threadIdSpace._1; i2 <- 0 until threadIdSpace._2) yield (i1,i2)
-    def blockIds = for (i1 <- 0 until blockIdSpace._1; i2 <- 0 until blockIdSpace._2) yield (i1,i2)
-    def localThreadIds = for (i1 <- 0 until localThreadIdSpace._1; i2 <- 0 until localThreadIdSpace._2) yield (i1,i2)
-  }
-  class Config3(val blockIdSpace: (Int,Int,Int), val localThreadIdSpace: (Int,Int,Int)) extends IndexSpace {
-    type Tuple = (Int,Int,Int)
-    def threadIdSpace = (blockIdSpace._1 * localThreadIdSpace._1, blockIdSpace._2 * localThreadIdSpace._2, blockIdSpace._3 * localThreadIdSpace._3)
-
-    def threadIds = for (i1 <- 0 until threadIdSpace._1; i2 <- 0 until threadIdSpace._2; i3 <- 0 until threadIdSpace._3) yield (i1,i2,i3)
-    def blockIds = for (i1 <- 0 until blockIdSpace._1; i2 <- 0 until blockIdSpace._2; i3 <- 0 until blockIdSpace._3) yield (i1,i2,i3)
-    def localThreadIds = for (i1 <- 0 until localThreadIdSpace._1; i2 <- 0 until localThreadIdSpace._2; i3 <- 0 until localThreadIdSpace._3) yield (i1,i2,i3)
+    /** Return the block ID of a given global thread ID */
+    def blockIdOfThread(p: Pt) = p / blockIdSpace.extent
+    def localThreadIdOfThread(p: Pt) = p % blockIdSpace.extent
   }
 
-  class size(n: Int) extends StaticAnnotation
+  class Config1(val maxBlock: Point1, val maxLocalThread: Point1) extends Config[Point1] {
+    type Pt = Point1
+    def threadIdSpace = new IdSpace1(maxBlock * maxLocalThread)
+    def blockIdSpace = new IdSpace1(maxBlock)
+    def localThreadIdSpace = new IdSpace1(maxLocalThread)
+  }
+  class Config2(val maxBlock: Point2, val maxLocalThread: Point2) extends Config[Point2] {
+    type Pt = Point2
+    def threadIdSpace = new IdSpace2(maxBlock * maxLocalThread)
+    def blockIdSpace = new IdSpace2(maxBlock)
+    def localThreadIdSpace = new IdSpace2(maxLocalThread)
+  }
+  class Config3(val maxBlock: Point3, val maxLocalThread: Point3) extends Config[Point3] {
+    type Pt = Point3
+    def threadIdSpace = new IdSpace3(maxBlock * maxLocalThread)
+    def blockIdSpace = new IdSpace3(maxBlock)
+    def localThreadIdSpace = new IdSpace3(maxLocalThread)
+  }
 
+  /*
   // Want a data structure indexed by thread id with which we can access local data in another instance of the kernel
-  abstract class Local[IS <: IndexSpace,A](var value: A) extends Function1[IS#Tuple, A] with Barrier {
-    def apply(i: IS#Tuple): A = throw new MarkerException("Local.apply")
-    def update(i: IS#Tuple, x: A): Unit = throw new MarkerException("Local.update")
+  abstract class Local[Cfg <: Config,A](var value: A) extends Function1[Cfg#Pt, A] with Barrier {
+    def apply(i: Cfg#Tuple): A = throw new MarkerException("Local.apply")
+    def update(i: Cfg#Tuple, x: A): Unit = throw new MarkerException("Local.update")
     // def value_=(x: A) = { value = x }
     // def :=(x: A) = { value = x }
 
-    // def ++(i: IS#Tuple): A = apply(id.localThread+i)
-    // def --(i: IS#Tuple): A = apply(id.localThread-i)
+    // def ++(i: Cfg#Tuple): A = apply(id.localThread+i)
+    // def --(i: Cfg#Tuple): A = apply(id.localThread-i)
   }
 
   implicit def local2a[A](x: Local[_,A]): A = x.value
-  implicit def a2local[A,IS <: IndexSpace](x: A)(implicit config: IS) = Local[IS,A](x)
+  implicit def a2local[A,Cfg <: Config](x: A)(implicit config: Cfg) = Local[Cfg,A](x)
 
   case class Local1[A](value: A) extends Local[Config1,A](value)
   case class Local2[A](value: A) extends Local[Config2,A](value) with Function2[Int,Int,A] {
