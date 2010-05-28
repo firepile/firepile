@@ -1,4 +1,4 @@
-package simplecl.tree
+package sooty.tree
 
 object Trees {
     trait Tree {
@@ -255,42 +255,6 @@ object Trees {
         def :=(t2: Tree) = Assign(t1, t2)
         def then(t2: Tree) = Seq(t1, t2)
     }
-
-    def main(args: Array[String]) = {
-//        val int = ValueType("int")
-//        val n = Id("n")
-//        val fact = Id("fact")
-//        val result = Id("result")
-//        val t = KernelFunDef(fact, List[Tree](MemType("global",Formal(int, n))),
-//                       Seq(VarDef(int, result),
-//                           If(n <= 1,
-//                              result := 1,
-//                              result := n * Call(fact, n-1)),
-//                           Return(result)))
-//        println(t.toCL)
-//    }
-
-        val float = ValueType("float")
-        val int = ValueType("int")
-        val i = Id("i")
-        val aSinB = Id("aSinB")
-        val sin = Id("sin")
-        val a = Id("a")
-        val b = Id("b")
-        val checking = Id("justChecking")
-        val output = Id("output")
-        val f = KernelFunDef(aSinB, List[Tree](MemType("global",Formal(ConstType(PtrType(float)),a)),
-                                                MemType("global",Formal(ConstType(PtrType(float)),b)),
-                                                MemType("global",Formal(PtrType(float),output))),
-                      Seq(VarDef(int, i),
-//                          Label("BACK"),
-                          i := GetGlobalId(0),
-//                          ArrayDef(checking, int, 20),
-//                          GoTo("BACK"),
-                          ArrayAccess(output,i) := ArrayAccess(a,i) * Call(sin,ArrayAccess(b,i)) + 1))
-        println(f.toCL)
-    }
-
 
 
     def indent(s: String) = {
