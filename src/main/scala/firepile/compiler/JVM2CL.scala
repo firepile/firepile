@@ -45,7 +45,7 @@ import soot.jimple.{ FloatConstant,
                      IntConstant,
                      LongConstant,
                      StringConstant }
-import firepile.GrimpUnapply._
+import firepile.compiler.GrimpUnapply._
 
 import scala.collection.mutable.HashMap
 

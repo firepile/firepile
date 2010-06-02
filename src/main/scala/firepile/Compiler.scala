@@ -11,7 +11,7 @@ import com.nativelibs4java.opencl.CLMem
 import com.nativelibs4java.opencl.CLEvent
 import com.nativelibs4java.opencl.CLKernel.LocalSize
 
-import tree.Trees._
+import firepile.tree.Trees._
 
 object Compiler {
   import Firepile._

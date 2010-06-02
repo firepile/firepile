@@ -1,4 +1,4 @@
-package firepile.compiler.tree
+package firepile.tree
 
 object Trees {
     trait Tree {
