@@ -1,4 +1,4 @@
-package simplecl.util
+package firepile.util
 
 object BufferBackedArray {
   import java.nio.ByteBuffer 
@@ -175,12 +175,6 @@ object BufferBackedArray {
   }
 
   import scala.collection.generic.CanBuildFrom
-  /*
-  implicit def bbarrayCBFrom[A: FixedSizeMarshal, From] = new CanBuildFrom[From,A,BBArray[A]] {
-    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
-    def apply(from: From): Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
-  }
-  */
   implicit def bbarrayCBFromArray[A: FixedSizeMarshal] = new CanBuildFrom[Array[_],A,BBArray[A]] {
     def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
     def apply(from: Array[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](from.length*implicitly[FixedSizeMarshal[A]].size)
@@ -205,7 +199,7 @@ object BufferBackedArray {
 
       if (b.capacity < pos + m.size) {
         // println("growing at " + pos + " to " + (b.capacity + m.size) * 2)
-        val nb = ByteBuffer.allocate(b.capacity*2)
+        val nb = ByteBuffer.allocate(b.capacity*2).order(ByteOrder.nativeOrder)
         b = nb.put(b.rewind.asInstanceOf[ByteBuffer])
       }
 
@@ -239,7 +233,7 @@ object BufferBackedArray {
     def ofDim[A: FixedSizeMarshal](n: Int) = new BBArray[A](n)
   }
 
-  class BBArray[A: FixedSizeMarshal](private val buf: ByteBuffer) extends ArrayLike[A, BBArray[A]] {
+  class BBArray[A: FixedSizeMarshal](private val buf: ByteBuffer) extends ArrayLike[A, BBArray[A]] with Iterable[A] {
     def this(n: Int) = this(ByteBuffer.allocate(n * implicitly[FixedSizeMarshal[A]].size).order(ByteOrder.nativeOrder)) // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
 
     def buffer: ByteBuffer = buf
@@ -255,18 +249,18 @@ object BufferBackedArray {
     def length: Int = buf.limit / marshal.size
   }
 
-  def time[T](key: String)(body: => T): T = {
-    val t0 = System.currentTimeMillis
-    try {
-      body
-    }
-    finally {
-      val t1 = System.currentTimeMillis
-      println(key + " " + (t1-t0)/1000.)
-    }
-  }
-
   def main(args: Array[String]) {
+    def time[T](key: String)(body: => T): T = {
+      val t0 = System.currentTimeMillis
+      try {
+        body
+      }
+      finally {
+        val t1 = System.currentTimeMillis
+        println(key + " " + (t1-t0)/1000.)
+      }
+    }
+
     val n = 100000
     val a = Array.tabulate[(Float,Double,Boolean)](n)(i => (i.toFloat,i.toDouble,i % 2 == 0))
     val b = new BBArray[(Float,Double,Boolean)](n)

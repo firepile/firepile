@@ -1,4 +1,4 @@
-package sooty.tree
+package firepile.compiler.tree
 
 object Trees {
     trait Tree {
@@ -21,8 +21,8 @@ object Trees {
         case s => s.toCL
       }
     }
-    def paren(t: Tree, s: Tree) = {
 
+    def paren(t: Tree, s: Tree) = {
         def paren(t: Tree) = "(" + t.toCL + ")"
 
         def prio(t: Tree) = t match {
@@ -56,10 +56,43 @@ object Trees {
             case _ => 99
         }
 
-        if (prio(s) >= prio(t))
-            paren(s)
-        else
-            s.toCL
+        t match {
+          case Assign(_,x) if x == s => s.toCL
+          case _ => {
+            if (prio(s) >= prio(t))
+                paren(s)
+            else
+                s.toCL
+          }
+        }
+    }
+
+    def escape(str: String): String = {
+      var s = ""
+      for (ch <- str) {
+        s += escape(ch)
+      }
+      s
+    }
+
+    def padWithZero(str: String) = {
+      var s = str
+      while (s.length < 3)
+        s = "0" + s
+      s
+    }
+
+    def escape(ch: Char): String = ch match {
+      case ch if ch == '\f' => "\\f"
+      case ch if ch == '\t' => "\\t"
+      case ch if ch == '\b' => "\\b"
+      case ch if ch == '\r' => "\\r"
+      case ch if ch == '\n' => "\\n"
+      case ch if ch == '\"' => "\\\""
+      case ch if ch == '\\' => "\\\\"
+      case ch if ch == '\'' => "\\'"
+      case ch if ch.isControl || ch > 127 => "\\" + padWithZero(ch.asDigit.toOctalString)
+      case ch => ch.toString
     }
 
     case class Id(name: String) extends Tree {
@@ -76,6 +109,12 @@ object Trees {
     }
     case class DoubleLit(value: Double) extends Tree {
         def toCL = value.toString
+    }
+    case class CharLit(value: Char) extends Tree {
+        def toCL = "'" + escape(value.toString) + "'"
+    }
+    case class StringLit(value: String) extends Tree {
+        def toCL = "\"" + escape(value.toString) + "\""
     }
     case class Cast(typ: Tree, e: Tree) extends Tree {
         def toCL = "(" + typ.toCL + ") " + paren(this, e)
@@ -116,7 +155,11 @@ object Trees {
         def toCL = paren(this, fun) + args.map((t:Tree) => t.toCL).mkString("(", ", ", ")")
     }
     case class If(cond: Tree, e1: Tree, e2: Tree) extends Tree {
-        def toCL = "if (" + cond.toCL + ") {\n" + indent(stmt(e1)) + "} else {\n" + indent(stmt(e2)) + "}\n"
+        def toCL = (e1,e2) match {
+          case (GoTo(_),Nop) => "if (" + cond.toCL + ") " + stmt(e1)
+          case (e1,Nop) => "if (" + cond.toCL + ") {\n" + indent(stmt(e1)) + "}\n"
+          case (e1,e2) => "if (" + cond.toCL + ") {\n" + indent(stmt(e1)) + "} else {\n" + indent(stmt(e2)) + "}\n"
+        }
     }
     case class Eval(e: Tree) extends Tree {
         def toCL = e.toCL + ";\n"
@@ -126,6 +169,9 @@ object Trees {
     }
     case object Return extends Tree {
         def toCL = "return;\n"
+    }
+    case object Nop extends Tree {
+        def toCL = ";\n"
     }
     case class While(cond: Tree, body: Tree) extends Tree {
         def toCL = "while (" + cond.toCL + ") {\n" + indent(stmt(body)) + "}"
@@ -215,7 +261,7 @@ object Trees {
         def toCL = name + ":\n"
     }
     case class GoTo(target: String) extends Tree {
-        def toCL = "goto " + target + "\n"
+        def toCL = "goto " + target + ";\n"
     }
     case class GetLocalId(typ: Tree) extends Tree {
         def toCL = "get_local_id(" + typ.toCL + ")"
