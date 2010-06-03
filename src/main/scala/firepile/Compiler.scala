@@ -263,19 +263,23 @@ object Compiler {
     val d = new BlockArrayDist1[BBArray[A]](numThreads)
     val e = new SimpleLocalArrayWithOutputEffect1[A,BBArray[A]](numThreads, numThreads * fixedSizeMarshal[A].size)
     val kernel = dev.compile1[BBArray[A], BBArray[A]](kernelName, src, d, e)
+
     new BBArrayReduceKernel1[A] {
-      def apply(a: BBArray[A]) = new InstantiatedKernel[A] {
+      def apply(a: BBArray[A]) = new Future[A] {
+
         println(d(a))
         println(e(a))
-        def run(dev: Device): Future[A] = {
-          val future: Future[BBArray[A]] = kernel(a).run(dev)
-          new Future[A] {
-            def force: A = {
-              val result = future.force
-              println("reduce result = " + result)
-              result.reduceLeft(f)
-            }
-          }
+
+        var future: Future[BBArray[A]] = null
+
+        def run = {
+          future = kernel(a).start
+        }
+
+        def finish: A = {
+          val result = future.force
+          println("reduce result = " + result)
+          result.reduceLeft(f)
         }
       }
     }

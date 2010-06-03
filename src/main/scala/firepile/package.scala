@@ -97,7 +97,7 @@ package object firepile {
   // def spawn[A1,A2,A3,B](k: Kernel3[A1,A2,A3,B])(a1: A1, a2: A2, a3: A3)(implicit dev: Device) = dev.spawn { k(a1,a2,a3) }
 
 
-  def spawn[B](k: InstantiatedKernel[B])(implicit dev: Device) = k.run(dev)
+  def spawn[B](k: Future[B]) = k.start
 
   class CompileInput[A:Marshal](x: A) {
       def put: ByteBuffer = implicitly[Marshal[A]].put(x)
@@ -108,7 +108,7 @@ package object firepile {
                       val effect: Effect,
                       val inputs: List[CompileInput[_]])
 
-  def compileInstantiatedKernel[B:Marshal](body: () => B, kernelName: String): CompileResult = {
+  def compileInstantiatedKernel[B:Marshal](dev: Device, body: () => B, kernelName: String): CompileResult = {
     val k = body.getClass
     val apply = Compiler.findApplyMethod(body, 0)
     val funs = compiler.JVM2CL.compileRoot(k.getName, Compiler.signature(apply)).reverse
@@ -116,40 +116,34 @@ package object firepile {
     null
   }
 
-  implicit def compile[B:Marshal](body: => B): InstantiatedKernel[B] = {
+  implicit def compile[B:Marshal](body: => B)(dev: Device): Future[B] = {
     val kernelName = Compiler.freshName("theKernel")
-    val kernel = compileInstantiatedKernel[B](() => body, kernelName)
+    val kernel = compileInstantiatedKernel[B](dev, () => body, kernelName)
 
-    new InstantiatedKernel[B] {
-      def run(dev: Device): Future[B] = {
-        if (kernel == null)
-          return new Future[B] {
-            def force: B = {
-              throw new RuntimeException("Compiler not implemented")
-            }
-          }
+    if (kernel == null)
+      throw new RuntimeException("Compiler not implemented")
 
+    new Future[B] {
+      def run = {
         val code: CLKernel = kernel.code
         val dist: Dist = kernel.dist
         val effect: Effect = kernel.effect
         val buffers: List[ByteBuffer] = kernel.inputs.map(in => in.put)
 
-        val k = new InstantiatedBufKernel(code, dist, effect, buffers:_*)
+        val k = new InstantiatedBufKernel(dev, code, dist, effect, buffers:_*)
 
-        val future = k.run(dev)
+        future = k.start
+      }
 
-        new Future[B] {
-          def force: B = {
-            val out = future.force
-            val b: B = implicitly[Marshal[B]].get(out)
-            b
-          }
-        }
+      var future: Future[ByteBuffer] = null
+
+      def finish: B = {
+        val out = future.force
+        val b: B = implicitly[Marshal[B]].get(out)
+        b
       }
     }
   }
-
-  // }
 
   // How to make kernels composable
   // Basic kernels:
@@ -285,9 +279,9 @@ package object firepile {
 
   // ------------------------------------------------------------------------
   trait Kernel
-  trait Kernel1[A,B] extends Function1[A,InstantiatedKernel[B]] with Kernel
-  trait Kernel2[A1,A2,B] extends Function2[A1,A2,InstantiatedKernel[B]] with Kernel
-  trait Kernel3[A1,A2,A3,B] extends Function3[A1,A2,A3,InstantiatedKernel[B]] with Kernel
+  trait Kernel1[A,B] extends Function1[A,Future[B]] with Kernel
+  trait Kernel2[A1,A2,B] extends Function2[A1,A2,Future[B]] with Kernel
+  trait Kernel3[A1,A2,A3,B] extends Function3[A1,A2,A3,Future[B]] with Kernel
 
   // Kernels that were compiled from functions on single elements
   trait BBArrayMapKernel1[A,B] extends Kernel1[BBArray[A],BBArray[B]]

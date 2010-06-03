@@ -14,7 +14,7 @@ import com.nativelibs4java.opencl.CLKernel.LocalSize
 
 import firepile._
 
-class InstantiatedBufKernel(code: CLKernel, val dist: Dist, val effect: Effect, buffers: ByteBuffer*) extends InstantiatedKernel[ByteBuffer] {
+class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val effect: Effect, buffers: ByteBuffer*) extends Future[ByteBuffer] {
   def printBuffer(b: ByteBuffer) = {
     val fb = b.asFloatBuffer.duplicate
     var sep = "buffer "
@@ -26,7 +26,7 @@ class InstantiatedBufKernel(code: CLKernel, val dist: Dist, val effect: Effect, 
     println()
   }
 
-  def run(dev: Device) = {
+  def run = {
     for (b <- buffers)
       printBuffer(b)
 
@@ -69,24 +69,26 @@ class InstantiatedBufKernel(code: CLKernel, val dist: Dist, val effect: Effect, 
     val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup),
               (writeEvents.toList ::: writeLenEvents.toList ::: writeOutLenEvent :: Nil):_*)
 
-    readBackResult(dev, e.outputSize, runEvent, memOut)
+    this.runEvent = runEvent
+    this.memOut = memOut
   }
 
-  def readBackResult(dev: Device, outputLength: Int, runEvent: CLEvent, memOut: CLByteBuffer) = {
-    new Future[ByteBuffer] {
-      def force = {
-        val bufOut = ByteBuffer.allocateDirect(outputLength).order(ByteOrder.nativeOrder)
-        // val readEvent = memOut.read(dev.queue, bufOut, false, runEvent)
-        println("runEvent about to be done: " + runEvent)
-        runEvent.waitFor
-        val readEvent = memOut.read(dev.queue, bufOut, false)
-        println("readEvent about to be done: " + readEvent)
-        readEvent.waitFor
-        dev.queue.finish
-        println("queue done")
-        bufOut.rewind
-        bufOut
-      }
-    }
+  var runEvent: CLEvent = null
+  var memOut: CLByteBuffer = null
+
+  def finish = {
+    val outputLength = effect.outputSize
+
+    val bufOut = ByteBuffer.allocateDirect(outputLength).order(ByteOrder.nativeOrder)
+    // val readEvent = memOut.read(dev.queue, bufOut, false, runEvent)
+    println("runEvent about to be done: " + runEvent)
+    runEvent.waitFor
+    val readEvent = memOut.read(dev.queue, bufOut, false)
+    println("readEvent about to be done: " + readEvent)
+    readEvent.waitFor
+    dev.queue.finish
+    println("queue done")
+    bufOut.rewind
+    bufOut
   }
 }

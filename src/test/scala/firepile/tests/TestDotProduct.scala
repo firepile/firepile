@@ -17,14 +17,10 @@ object TestDotProduct {
     println("cl bbarray dot product");
     {
       val c: Float = time {
-        val result = spawn {
-            val b = (b1 zip b2)
-            val f = (p: (Float,Float)) => p._1 * p._2
-            val m = b.map(f)
-            val r = m.reduceLeft(_+_)
-            r
-        }
-        result.force
+        // val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y).reduceKernel(_+_)
+        // result.force
+        val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y)
+        result.force.reduceLeft(_+_)
       }
       println("c = " + c)
       val correct = (b1 zip b2).map((p: (Float,Float)) => p._1 * p._2).reduceLeft(_+_)
