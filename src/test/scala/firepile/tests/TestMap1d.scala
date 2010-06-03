@@ -16,7 +16,7 @@ object TestMap1d {
     println("cl array");
     {
       val c = time {
-        val result = a.mapKernel((x:Float) => if (x < 0) -1 else if (x > 0) 1 else 0)
+        val result = a.mapKernel((x:Float) => if (x < 0) -1 else if (x > 0) 1 else 0).start
         result.force
       }
       assert(a.length == c.length)

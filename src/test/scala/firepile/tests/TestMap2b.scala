@@ -19,7 +19,7 @@ object TestMap2b {
     println("cl bbarray a*sin(b)+1");
     {
       val c: BBArray[Float] = time {
-        val result = mapKernel(aSinB)(b1, b2)
+        val result = mapKernel(aSinB)(b1, b2).start
         result.force
       }
       println("c = " + c)

@@ -86,17 +86,12 @@ package object firepile {
   implicit def wrapArray3bba[A1: FixedSizeMarshal,A2: FixedSizeMarshal,A3: FixedSizeMarshal](p: (BBArray[A1],BBArray[A2],Array[A3])) = new BBSpawner3[A1,A2,A3](p._1, p._2, p._3)
   implicit def wrapArray3bbb[A1: FixedSizeMarshal,A2: FixedSizeMarshal,A3: FixedSizeMarshal](p: (BBArray[A1],BBArray[A2],BBArray[A3])) = new BBSpawner3[A1,A2,A3](p._1, p._2, p._3)
 
-  def mapKernel[A,B](k: BBArrayMapKernel1[A,B])(a: BBArray[A])(implicit dev: Device) = dev.spawn { k(a) }
-  def mapKernel[A1,A2,B](k: BBArrayMapKernel2[A1,A2,B])(a1: BBArray[A1], a2: BBArray[A2])(implicit dev: Device) = dev.spawn { k(a1,a2) }
-  def mapKernel[A1,A2,A3,B](k: BBArrayMapKernel3[A1,A2,A3,B])(a1: BBArray[A1], a2: BBArray[A2], a3: BBArray[A3])(implicit dev: Device) = dev.spawn { k(a1,a2,a3) }
-  def reduceKernel[A](k: BBArrayReduceKernel1[A])(a: BBArray[A])(implicit dev: Device) = dev.spawn { k(a) }
+  def mapKernel[A,B](k: BBArrayMapKernel1[A,B])(a: BBArray[A]) = k(a)
+  def mapKernel[A1,A2,B](k: BBArrayMapKernel2[A1,A2,B])(a1: BBArray[A1], a2: BBArray[A2]) = k(a1,a2)
+  def mapKernel[A1,A2,A3,B](k: BBArrayMapKernel3[A1,A2,A3,B])(a1: BBArray[A1], a2: BBArray[A2], a3: BBArray[A3]) = k(a1,a2,a3)
+  def reduceKernel[A](k: BBArrayReduceKernel1[A])(a: BBArray[A]) = k(a)
 
-  def spawn[A,B](k: BBArrayLocalReduceKernel1[A,B])(a: BBArray[A])(implicit dev: Device) = dev.spawn { k(a) }
-
-  // def spawn[A1,A2,B](k: Kernel2[A1,A2,B])(a1: A1, a2: A2)(implicit dev: Device) = dev.spawn { k(a1,a2) }
-  // def spawn[A1,A2,A3,B](k: Kernel3[A1,A2,A3,B])(a1: A1, a2: A2, a3: A3)(implicit dev: Device) = dev.spawn { k(a1,a2,a3) }
-
-
+  def spawn[A,B](k: BBArrayLocalReduceKernel1[A,B])(a: BBArray[A]) = k(a)
   def spawn[B](k: Future[B]) = k.start
 
   class CompileInput[A:Marshal](x: A) {

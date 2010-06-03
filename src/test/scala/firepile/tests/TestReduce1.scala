@@ -18,7 +18,7 @@ object TestReduce1 {
     println("cl bbarray sum");
     {
       val c: Float = time {
-        val result = b.reduceKernel(sumFloat)
+        val result = b.reduceKernel(sumFloat).start
         result.force
       }
       println("c = " + c)

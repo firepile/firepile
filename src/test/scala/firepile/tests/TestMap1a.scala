@@ -18,7 +18,7 @@ object TestMap1a {
     println("cl array");
     {
       val c = time {
-        val result = a.mapKernel(floatX2)
+        val result = a.mapKernel(floatX2).start
         result.force
       }
       assert(a.length == c.length)

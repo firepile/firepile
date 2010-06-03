@@ -19,7 +19,7 @@ object TestDotProduct {
       val c: Float = time {
         // val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y).reduceKernel(_+_)
         // result.force
-        val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y)
+        val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y).start
         result.force.reduceLeft(_+_)
       }
       println("c = " + c)
