@@ -14,8 +14,6 @@ import com.nativelibs4java.opencl.CLKernel.LocalSize
 import firepile.tree.Trees._
 
 object Compiler {
-  import Firepile._
-
   val Header = ("\n" +
     "struct Point1 {                                                                               \n" +
     "  int x;                                                                                      \n" +

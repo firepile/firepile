@@ -12,7 +12,7 @@ import com.nativelibs4java.opencl.CLEvent
 import com.nativelibs4java.opencl.CLKernel
 import com.nativelibs4java.opencl.CLKernel.LocalSize
 
-import Firepile._
+import firepile._
 
 class InstantiatedBufKernel(code: CLKernel, val dist: Dist, val effect: Effect, buffers: ByteBuffer*) extends InstantiatedKernel[ByteBuffer] {
   def printBuffer(b: ByteBuffer) = {

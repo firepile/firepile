@@ -16,14 +16,14 @@ import com.nativelibs4java.opencl.CLKernel.LocalSize
 import com.nativelibs4java.opencl._
 import java.util.EnumSet
 
-import Firepile.Effect
-import Firepile.Effect1
-import Firepile.Effect2
-import Firepile.Dist
-import Firepile.Dist1
-import Firepile.Dist2
-import Firepile.Kernel1
-import Firepile.Kernel2
+import firepile.Effect
+import firepile.Effect1
+import firepile.Effect2
+import firepile.Dist
+import firepile.Dist1
+import firepile.Dist2
+import firepile.Kernel1
+import firepile.Kernel2
 import Mems._
 
   object Device {

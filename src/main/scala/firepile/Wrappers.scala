@@ -1,7 +1,7 @@
 package firepile
 
 import firepile.util.BufferBackedArray._
-import Firepile._
+import firepile._
 
 object Wrappers {
   class ArrayKernelWrapper[A: FixedSizeMarshal](a1: Array[A]) {

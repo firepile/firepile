@@ -1,7 +1,6 @@
 package firepile.tests
 
-import firepile.Firepile
-import firepile.Firepile._
+import firepile._
 import firepile.Device
 import firepile.Spaces._
 import firepile.util.BufferBackedArray._
@@ -46,7 +45,7 @@ object TestLocalReduce1 {
   def main(args: Array[String]) = {
     val dataSize = if (args.length > 0) args(0).toInt else 1000
 
-    implicit val gpu: Device = Firepile.gpu
+    implicit val gpu: Device = firepile.gpu
 
     val b = BBArray.tabulate(dataSize)(_.toFloat)
 

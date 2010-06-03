@@ -1,5 +1,3 @@
-package firepile
-
 import firepile.util.BufferBackedArray._
 
 import java.nio.ByteBuffer
@@ -13,10 +11,7 @@ import com.nativelibs4java.opencl.CLKernel
 import com.nativelibs4java.opencl.CLKernel.LocalSize
 import com.nativelibs4java.opencl.JavaCL
 
-
-import java.util.EnumSet
-
-object Firepile {
+package object firepile {
   import Wrappers._
   import Spaces._
 
