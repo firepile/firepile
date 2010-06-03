@@ -294,10 +294,6 @@ object Firepile {
   trait Kernel2[A1,A2,B] extends Function2[A1,A2,InstantiatedKernel[B]] with Kernel
   trait Kernel3[A1,A2,A3,B] extends Function3[A1,A2,A3,InstantiatedKernel[B]] with Kernel
 
-  trait InstantiatedKernel[B] {
-    def run(dev: Device): Future[B]
-  }
-
   // Kernels that were compiled from functions on single elements
   trait BBArrayMapKernel1[A,B] extends Kernel1[BBArray[A],BBArray[B]]
   trait BBArrayMapKernel2[A1,A2,B] extends Kernel2[BBArray[A1],BBArray[A2],BBArray[B]]

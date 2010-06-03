@@ -38,6 +38,8 @@ import soot.{LongType => SootLongType}
 import soot.{FloatType => SootFloatType}
 import soot.{DoubleType => SootDoubleType}
 import soot.{RefType => SootRefType}
+import soot.{ArrayType => SootArrayType}
+import soot.{NullType => SootNullType}
 
 import firepile.tree.Trees._
 import soot.jimple.{ FloatConstant,
@@ -62,12 +64,12 @@ object JVM2CL {
     compileRoot(className, methodName)
   }
 
-    setup
+  setup
 
-  def compileRoot(className: String, methodName: String): List[Tree] = {
+  def compileRoot(className: String, methodName: String, self: AnyRef = null): List[Tree] = {
     println("compiling " + className + "." + methodName)
     try {
-      addRootMethodToWorklist(className, methodName)
+      addRootMethodToWorklist(className, methodName, self)
       if (makeCallGraph) {
         buildCallGraph
         optimizeCallGraph
@@ -81,7 +83,7 @@ object JVM2CL {
     }
   }
 
-  def setup = {
+  private def setup = {
     // java.class.path is broken in Scala, especially when running under sbt
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
       + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
@@ -102,14 +104,45 @@ object JVM2CL {
 
   def mangleName(name: String) = name.replace('$', '_').replace('.', '_')
 
-  implicit def v2tree(v: Value): Tree = translateExp(v)
+  private implicit def v2tree(v: Value): Tree = translateExp(v)
 
-  val worklist = new Queue[SootMethod]
-  val inWorklist = new HashSet[SootMethod]
+  class Worklist[A] extends Queue[A] {
+    val inWorklist = new HashSet[A]
+
+    override def +=(a: A) = {
+      if (! inWorklist.contains(a)) {
+        inWorklist += a
+        super.+=(a)
+      }
+      else
+        this
+    }
+  }
+
+  trait Task {
+    def run: List[Tree]
+    def method: SootMethod
+  }
+
+  def mapDef(m: SootMethod, t: Tree) = t
+  def reduceDef(m: SootMethod, t: Tree) = t
+
+  object CompileMethodTask {
+    def apply(m: SootMethodRef, self: AnyRef = null): CompileMethodTask = CompileMethodTask(m.resolve, self)
+  }
+  
+  case class CompileMethodTask(method: SootMethod, self: AnyRef) extends Task {
+    def run = compileMethod(method, self) match {
+      case null => Nil
+      case t => t::Nil
+    }
+  }
+
+  private val worklist = new Worklist[Task]
 
   private val makeCallGraph = false
 
-  private def addRootMethodToWorklist(className: String, methodName: String): Unit = {
+  private def addRootMethodToWorklist(className: String, methodName: String, self: AnyRef): Unit = {
     // Set up the class we're working with
     val c = Scene.v.loadClassAndSupport(className)
     if (makeCallGraph) {
@@ -124,23 +157,15 @@ object JVM2CL {
 
       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
       if (sig.equals(methodName)) {
-        enqueue(m)
+        worklist += CompileMethodTask(m, self)
       }
     }
   }
 
-  private def enqueue(m: SootMethodRef): Unit = enqueue(m.resolve)
-
-  private def enqueue(m: SootMethod): Unit = {
-    if (! inWorklist.contains(m)) {
-      println("enqueueing method" + m)
-      worklist += m
-      inWorklist += m
-    }
-  }
+  private def findSelf(v: Value, self: AnyRef): AnyRef = null
 
   private def buildCallGraph = {
-    Scene.v.setEntryPoints(worklist.toList)
+    Scene.v.setEntryPoints(worklist.toList.map(p => p.method))
     println("entry points " + Scene.v.getEntryPoints)
     (new CallGraphBuilder).build
     println(Scene.v.getCallGraph)
@@ -152,20 +177,19 @@ object JVM2CL {
     StaticInliner.v.transform
   }
 
-  def processWorklist = {
+  private def processWorklist = {
     val results = ListBuffer[Tree]()
 
     while (! worklist.isEmpty) {
-      val m = worklist.dequeue
-      val t = compileMethod(m)
-      if (t != null)
-          results += t
+      val task = worklist.dequeue
+      val ts = task.run
+      results ++= ts
     }
     results.toList
   }
 
-  def compileMethod(m: SootMethod): Tree = {
-    symtab = new SymbolTable
+  private def compileMethod(m: SootMethod, self: AnyRef): Tree = {
+    symtab = new SymbolTable(self)
 
     println("-------------------------------------------------------")
     println(m)
@@ -189,20 +213,13 @@ object JVM2CL {
 
     val body = translateUnits(units, Nil)
     val labeled = insertLabels(units, body, Nil)
-    val fun = makeFunction(m, prettify(removeThis(labeled)))
+    val fun = makeFunction(m, removeThis(labeled))
+
       // TODO: don't removeThis for normal methods; do removeThis for closures
       // TODO: verify that this is not used in the body of the method
 
     println()
     println("Result tree:")
-    println(body.mkString("\n"))
-
-    println()
-    println("Result tree with labels:")
-    println(labeled.mkString("\n"))
-
-    println()
-    println("Result tree with labels, params, local vars:")
     println(fun)
 
     println()
@@ -212,7 +229,25 @@ object JVM2CL {
     fun
   }
 
-  def removeThis(body: List[Tree]): List[Tree] = {
+  private def fold(f: Tree => Tree)(t: Tree): Tree = f(t match {
+    case Call(fun, args) => Call(fold(f)(fun), args.map(a => fold(f)(a)))
+    case Bin(op1, op, op2) => Bin(fold(f)(op1), op, fold(f)(op2))
+    case Un(op, op2) => Un(op, fold(f)(op2))
+    case Eval(e) => Eval(fold(f)(e))
+    case Assign(op1, op2) => Assign(fold(f)(op1), fold(f)(op2))
+    case Select(op1, name) => Select(fold(f)(op1), name)
+    case Ref(op1) => Ref(fold(f)(op1))
+    case Deref(op1) => Deref(fold(f)(op1))
+    case ArrayAccess(op1, op2) => ArrayAccess(fold(f)(op1), fold(f)(op2))
+    case Cast(t, e) => Cast(t, fold(f)(e))
+    case If(e, s1, s2) => If(fold(f)(e), fold(f)(s1), fold(f)(s2))
+    case While(e, s) => While(fold(f)(e), fold(f)(s))
+    case DoWhile(s, e) => DoWhile(fold(f)(s), fold(f)(e))
+    case Return(e) => Return(fold(f)(e))
+    case t => t
+  })
+
+  private def removeThis(body: List[Tree]): List[Tree] = {
     symtab.locals.remove(Id("this"))
     body match {
       case Eval(Assign(Id("this"), _))::ts => removeThis(ts)
@@ -221,36 +256,7 @@ object JVM2CL {
     }
   }
 
-  def not(t: Tree) = t match {
-    case Bin(op1, "<", op2) => Bin(op1, ">=", op2)
-    case Bin(op1, ">", op2) => Bin(op1, "<=", op2)
-    case Bin(op1, "<=", op2) => Bin(op1, ">", op2)
-    case Bin(op1, ">=", op2) => Bin(op1, "<", op2)
-    case Bin(op1, "==", op2) => Bin(op1, "!=", op2)
-    case Bin(op1, "!=", op2) => Bin(op1, "==", op2)
-    case Un("!", op) => op
-    case e => Un("!", e)
-  }
-
-  /*
-  object IfThenElse {
-    def unapply(ts: List[Tree]) = {
-      ts match {
-        case Nil => None
-        case If(cond, GoTo(l0), Nop)::ts => {
-          val (before,label,after) = ts.
-                If(cond, 
-
-  def prettify(body: List[Tree]): List[Tree] = body match {
-    case If(cond, GoTo(l0), Nop)::t1::GoTo(l1)::Label(l0_)::t2::Label(l1_)::ts if l0 == l0_ && l1 == l1_ => prettify(If(not(cond), t1, Seq(Label(l0)::t2::Nil))::Label(l1)::ts)
-    case t::ts => t::prettify(ts)
-    case Nil => Nil
-  }
-*/
-
-  def prettify(body: List[Tree]): List[Tree] = body
-
-  class SymbolTable {
+  private class SymbolTable(val self: AnyRef) {
     val labels = new HashMap[SootUnit, String]()
     val params = new HashMap[Int, (Id, Type)]()
     val locals = new HashMap[Id, Type]()
@@ -278,9 +284,9 @@ object JVM2CL {
     }
   }
 
-  var symtab: SymbolTable = null
+  private var symtab: SymbolTable = null
 
-  def translateLabel(u: SootUnit): String = u match {
+  private def translateLabel(u: SootUnit): String = u match {
     case target : Stmt => {
       symtab.labels.get(target) match {
         case Some(label) => label
@@ -294,36 +300,37 @@ object JVM2CL {
     case _ => "Label"
   }
 
-
-  def translateType(t: Type): Tree = t match {
-    case t : SootVoidType => ValueType("void")
-    case t : SootBooleanType => ValueType("int")
-    case t : SootByteType => ValueType("char")
-    case t : SootShortType => ValueType("short")
-    case t : SootCharType => ValueType("ushort")
-    case t : SootIntType => ValueType("int")
-    case t : SootLongType => ValueType("long")
-    case t : SootFloatType => ValueType("float")
-    case t : SootDoubleType => ValueType("double")
-    case t : SootRefType => PtrType(ValueType(mangleName(t.toString)))
-    // TODO: array types
-    case _ => ValueType(t.toString)
+  private def translateType(t: Type): Tree = t match {
+      case t : SootVoidType => ValueType("void")
+      case t : SootBooleanType => ValueType("int")
+      case t : SootByteType => ValueType("char")
+      case t : SootShortType => ValueType("short")
+      case t : SootCharType => ValueType("ushort")
+      case t : SootIntType => ValueType("int")
+      case t : SootLongType => ValueType("long")
+      case t : SootFloatType => ValueType("float")
+      case t : SootDoubleType => ValueType("double")
+      case t : SootRefType => PtrType(ValueType(mangleName(t.toString)))
+      case t : SootArrayType => PtrType(translateType(t.getArrayElementType))
+      case t : SootNullType => PtrType(ValueType("void"))
+      // TODO: array types
+      case _ => ValueType(t.toString)
   }
 
   object MathCall {
-    def unapply(v: Value): Option[(String,List[Value])] = {
-      v match {
-      // scala.Math.sin(x)  [deprecated]
-      case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.MathCommon"), name, _, _, _), args) => Some((name, args))
-      case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.Math$"), name, _, _, _), args) => Some((name, args))
-      // scala.math.package$.sin(x)
-      case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.MathCommon"), name, _, _, _), args) => Some((name, args))
-      case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.math.package$"), name, _, _, _), args) => Some((name, args))
-      // java.lang.Math.sin(x)
-      case GStaticInvoke(SMethodRef(SClassName("java.lang.Math"), name, _, _, _), args) => Some((name, args))
-      case _ => None
-    }
-    }
+      def unapply(v: Value): Option[(String,List[Value])] = {
+        v match {
+        // scala.Math.sin(x)  [deprecated]
+        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.MathCommon"), name, _, _, _), args) => Some((name, args))
+        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.Math$"), name, _, _, _), args) => Some((name, args))
+        // scala.math.package$.sin(x)
+        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.MathCommon"), name, _, _, _), args) => Some((name, args))
+        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.math.package$"), name, _, _, _), args) => Some((name, args))
+        // java.lang.Math.sin(x)
+        case GStaticInvoke(SMethodRef(SClassName("java.lang.Math"), name, _, _, _), args) => Some((name, args))
+        case _ => None
+      }
+      }
   }
 
   object FloatMathCall {
@@ -425,66 +432,6 @@ object JVM2CL {
           }
         }
 
-  
-    object IntrinsicCall {
-        def apply(returnType: Type, containerType: Type, fun: Tree, args: Tree*): IntrinsicCall = IntrinsicCall(returnType, containerType, fun, args.toList)
-    }
-    case class IntrinsicCall(returnType: Type, containerType: Type, fun: Tree, args: List[Tree]) extends Tree {
-        def toCL = "intrinsic[" + containerType + "::" + fun.toCL + ": " + returnType + "]" + args.map((t:Tree) => t.toCL).mkString("(", ", ", ")")
-    }
-
-  object CollectionCall {
-    def unapply(v: Value): Option[Tree] = {println("coll? " + v); v} match {
-      // staticinvoke <scala.runtime.BoxesRunTime: float unboxToFloat(java.lang.Object)>(obj)
-      case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), name, _, _, _), List(obj)) => {
-        val x = Some(IntrinsicCall(v.getType, k.getType, Id(name), translateExp(obj)))
-        println("returning coll " + x)
-        x
-      }
-      case v @ GInterfaceInvoke(coll, SMethodRef(k @ SClassName("scala.collection.IndexedSeqOptimized"), "zip", _, _, _), List(coll2, cbf)) => {
-        val x = Some(IntrinsicCall(v.getType, k.getType, Id("zip"), coll, coll2))
-        println("returning coll " + x)
-        x
-      }
-      case v @ GInterfaceInvoke(coll, SMethodRef(k @ SClassName("scala.collection.IndexedSeqOptimized"), name, _, _, _), args) => {
-        val x = Some(IntrinsicCall(v.getType, k.getType, Id(name), (coll::args).map(a => translateExp(a))))
-        println("returning coll " + x)
-        x
-      }
-      case v @ GInterfaceInvoke(coll, SMethodRef(k @ SClassName("scala.collection.TraversableLike"), "map", _, _, _), List(fun, cbf)) => {
-        val x = Some(IntrinsicCall(v.getType, k.getType, Id("map"), coll, fun))
-        println("returning coll " + x)
-        x
-      }
-      case v @ GInterfaceInvoke(coll, SMethodRef(k @ SClassName("scala.collection.TraversableLike"), name, _, _, _), args) => {
-        val x = Some(IntrinsicCall(v.getType, k.getType, Id(name), (coll::args).map(a => translateExp(a))))
-        println("returning coll " + x)
-        x
-      }
-      case GVirtualInvoke(coll, SMethodRef(klass, name, _, _, _), args) => {
-        println("virtual call with klass=" + klass.getName + " name=" + name + " args=" + args.toList)
-        None
-      }
-      case GInterfaceInvoke(coll, SMethodRef(klass, name, _, _, _), args) => {
-        println("interface call with klass=" + klass.getName + " name=" + name + " args=" + args.toList)
-        None
-      }
-      case GCast(e, t : SootRefType) if t.getClassName.equals("firepile.util.BufferBackedArray$BBArray") => Some(translateExp(e))
-      case _ => {
-        println("did not match " + v.getClass.getName)
-        None
-      }
-    }
-    /*
-    b = (firepile.util.BufferBackedArray$BBArray) this.<firepile.tests.TestDotProduct$$anonfun$3$$anonfun$4: firepile.tests.TestDotProduct$$anonfun$3 $outer>.<firepile.tests.TestDotProduct$$anonfun$3: firepile.util.BufferBackedArray$BBArray b1$1>.<scala.collection.IndexedSeqOptimized: java.lang.Object zip(scala.collection.Iterable,scala.collection.generic.CanBuildFrom)>(this.<firepile.tests.TestDotProduct$$anonfun$3$$anonfun$4: firepile.tests.TestDotProduct$$anonfun$3 $outer>.<firepile.tests.TestDotProduct$$anonfun$3: firepile.util.BufferBackedArray$BBArray b2$1>, <firepile.util.BufferBackedArray$: firepile.util.BufferBackedArray$ MODULE$>.<firepile.util.BufferBackedArray$: scala.collection.generic.CanBuildFrom bbarrayCBFromBBArray(firepile.util.BufferBackedArray$FixedSizeMarshal)>(<firepile.util.BufferBackedArray$: firepile.util.BufferBackedArray$ MODULE$>.<firepile.util.BufferBackedArray$: firepile.util.BufferBackedArray$T2M tuple2Marshal(firepile.util.BufferBackedArray$FixedSizeMarshal,firepile.util.BufferBackedArray$FixedSizeMarshal)>(<firepile.util.BufferBackedArray$FM$: firepile.util.BufferBackedArray$FM$ MODULE$>, <firepile.util.BufferBackedArray$FM$: firepile.util.BufferBackedArray$FM$ MODULE$>)))
-    f = new firepile.tests.TestDotProduct$$anonfun$3$$anonfun$4$$anonfun$5(this)
-    m = (firepile.util.BufferBackedArray$BBArray) b.<scala.collection.TraversableLike: java.lang.Object map(scala.Function1,scala.collection.generic.CanBuildFrom)>(f, <firepile.util.BufferBackedArray$: firepile.util.BufferBackedArray$ MODULE$>.<firepile.util.BufferBackedArray$: scala.collection.generic.CanBuildFrom bbarrayCBFromBBArray(firepile.util.BufferBackedArray$FixedSizeMarshal)>(<firepile.util.BufferBackedArray$FM$: firepile.util.BufferBackedArray$FM$ MODULE$>))
-    r = staticinvoke <scala.runtime.BoxesRunTime: float unboxToFloat(java.lang.Object)>(m.<scala.collection.IndexedSeqOptimized: java.lang.Object reduceLeft(scala.Function2)>(new firepile.tests.TestDotProduct$$anonfun$3$$anonfun$4$$anonfun$6(this)))
-    return r
-    */
-
-  }
-
   // Split library calls into separate objects.
   // This avoids an OutOfMemory error in scalac.
   object LibraryCall {
@@ -502,7 +449,6 @@ object JVM2CL {
 
         case DoubleMath(t) => t
         case FloatMath(t) => t
-        case CollectionCall(t) => t
         // case MathLibraryCall(t) => t
 
         case _ => null
@@ -543,7 +489,7 @@ object JVM2CL {
     }
   }
 
-  def translateExp(v: Value): Tree = v match {
+  private def translateExp(v: Value): Tree = v match {
     // Must be first
     case LibraryCall(t) => t
 
@@ -621,7 +567,7 @@ object JVM2CL {
     case GNewMultiArray(newTyp, sizes) => Id("unimplemented:newmultiarray")
 
     case GNewInvoke(baseTyp, method @ SMethodRef(_, "<init>", _, _, _), args) => {
-      enqueue(method)
+      worklist += CompileMethodTask(method)
 
       def isFunctionClass(k: SootClass): Boolean = {
         if (k.getName.equals("scala.runtime.AbstractFunction1"))
@@ -642,20 +588,20 @@ object JVM2CL {
       }
 
       if (isFunction(baseTyp))
-        IntrinsicCall(baseTyp, baseTyp, Id("makeClosure"), args.map(a => translateExp(a)))
+        Call(Id("makeClosure"), args.map(a => translateExp(a)))
       else
-        Call(Id("_init_"), IntrinsicCall(baseTyp, baseTyp, Id("new"), args.map(a => translateExp(a))))
+        Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a))))
     }
     case GStaticInvoke(method, args) => {
-      enqueue(method)
+      worklist += CompileMethodTask(method)
       Call(Id(method.name), args.map(a => translateExp(a)))
     }
     case GSpecialInvoke(base, method, args) => {
-      enqueue(method)
+      worklist += CompileMethodTask(method, findSelf(base, symtab.self))
       Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
     case GVirtualInvoke(base, method, args) => {
-      enqueue(method)
+      worklist += CompileMethodTask(method, findSelf(base, symtab.self))
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
       // Then generate a call to a dispatch method:
       // e.g.,
@@ -686,7 +632,7 @@ object JVM2CL {
       Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
     case GInterfaceInvoke(base, method, args) => {
-      enqueue(method)
+      worklist += CompileMethodTask(method, findSelf(base, symtab.self))
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
       Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
@@ -699,10 +645,10 @@ object JVM2CL {
     case GInstanceFieldRef(base, fieldRef) => Select(base, fieldRef.name)
     case GArrayRef(base, index) => ArrayAccess(base, index)
 
-    case v => { println("huh " + v); Id("unsupported") }
+    case v => Id("unsupported:" + v.getClass.getName)
   }
 
-  def translateUnits(units: List[SootUnit], result: List[Tree]): List[Tree] = units match {
+  private def translateUnits(units: List[SootUnit], result: List[Tree]): List[Tree] = units match {
     case u::us => {
       val tree: Tree = u match {
         case GIdentity(left, right) => Eval(Assign(left, right))
@@ -731,7 +677,7 @@ object JVM2CL {
     case Nil => result
   }
 
-  def insertLabels(units: List[SootUnit], result: List[Tree], resultWithLabels: List[Tree]) : List[Tree] = units match {
+  private def insertLabels(units: List[SootUnit], result: List[Tree], resultWithLabels: List[Tree]) : List[Tree] = units match {
     case u::us => {
       symtab.labels.get(u) match {
         case Some(label) => insertLabels(us, result.tail, resultWithLabels ::: Label(label) :: result.head :: Nil)
@@ -741,7 +687,7 @@ object JVM2CL {
    case Nil => resultWithLabels
   }
 
-  def makeFunction(m: SootMethod, result: List[Tree]) : Tree = {
+  private def makeFunction(m: SootMethod, result: List[Tree]) : Tree = {
     val paramTree = new ListBuffer[Tree]()
     val varTree = new ListBuffer[Tree]()
 

@@ -18,10 +18,10 @@ object Wrappers {
 
   class BBSpawner2[A1: FixedSizeMarshal,A2: FixedSizeMarshal](a1:BBArray[A1],a2:BBArray[A2]) {
     def lazyzip[A3: FixedSizeMarshal](a3:BBArray[A3]) = new BBSpawner3(a1,a2,a3)
-    def zipMap[B](k: BBArrayMapKernel2[A1,A2,B])(implicit dev: Device, fsm: FixedSizeMarshal[B]) = dev.spawn { k(a1,a2) }
+    def zipWithKernel[B](k: BBArrayMapKernel2[A1,A2,B])(implicit dev: Device, fsm: FixedSizeMarshal[B]) = dev.spawn { k(a1,a2) }
 
   }
   class BBSpawner3[A1: FixedSizeMarshal,A2: FixedSizeMarshal,A3: FixedSizeMarshal](a1:BBArray[A1],a2:BBArray[A2],a3:BBArray[A3]) {
-    def zipMap[B](k: BBArrayMapKernel3[A1,A2,A3,B])(implicit dev: Device, fsm: FixedSizeMarshal[B]) = dev.spawn { k(a1,a2,a3) }
+    def zipWithKernel[B](k: BBArrayMapKernel3[A1,A2,A3,B])(implicit dev: Device, fsm: FixedSizeMarshal[B]) = dev.spawn { k(a1,a2,a3) }
   }
 }

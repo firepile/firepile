@@ -17,14 +17,13 @@ import com.nativelibs4java.opencl._
 import java.util.EnumSet
 
 import Firepile.Effect
-import Firepile.Dist
 import Firepile.Effect1
-import Firepile.Dist1
-import Firepile.Kernel1
 import Firepile.Effect2
+import Firepile.Dist
+import Firepile.Dist1
 import Firepile.Dist2
+import Firepile.Kernel1
 import Firepile.Kernel2
-import Firepile.InstantiatedKernel
 import Mems._
 
   object Device {
