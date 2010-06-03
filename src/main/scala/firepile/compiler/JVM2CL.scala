@@ -54,22 +54,22 @@ import scala.collection.mutable.HashMap
 object JVM2CL {
   def main(args: Array[String]) = {
     if (args.length != 2) {
-      println("usage: sooty.Main className methodName")
+      println("usage: sooty.Main className methodSig")
       exit(1)
     }
 
     val className = args(0)
-    val methodName = args(1)
+    val methodSig = args(1)
 
-    compileRoot(className, methodName)
+    compileRoot(className, methodSig)
   }
 
   setup
 
-  def compileRoot(className: String, methodName: String, self: AnyRef = null): List[Tree] = {
-    println("compiling " + className + "." + methodName)
+  def compileRoot(className: String, methodSig: String, self: AnyRef = null): List[Tree] = {
+    println("compiling " + className + "." + methodSig)
     try {
-      addRootMethodToWorklist(className, methodName, self)
+      addRootMethodToWorklist(className, methodSig, self)
       if (makeCallGraph) {
         buildCallGraph
         optimizeCallGraph
@@ -142,7 +142,7 @@ object JVM2CL {
 
   private val makeCallGraph = false
 
-  private def addRootMethodToWorklist(className: String, methodName: String, self: AnyRef): Unit = {
+  private def addRootMethodToWorklist(className: String, methodSig: String, self: AnyRef): Unit = {
     // Set up the class we're working with
     val c = Scene.v.loadClassAndSupport(className)
     if (makeCallGraph) {
@@ -156,7 +156,7 @@ object JVM2CL {
       val m = i.next
 
       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-      if (sig.equals(methodName)) {
+      if (sig.equals(methodSig)) {
         worklist += CompileMethodTask(m, self)
       }
     }
