@@ -20,6 +20,7 @@ import soot.Local
 import soot.SootClass
 import soot.SootMethod
 import soot.SootMethodRef
+import soot.Modifier
 import soot.toolkits.graph.ExceptionalUnitGraph
 import soot.toolkits.graph.UnitGraph
 import soot.jimple.JimpleBody
@@ -628,8 +629,12 @@ object JVM2CL {
       // subclasses of A override m
       
       // rewrite to:
-      // Call(mangle(method.getDeclaringClass, method.name), (base::args).map(a => translateExp(a)))
-      Call(Select(base, method.name), args.map(a => translateExp(a)))
+
+      if( Modifier.isFinal(method.declaringClass.getModifiers) || Modifier.isFinal(method.resolve.getModifiers))
+        Call(Id(mangleName(method.declaringClass + method.name)), args.map(a => translateExp(a)))
+      else
+        Call(Id("unimplemented: call to " + mangleName(method.declaringClass + method.name)), Seq())
+      //Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
     case GInterfaceInvoke(base, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
@@ -709,6 +714,6 @@ object JVM2CL {
     for((id: Id, typ: Type) <- symtab.locals)
       varTree += VarDef(translateType(typ), id)
 
-    FunDef(translateType(m.getReturnType), Id(mangleName(m.getName)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
+    FunDef(translateType(m.getReturnType), Id(mangleName(m.getDeclaringClass + m.getName)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
   }
 }
