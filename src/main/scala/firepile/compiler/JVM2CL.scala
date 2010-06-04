@@ -261,6 +261,7 @@ object JVM2CL {
     val labels = new HashMap[SootUnit, String]()
     val params = new HashMap[Int, (Id, Type)]()
     val locals = new HashMap[Id, Type]()
+    val arrays = new HashMap[Id, (Type, Tree)]()
     var thisParam: (Id, Type) = null
 
     def addThisParam(typ: Type, id: Id) = {
@@ -275,6 +276,11 @@ object JVM2CL {
       assert(!params.contains(id))
       // assert(!locals.contains(id))
       locals += id -> typ
+    }
+
+    def addArrayDef(typ: Type, id: Id, size: Tree) = {
+      assert(!locals.contains(id))
+      arrays += id -> (typ, size)
     }
 
     var next = -1
@@ -551,7 +557,7 @@ object JVM2CL {
 
     case GNeg(op) => Un("-", op)
 
-    // TODO
+    // TODO - What do we do with this?  Does it need a representation in the C AST?
     case GArrayLength(op) => Id("unimplemented:arraylength")
 
     case GCast(op, castTyp) => Cast(translateType(castTyp), op)
@@ -657,6 +663,7 @@ object JVM2CL {
     case u::us => {
       val tree: Tree = u match {
         case GIdentity(left, right) => Eval(Assign(left, right))
+        case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => { symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size)); Seq() }
         case GAssignStmt(left, right) => Eval(Assign(left, right))
         case GGoto(target) => GoTo(translateLabel(target))
         case GNop() => Nop
@@ -711,8 +718,11 @@ object JVM2CL {
       }
     }
 
-    for((id: Id, typ: Type) <- symtab.locals)
+    for((id: Id, typ: Type) <- symtab.locals) 
       varTree += VarDef(translateType(typ), id)
+
+    for(((id: Id), (typ: Type, size: IntLit)) <- symtab.arrays)
+        varTree += ArrayDef(id, translateType(typ), size)
 
     FunDef(translateType(m.getReturnType), Id(mangleName(m.getDeclaringClass + m.getName)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
   }
