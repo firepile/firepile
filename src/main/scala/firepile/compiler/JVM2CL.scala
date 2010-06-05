@@ -674,8 +674,11 @@ object JVM2CL {
 
         // TODO
         case GTableSwitchStmt(key, lowIndex, highIndex, targets, defaultTarget) => Id("switch unsupported")
-        case GLookupSwitchStmt(key, lookupVals, targets, defaultTarget) => Id("switch unsupported")
-
+        case GLookupSwitchStmt(key: Local, lookupVals: List[Value], targets: List[Stmt], defaultTarget) => {
+          val valsWithTargets: List[(Value, Stmt)] = lookupVals.zip(targets)
+          Switch(Id(key.getName), valsWithTargets.map(vt => Case(translateExp(vt._1), Seq(translateUnits(List(vt._2), Nil)))) ::: List(Default(Seq(translateUnits(List(defaultTarget), Nil)))))
+          //Id("switch unsupported")
+        }
         // IGNORE
         case GThrow(op) => Id("throw unsupported")
         case GExitMonitor(op) => Id("monitors unsupported")

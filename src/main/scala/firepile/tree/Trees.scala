@@ -181,10 +181,13 @@ object Trees {
     }
     case class Switch(index: Tree, cases: List[Tree]) extends Tree {
         def toCL = "switch (" + index.toCL + ") {\n" +
-            cases.map((t:Tree) => indent(stmt(t))).mkString(indent("break;\n")) + "}"
+            cases.map((t:Tree) => indent(stmt(t))).mkString(indent("break;\n")) + "}\n"
     }
     case class Case(index: Tree, body: Tree) extends Tree {
         def toCL = "case " + index.toCL + ": {\n" + indent(stmt(body)) + "}\n"
+    }
+    case class Default(body: Tree) extends Tree {
+        def toCL = "default: {\n" + indent(stmt(body)) + "}\n"
     }
     case class Block(decls: List[Tree], body: Tree) extends Tree {
       def toCL = "{\n" + decls.map((t:Tree) => indent(stmt(t))).mkString("") +
