@@ -30,6 +30,13 @@ object BufferBackedArray {
     def manifest: ClassManifest[A]
   }
 
+  /*
+  trait AggregateMarshal[A, CC[A]] extends Marshal[CC[A]] {
+    def itemMarshal: FixedSizeMarshal[A] = implicitly
+    type ItemType = A
+  }
+*/
+
   trait Marshal[A] {
     def size(a: A): Int
     def align: Int

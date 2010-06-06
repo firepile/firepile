@@ -4,13 +4,7 @@ trait Future[B] {
   private var result: Option[B] = None
   private var started: Boolean = false
 
-  final def start: Future[B] = {
-    if (! started) {
-      started = true
-      run
-    }
-    this
-  }
+  final lazy val start: Future[B] = { run; this }
 
   // Override to start the computation; nonblocking
   protected def run: Unit

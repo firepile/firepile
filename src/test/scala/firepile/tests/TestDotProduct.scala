@@ -16,11 +16,19 @@ object TestDotProduct {
 
     println("cl bbarray dot product");
     {
+      /*
+      // Ideal code
+      spawn {
+        (b1, b2).zipWith(_*_).reduce(_+_)
+      }
+      */
+
       val c: Float = time {
         // val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y).reduceKernel(_+_)
         // result.force
-        val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y).start
-        result.force.reduceLeft(_+_)
+        import firepile.Compose._
+        val result = spawn { (b1,b2).mapk(f2Mapper2((x:Float,y:Float)=>x*y)).reduce(f2Reducer((x:Float,y:Float)=>x+y)) }
+        result.force
       }
       println("c = " + c)
       val correct = (b1 zip b2).map((p: (Float,Float)) => p._1 * p._2).reduceLeft(_+_)

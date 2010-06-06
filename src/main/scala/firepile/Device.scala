@@ -48,20 +48,21 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     val transA = implicitly[Marshal[A]];
     val transB = implicitly[Marshal[B]];
     val kernel: (Dist,Effect) => BufKernel = compileString(name, src)
+
     new Kernel1[A,B] {
       def apply(input: A) = new Future[B] {
-        var f: Future[ByteBuffer] = null
-
-        def run = {
+        lazy val future: Future[ByteBuffer] = {
           val bufIn: ByteBuffer = transA.put(input)
           val d: Dist = dist(input)
           val e: Effect = effect(input)
           val k = kernel(d, e)
-          f = k(bufIn).start
+          k(bufIn)
         }
 
+        def run: Unit = future.start
+
         def finish = {
-          val bufOut: ByteBuffer = f.force
+          val bufOut: ByteBuffer = future.force
           val result: B = transB.get(bufOut)
           result
         }
@@ -76,19 +77,19 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     val kernel: (Dist,Effect) => BufKernel = compileString(name, src)
     new Kernel2[A1,A2,B] {
       def apply(a1: A1, a2: A2) = new Future[B] {
-        var f: Future[ByteBuffer] = null
-
-        def run = {
+        lazy val future: Future[ByteBuffer] = {
           val bufIn1: ByteBuffer = transA1.put(a1)
           val bufIn2: ByteBuffer = transA2.put(a2)
           val d: Dist = dist(a1, a2)
           val e: Effect = effect(a1, a2)
           val k = kernel(d, e)
-          f = k(bufIn1, bufIn2).start
+          k(bufIn1, bufIn2)
         }
 
+        def run: Unit = future.start
+
         def finish: B = {
-          val bufOut: ByteBuffer = f.force
+          val bufOut: ByteBuffer = future.force
           val result: B = transB.get(bufOut)
           result
         }

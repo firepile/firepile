@@ -119,7 +119,7 @@ package object firepile {
       throw new RuntimeException("Compiler not implemented")
 
     new Future[B] {
-      def run = {
+      lazy val future: Future[ByteBuffer] = {
         val code: CLKernel = kernel.code
         val dist: Dist = kernel.dist
         val effect: Effect = kernel.effect
@@ -127,10 +127,10 @@ package object firepile {
 
         val k = new InstantiatedBufKernel(dev, code, dist, effect, buffers:_*)
 
-        future = k.start
+        k.start
       }
 
-      var future: Future[ByteBuffer] = null
+      def run: Unit = future
 
       def finish: B = {
         val out = future.force
@@ -211,26 +211,30 @@ package object firepile {
     override def toString = "Dist {n=" + totalNumberOfItems + "/" + numberOfItemsPerGroup + "}"
   }
 
+  trait HasLength[A] {
+    def length(a: A): Int
+  }
+
   type Dist1[A] = Function1[A,Dist]
   type Dist2[A1,A2] = Function2[A1,A2,Dist]
   type Dist3[A1,A2,A3] = Function3[A1,A2,A3,Dist]
 
-  class SimpleArrayDist1[T <: { def length: Int }] extends Dist1[T] {
+  class SimpleArrayDist1[T: HasLength] extends Dist1[T] {
     def apply(a: T) = new Dist {
-      val totalNumberOfItems = a.length
+      val totalNumberOfItems = implicitly[HasLength[T]].length(a)
     }
   }
 
-  class SimpleArrayDist2[T <: { def length: Int }, U <: { def length: Int }] extends Dist2[T,U] {
+  class SimpleArrayDist2[T: HasLength, U: HasLength] extends Dist2[T,U] {
     def apply(a1: T, a2: U) = new Dist {
-      val totalNumberOfItems = a1.length max a2.length
+      val totalNumberOfItems = implicitly[HasLength[T]].length(a1) max implicitly[HasLength[U]].length(a2)
     }
   }
 
-  class BlockArrayDist1[T <: { def length: Int }](n: Int = 32) extends Dist1[T] {
+  class BlockArrayDist1[T: HasLength](n: Int = 32) extends Dist1[T] {
     def apply(a: T) = new Dist {
       // Round up to next block size
-      val totalNumberOfItems = (a.length + n - 1) / n * n
+      val totalNumberOfItems = (implicitly[HasLength[T]].length(a) + n - 1) / n * n
       override val numberOfItemsPerGroup = n
     }
   }
@@ -246,28 +250,28 @@ package object firepile {
   type Effect2[A1,A2] = Function2[A1,A2,Effect]
   type Effect3[A1,A2,A3] = Function3[A1,A2,A3,Effect]
 
-  class SimpleGlobalArrayEffect1[B:FixedSizeMarshal, T <: { def length: Int }] extends Effect1[T] {
+  class SimpleGlobalArrayEffect1[B:FixedSizeMarshal, T: HasLength] extends Effect1[T] {
     def apply(a: T) = new Effect {
-      val outputSize = a.length * fixedSizeMarshal[B].size
+      val outputSize = implicitly[HasLength[T]].length(a) * fixedSizeMarshal[B].size
     }
   }
 
-  class SimpleGlobalArrayEffect2[B:FixedSizeMarshal, T <: { def length: Int }, U <: { def length: Int }] extends Effect2[T,U] {
+  class SimpleGlobalArrayEffect2[B:FixedSizeMarshal, T: HasLength, U: HasLength] extends Effect2[T,U] {
     def apply(a1: T, a2: U) = new Effect {
-      val outputSize = (a1.length max a2.length) * fixedSizeMarshal[B].size
+      val outputSize = (implicitly[HasLength[T]].length(a1) max implicitly[HasLength[U]].length(a2)) * fixedSizeMarshal[B].size
     }
   }
 
-  class SimpleLocalArrayEffect1[A:FixedSizeMarshal, T <: { def length: Int }](localSizes: Int*) extends Effect1[T] {
+  class SimpleLocalArrayEffect1[A:FixedSizeMarshal, T: HasLength](localSizes: Int*) extends Effect1[T] {
     def apply(a: T) = new Effect {
-      val outputSize = a.length * fixedSizeMarshal[A].size
+      val outputSize = implicitly[HasLength[T]].length(a) * fixedSizeMarshal[A].size
       override val localBufferSizes = localSizes.toList
     }
   }
 
-  class SimpleLocalArrayWithOutputEffect1[B:FixedSizeMarshal, T <: { def length: Int }](numThreads: Int, localSizes:Int*) extends Effect1[T] {
+  class SimpleLocalArrayWithOutputEffect1[B:FixedSizeMarshal, T: HasLength](numThreads: Int, localSizes:Int*) extends Effect1[T] {
     def apply(a: T) = new Effect {
-      val outputSize = ((a.length + numThreads - 1) / numThreads) * fixedSizeMarshal[B].size
+      val outputSize = ((implicitly[HasLength[T]].length(a) + numThreads - 1) / numThreads) * fixedSizeMarshal[B].size
       override val localBufferSizes = localSizes.toList
     }
   }

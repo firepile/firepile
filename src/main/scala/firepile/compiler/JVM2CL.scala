@@ -103,6 +103,9 @@ object JVM2CL {
     // Options.v.set_whole_program(true)
   }
 
+  def methodName(m: SootMethod): String = mangleName(m.getDeclaringClass.getName + m.getName)
+  def methodName(m: java.lang.reflect.Method): String = mangleName(m.getDeclaringClass.getName + m.getName)
+  def methodName(m: SootMethodRef): String = mangleName(m.declaringClass.getName + m.name)
   def mangleName(name: String) = name.replace('$', '_').replace('.', '_')
 
   private implicit def v2tree(v: Value): Tree = translateExp(v)
@@ -638,9 +641,9 @@ object JVM2CL {
       // rewrite to:
 
       if( Modifier.isFinal(method.declaringClass.getModifiers) || Modifier.isFinal(method.resolve.getModifiers))
-        Call(Id(mangleName(method.declaringClass + method.name)), args.map(a => translateExp(a)))
+        Call(Id(methodName(method)), args.map(a => translateExp(a)))
       else
-        Call(Id("unimplemented: call to " + mangleName(method.declaringClass + method.name)), Seq())
+        Call(Id("unimplemented: call to " + methodName(method)), Seq())
       //Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
     case GInterfaceInvoke(base, method, args) => {
@@ -726,8 +729,8 @@ object JVM2CL {
       varTree += VarDef(translateType(typ), id)
 
     for(((id: Id), (typ: Type, size: IntLit)) <- symtab.arrays)
-        varTree += ArrayDef(id, translateType(typ), size)
+      varTree += ArrayDef(id, translateType(typ), size)
 
-    FunDef(translateType(m.getReturnType), Id(mangleName(m.getDeclaringClass + m.getName)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
+    FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
   }
 }
