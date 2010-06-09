@@ -51,20 +51,55 @@ object Compiler {
     "#define id2_localThread  { get_local_id(0), get_local_id(1) }                                 \n" +
     "#define id3_localThread  { get_local_id(0), get_local_id(1), get_local_id(2) }                \n" +
     "                                                                                              \n" +
-    "#define arraylength(a)   a ## _len                                                            \n" +
+    "#define ARRAY_TYPE(Q,T) T ## Q ## _array;                                                     \n" +
+    "#define ARRAY_DECL(Q,T) typedef struct { const int len; __ ## Q T *data; } ARRAY_TYPE(Q,T);   \n" +
+    "                                                                                              \n" +
+    "ARRAY_DECL(constant, char)                                                                    \n" +
+    "ARRAY_DECL(constant, short)                                                                   \n" +
+    "ARRAY_DECL(constant, ushort)                                                                  \n" +
+    "ARRAY_DECL(constant, int)                                                                     \n" +
+    "ARRAY_DECL(constant, long)                                                                    \n" +
+    "ARRAY_DECL(constant, float)                                                                   \n" +
+    "ARRAY_DECL(constant, double)                                                                  \n" +
+    "                                                                                              \n" +
+    "ARRAY_DECL(global, char)                                                                      \n" +
+    "ARRAY_DECL(global, short)                                                                     \n" +
+    "ARRAY_DECL(global, ushort)                                                                    \n" +
+    "ARRAY_DECL(global, int)                                                                       \n" +
+    "ARRAY_DECL(global, long)                                                                      \n" +
+    "ARRAY_DECL(global, float)                                                                     \n" +
+    "ARRAY_DECL(global, double)                                                                    \n" +
+    "                                                                                              \n" +
+    "ARRAY_DECL(local,  char)                                                                      \n" +
+    "ARRAY_DECL(local,  short)                                                                     \n" +
+    "ARRAY_DECL(local,  ushort)                                                                    \n" +
+    "ARRAY_DECL(local,  int)                                                                       \n" +
+    "ARRAY_DECL(local,  long)                                                                      \n" +
+    "ARRAY_DECL(local,  float)                                                                     \n" +
+    "ARRAY_DECL(local,  double)                                                                    \n" +
+    "                                                                                              \n" +
+    "ARRAY_DECL(private, char)                                                                     \n" +
+    "ARRAY_DECL(private, short)                                                                    \n" +
+    "ARRAY_DECL(private, ushort)                                                                   \n" +
+    "ARRAY_DECL(private, int)                                                                      \n" +
+    "ARRAY_DECL(private, long)                                                                     \n" +
+    "ARRAY_DECL(private, float)                                                                    \n" +
+    "ARRAY_DECL(private, double)                                                                   \n" +
+    "                                                                                              \n" +
     "\n")
 
   def generateMapKernel1(tree: Tree, kernelName: String): String = tree match {
     case FunDef(returnType, name, List(Formal(formal, _)), _) => ("\n" +
       "inline " + tree.toCL + "\n" +
       "__kernel void " + kernelName + "(                                                           \n" +
-      "   __constant " + formal.toCL + "* a,                                                       \n" +
-      "   const int a_len,                                                                         \n" +
-      "   __global " + returnType.toCL + "* output,                                                \n" +
-      "   const int output_len)                                                                    \n" +
+      "  __constant " + formal.toCL + "* a,                                                        \n" +
+      "  const int a_len,                                                                          \n" +
+      "  __global " + returnType.toCL + "* output,                                                 \n" +
+      "  const int output_len)                                                                     \n" +
       "{                                                                                           \n" +
-      "   int i = get_global_id(0);                                                                \n" +
-      "   output[i] = " + name + "(a[i]);                                                          \n" +
+      "  int i = get_global_id(0);                                                                 \n" +
+      "  // if (i < a_len) /* should not happen by construction -- # work items == array length    \n" +
+      "    output[i] = " + name + "(a[i]);                                                         \n" +
       "}                                                                                           \n")
     case _ => throw new RuntimeException("unexpected C AST " + tree.toCL)
   }
@@ -362,6 +397,7 @@ object Compose {
     case (FunDef(mreturnType, mname, List(Formal(mformal1, _)), _),
           FunDef(rreturnType, rname, List(Formal(rformal1, _), Formal(rformal2, _)), _))
           if mreturnType.equals(rreturnType) && mreturnType.equals(rformal1) && mreturnType.equals(rformal2) => ("\n" +
+      "#define BLOCKSIZE 32                                                                        \n" +
       "__kernel void " + kernelName + "(                                                           \n" +
       "   __constant " + mformal1.toCL + "* a,                                                     \n" +
       "   const int a_len,                                                                         \n" +
@@ -374,15 +410,27 @@ object Compose {
       "   int lid = get_local_id(0);                                                               \n" +
       "   tmp[lid] = " + mname + "(a[i]);                                                          \n" +
       "   barrier(CLK_LOCAL_MEM_FENCE);                                                            \n" +
-      "   // Do the reduction.  This is O(n)--we could make it O(log n) with some effort.          \n" +
+      "                                                                                            \n" +
+      "   int n = get_local_size(0);                                                               \n" +
+      "   int s = n/2;                                                                             \n" +
+      "   while (s >= BLOCKSIZE) {                                                                 \n" +
+      "     tmp[lid] = " + rname + "(tmp[lid], tmp[lid+s]);                                        \n" +
+      "     barrier(CLK_LOCAL_MEM_FENCE);                                                          \n" +
+      "     s /= 2;                                                                                \n" +
+      "   }                                                                                        \n" +
+      "                                                                                            \n" +
+      "   // Unroll the last loop and don't use barriers since                                     \n" +
+      "   // all accesses are within a block.                                                      \n" +
+      "   if (BLOCKSIZE >= 64) tmp[lid] = tmp[lid+32];                                             \n" +
+      "   if (BLOCKSIZE >= 32) tmp[lid] = tmp[lid+16];                                             \n" +
+      "   if (BLOCKSIZE >= 16) tmp[lid] = tmp[lid+8];                                              \n" +
+      "   if (BLOCKSIZE >=  8) tmp[lid] = tmp[lid+4];                                              \n" +
+      "   if (BLOCKSIZE >=  4) tmp[lid] = tmp[lid+2];                                              \n" +
+      "   if (BLOCKSIZE >=  2) tmp[lid] = tmp[lid+1];                                              \n" +
+      "                                                                                            \n" +
       "   if (lid == 0) {                                                                          \n" +
-      "     int n = get_local_size(0);                                                             \n" +
       "     int bid = get_group_id(0);                                                             \n" +
-      "     " + rreturnType.toCL + " t = tmp[lid];                                                 \n" +
-      "     for (int j = lid+1; j < lid+n; j++) {                                                  \n" +
-      "       t = " + rname + "(t, tmp[j]);                                                        \n" +
-      "     }                                                                                      \n" +
-      "     output[bid] = t;                                                                       \n" +
+      "     output[bid] = tmp[0];                                                                  \n" +
       "   }                                                                                        \n" +
       "}                                                                                           \n")
     case _ => throw new RuntimeException("unexpected C AST " + map.toCL + " or " + reduce.toCL)
