@@ -181,7 +181,7 @@ object Trees {
     }
     case class Switch(index: Tree, cases: List[Tree]) extends Tree {
         def toCL = "switch (" + index.toCL + ") {\n" +
-            cases.map((t:Tree) => indent(stmt(t))).mkString(indent("break;\n")) + "}\n"
+            cases.map((t:Tree) => indent(stmt(t))).mkString("") + "}\n"
     }
     case class Case(index: Tree, body: Tree) extends Tree {
         def toCL = "case " + index.toCL + ": {\n" + indent(stmt(body)) + "}\n"
@@ -274,6 +274,28 @@ object Trees {
     }
 
 
+  def forallTree(f: Tree => Unit) = fold((t:Tree) => {f(t); t}) _
+
+  def fold(f: Tree => Tree)(t: Tree): Tree = f(t match {
+    case Call(fun, args) => Call(fold(f)(fun), args.map(a => fold(f)(a)))
+    case Switch(e, cases) => Switch(fold(f)(e), cases.map(a => fold(f)(a)))
+    case Case(e, s) => Case(fold(f)(e), fold(f)(s))
+    case Bin(op1, op, op2) => Bin(fold(f)(op1), op, fold(f)(op2))
+    case Un(op, op2) => Un(op, fold(f)(op2))
+    case Eval(e) => Eval(fold(f)(e))
+    case Assign(op1, op2) => Assign(fold(f)(op1), fold(f)(op2))
+    case Select(op1, name) => Select(fold(f)(op1), name)
+    case Ref(op1) => Ref(fold(f)(op1))
+    case Deref(op1) => Deref(fold(f)(op1))
+    case ArrayAccess(op1, op2) => ArrayAccess(fold(f)(op1), fold(f)(op2))
+    case Cast(t, e) => Cast(t, fold(f)(e))
+    case If(e, s1, s2) => If(fold(f)(e), fold(f)(s1), fold(f)(s2))
+    case While(e, s) => While(fold(f)(e), fold(f)(s))
+    case DoWhile(s, e) => DoWhile(fold(f)(s), fold(f)(e))
+    case Return(e) => Return(fold(f)(e))
+    case t => t
+  })
+
     val IntType = ValueType("int")
     val FloatType = ValueType("float")
     val LongType = ValueType("long")
@@ -304,7 +326,6 @@ object Trees {
         def :=(t2: Tree) = Assign(t1, t2)
         def then(t2: Tree) = Seq(t1, t2)
     }
-
 
     def indent(s: String) = {
         var t = ""
