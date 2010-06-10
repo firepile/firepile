@@ -233,24 +233,6 @@ object JVM2CL {
     fun
   }
 
-  private def fold(f: Tree => Tree)(t: Tree): Tree = f(t match {
-    case Call(fun, args) => Call(fold(f)(fun), args.map(a => fold(f)(a)))
-    case Bin(op1, op, op2) => Bin(fold(f)(op1), op, fold(f)(op2))
-    case Un(op, op2) => Un(op, fold(f)(op2))
-    case Eval(e) => Eval(fold(f)(e))
-    case Assign(op1, op2) => Assign(fold(f)(op1), fold(f)(op2))
-    case Select(op1, name) => Select(fold(f)(op1), name)
-    case Ref(op1) => Ref(fold(f)(op1))
-    case Deref(op1) => Deref(fold(f)(op1))
-    case ArrayAccess(op1, op2) => ArrayAccess(fold(f)(op1), fold(f)(op2))
-    case Cast(t, e) => Cast(t, fold(f)(e))
-    case If(e, s1, s2) => If(fold(f)(e), fold(f)(s1), fold(f)(s2))
-    case While(e, s) => While(fold(f)(e), fold(f)(s))
-    case DoWhile(s, e) => DoWhile(fold(f)(s), fold(f)(e))
-    case Return(e) => Return(fold(f)(e))
-    case t => t
-  })
-
   private def removeThis(body: List[Tree]): List[Tree] = {
     symtab.locals.remove(Id("this"))
     body match {
