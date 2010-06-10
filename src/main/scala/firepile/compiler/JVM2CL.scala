@@ -10,7 +10,6 @@ import soot.jimple.toolkits.invoke.StaticInliner
 import soot.jimple.toolkits.invoke.StaticMethodBinder
 import soot.options.Options
 
-
 import soot.Body
 import soot.{Unit => SootUnit}
 import soot.Scene
@@ -159,7 +158,9 @@ object JVM2CL {
     while (i.hasNext) {
       val m = i.next
 
+
       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+      println("trying " + sig)
       if (sig.equals(methodSig)) {
         worklist += CompileMethodTask(m, self)
       }
@@ -319,7 +320,7 @@ object JVM2CL {
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.MathCommon"), name, _, _, _), args) => Some((name, args))
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.math.package$"), name, _, _, _), args) => Some((name, args))
         // firepile.util.Math.sin(x)  TODO: FIX THIS
-        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("firepile.util.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("firepile.util.Math"), name, _, _, _), args) => Some((name, args))
+        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("firepile.util.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("firepile.util.Math$"), name, _, _, _), args) => Some((name, args))
         // java.lang.Math.sin(x)
         case GStaticInvoke(SMethodRef(SClassName("java.lang.Math"), name, _, _, _), args) => Some((name, args))
         case _ => None
@@ -597,6 +598,7 @@ object JVM2CL {
     }
     case GVirtualInvoke(base, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
+
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
       // Then generate a call to a dispatch method:
       // e.g.,
@@ -624,11 +626,80 @@ object JVM2CL {
       
       // rewrite to:
 
-      if( Modifier.isFinal(method.declaringClass.getModifiers) || Modifier.isFinal(method.resolve.getModifiers))
+      def getPossibleReceivers(base: Value, method: SootMethodRef) = {
+        if (Modifier.isFinal(method.declaringClass.getModifiers)) {
+          method.declaringClass :: Nil
+        }
+        else if (Modifier.isFinal(method.resolve.getModifiers)) {
+          method.declaringClass :: Nil
+        }
+        else {
+          base.getType match {
+            case t : SootRefType if Modifier.isFinal(t.getSootClass.getModifiers) =>
+              // assert method not overridden between method.declaringClass and t
+              method.declaringClass :: Nil
+
+            case t : SootRefType => {
+              // iterate through all loaded subclasses of t, filtering out those that implement method
+              val result = ListBuffer[SootClass]()
+
+              val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+              val H = Scene.v.getActiveHierarchy
+
+              val queue = new Queue[SootClass]()
+              queue += t.getSootClass
+
+              while (! queue.isEmpty) {
+                val c = queue.dequeue
+
+                def hasMethod(c: SootClass, methodSig: String): Boolean = {
+                  val i = c.methodIterator
+                  while (i.hasNext) {
+                    val m = i.next
+
+                    if (! m.isAbstract) {
+                      val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+                      if (sig.equals(methodSig)) {
+                        return true
+                      }
+                    }
+                  }
+                  return false
+                }
+
+                if (hasMethod(c, methodSig)) {
+                  result += c
+                }
+
+                queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
+              }
+
+              if (result.isEmpty)
+                method.declaringClass :: Nil
+              else 
+                result.toList
+            }
+
+            case _ => Nil
+          }
+        }
+      }
+
+      val possibleReceivers = getPossibleReceivers(base, method)
+
+      println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
+
+      assert(possibleReceivers.length > 0)
+
+      if (possibleReceivers.length == 1) {
+        // monomorphic call
+        // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
         Call(Id(methodName(method)), args.map(a => translateExp(a)))
-      else
+      }
+      else {
+        // polymorphic call--generate a switch
         Call(Id("unimplemented: call to " + methodName(method)), Seq())
-      //Call(Select(base, method.name), args.map(a => translateExp(a)))
+      }
     }
     case GInterfaceInvoke(base, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
