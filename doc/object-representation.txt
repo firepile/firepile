@@ -1,0 +1,153 @@
+PROBLEM: How to handle linked lists?
+
+class L {
+  val next: L
+}
+
+val x: L = head
+while (x != null) {
+  x = x.next
+}
+
+should be as if written:
+
+class L {
+  val next: Int // offset into array containing all the L's
+}
+
+but where does the array containing all the L's come from.
+Array could be passed in.  But L could be allocated in the kernel itself, or in another array.
+
+-----------------------------
+
+class A { var a: Int }
+class B extends A { var b: Int }
+class C extends A { var c: Int }
+class D extends B { var d: Int }
+
+Assuming we know the class hierarchy:
+
+struct Objectclass {
+  int __id;
+}
+
+// copy from declaration of the class
+struct Apart { int a; }
+struct Bpart { int b; }
+struct Cpart { int c; }
+struct Dpart { int d; }
+
+// Enumerate superclass parts, in top-down order
+struct Aclass {
+  int __id;
+  struct Apart a;
+}
+
+struct Bclass {
+  int __id;
+  struct Apart a;
+  struct Bpart b;
+}
+
+struct Cclass {
+  int __id;
+  struct Apart a;
+  struct Cpart c;
+}
+
+struct Dclass {
+  int __id;
+  struct Apart a;
+  struct Bpart b;
+  struct Dpart d;
+}
+
+// Enumerate subclasses 
+union A {
+  struct Aclass a;
+  struct Bclass b;
+  struct Cclass c;
+  struct Dclass d;
+}
+union B {
+  struct Bclass b;
+  struct Dclass d;
+}
+union C {
+  struct Cclass c;
+}
+union D {
+  struct Dclass d;
+}
+
+class A { var a: Int }
+class B extends A { var b: Int }
+class C extends A { var c: Int }
+class D extends B { var d: Int }
+
+
+
+Rep of D:
+
+struct Object {
+  int __id;
+}
+
+struct D {
+  int __id;
+  int a;
+  int b;
+  int d;
+}
+
+union Dcorrect {
+  struct Object object;
+  struct D d;
+}
+
+Rep of C:
+
+struct C {
+  int __id;
+  int a;
+  int c;
+}
+
+Rep of B:
+
+struct B {
+  int __id;
+  int a;
+  int b;
+}
+
+union Bcorrect {
+  struct Object object;
+  struct B b;
+  struct D d;
+}
+
+Rep of A:
+
+struct A {
+  int __id;
+  int a;
+}
+
+union Acorrect {
+  struct Object object;
+  struct A a;
+  struct B b;
+  struct C c;
+  struct D d;
+}
+
+#define TYPEID(x) x.object.id
+
+// want this:
+#define TYPEID(x) (*((int *) x))
+// may have to be this:
+#define GTYPEID(x) (*((__global int *) x))
+#define LTYPEID(x) (*((__local int *) x))
+#define PTYPEID(x) (*((__private int *) x))
+
