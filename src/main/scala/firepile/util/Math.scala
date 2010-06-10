@@ -2,6 +2,9 @@ package firepile.util
  
 object Math {
   // Math functions for floats 
+
+// pi, e, etc
+
   def acos(x: Float) = 0.0F
   def acosh(x: Float) = 0.0F
   def acospi(x: Float) = 0.0F   // acos(x) / pi
@@ -32,8 +35,10 @@ object Math {
   def fmax (x: Float, y: Float) = 0.0F
   def fmin21(x: Float, y: Float) = 0.0F
   def fmod(x: Float, y: Float) = 0.0F
-  // gentype fract (gentype x, gentype *iptr)
-  // gentype frexp (gentype x, intn *exp)
+    // gentype fract (gentype x, gentype *iptr)
+    def fract(x: Float) = (0, 0.0F)
+    // gentype frexp (gentype x, intn *exp)
+    def frexp(x: Float) = (0.0F, 0.0F)
   def hypot(x: Float, y: Float) = 0.0F
   def ilogb(x: Float): Int  = { 0 } // intn ilogb (gentype x)
   def ldexp(x: Float, n: Int) = 0.0F
@@ -52,12 +57,14 @@ object Math {
   def powr(x: Float, y: Float) = 0.0F
   def remainder(x: Float, y: Float) = 0.0F
     // gentype remquo (gentype x, gentype y, intn *quo)
+    def remquo(x: Float, y: Float) = (0.0F, 0.0F)
   def rint(x: Float) = 0.0F
   def rootn(x: Float, y: Int) = 0.0F
   def round(x: Float) = 0.0F
   def rsqrt(x: Float) = 0.0F
   def sin(x: Float) = 0.0F
   // gentype sincos (gentype x, gentype *cosval)
+    def sincos(x: Float) = (sin(x), cos(x))
   def sinh(x: Float) = 0.0F
   def sinpi(x: Float) = 0.0F
   def sqrt(x: Float) = 0.0F
