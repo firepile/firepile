@@ -14,6 +14,7 @@ import com.nativelibs4java.opencl.JavaCL
 package object firepile {
   import Wrappers._
   import Spaces._
+  import Marshaling._
 
   private lazy val defaultGPUPlatform: Option[Platform] = {
     platforms.flatMap {
@@ -93,52 +94,6 @@ package object firepile {
 
   def spawn[A,B](k: BBArrayLocalReduceKernel1[A,B])(a: BBArray[A]) = k(a)
   def spawn[B](k: Future[B]) = k.start
-
-  class CompileInput[A:Marshal](x: A) {
-      def put: ByteBuffer = implicitly[Marshal[A]].put(x)
-  }
-
-  class CompileResult(val code: CLKernel,
-                      val dist: Dist,
-                      val effect: Effect,
-                      val inputs: List[CompileInput[_]])
-
-  def compileInstantiatedKernel[B:Marshal](dev: Device, body: () => B, kernelName: String): CompileResult = {
-    val k = body.getClass
-    val apply = Compiler.findApplyMethod(body, 0)
-    val funs = compiler.JVM2CL.compileRoot(k.getName, Compiler.signature(apply)).reverse
-    println(funs)
-    null
-  }
-
-  implicit def compile[B:Marshal](body: => B)(dev: Device): Future[B] = {
-    val kernelName = Compiler.freshName("theKernel")
-    val kernel = compileInstantiatedKernel[B](dev, () => body, kernelName)
-
-    if (kernel == null)
-      throw new RuntimeException("Compiler not implemented")
-
-    new Future[B] {
-      lazy val future: Future[ByteBuffer] = {
-        val code: CLKernel = kernel.code
-        val dist: Dist = kernel.dist
-        val effect: Effect = kernel.effect
-        val buffers: List[ByteBuffer] = kernel.inputs.map(in => in.put)
-
-        val k = new InstantiatedBufKernel(dev, code, dist, effect, buffers:_*)
-
-        k.start
-      }
-
-      def run: Unit = future
-
-      def finish: B = {
-        val out = future.force
-        val b: B = implicitly[Marshal[B]].get(out)
-        b
-      }
-    }
-  }
 
   // How to make kernels composable
   // Basic kernels:
@@ -241,9 +196,9 @@ package object firepile {
 
   // ------------------------------------------------------------------------
   trait Effect {
-    def outputSize: Int
+    def outputSizes: List[Int] = Nil
     def localBufferSizes: List[Int] = Nil
-    override def toString = "Effect {out=" + outputSize + "}"
+    override def toString = "Effect {out=" + outputSizes + "}"
   }
 
   type Effect1[A] = Function1[A,Effect]
@@ -252,26 +207,26 @@ package object firepile {
 
   class SimpleGlobalArrayEffect1[B:FixedSizeMarshal, T: HasLength] extends Effect1[T] {
     def apply(a: T) = new Effect {
-      val outputSize = implicitly[HasLength[T]].length(a) * fixedSizeMarshal[B].size
+      override val outputSizes = (implicitly[HasLength[T]].length(a) * fixedSizeMarshal[B].size) :: Nil
     }
   }
 
   class SimpleGlobalArrayEffect2[B:FixedSizeMarshal, T: HasLength, U: HasLength] extends Effect2[T,U] {
     def apply(a1: T, a2: U) = new Effect {
-      val outputSize = (implicitly[HasLength[T]].length(a1) max implicitly[HasLength[U]].length(a2)) * fixedSizeMarshal[B].size
+      override val outputSizes = ((implicitly[HasLength[T]].length(a1) max implicitly[HasLength[U]].length(a2)) * fixedSizeMarshal[B].size) :: Nil
     }
   }
 
   class SimpleLocalArrayEffect1[A:FixedSizeMarshal, T: HasLength](localSizes: Int*) extends Effect1[T] {
     def apply(a: T) = new Effect {
-      val outputSize = implicitly[HasLength[T]].length(a) * fixedSizeMarshal[A].size
+      override val outputSizes = (implicitly[HasLength[T]].length(a) * fixedSizeMarshal[A].size) :: Nil
       override val localBufferSizes = localSizes.toList
     }
   }
 
   class SimpleLocalArrayWithOutputEffect1[B:FixedSizeMarshal, T: HasLength](numThreads: Int, localSizes:Int*) extends Effect1[T] {
     def apply(a: T) = new Effect {
-      val outputSize = ((implicitly[HasLength[T]].length(a) + numThreads - 1) / numThreads) * fixedSizeMarshal[B].size
+      override val outputSizes = (((implicitly[HasLength[T]].length(a) + numThreads - 1) / numThreads) * fixedSizeMarshal[B].size) :: Nil
       override val localBufferSizes = localSizes.toList
     }
   }

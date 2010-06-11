@@ -1,6 +1,7 @@
 package firepile
 
 import util.BufferBackedArray._
+import firepile.Marshaling._
 
 object Spaces {
   trait IdSpace[Pt <: Point[Pt]] extends Iterable[Pt] {

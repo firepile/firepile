@@ -1,6 +1,7 @@
 package firepile
 
 import firepile.util.BufferBackedArray._
+import firepile.Marshaling._
 import firepile._
 
 object Wrappers {

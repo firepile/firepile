@@ -2,6 +2,7 @@ package firepile
 
 import firepile._
 import firepile.util.BufferBackedArray._
+import firepile.Marshaling._
 
 import java.nio.ByteBuffer
 
@@ -44,6 +45,32 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     (d: Dist, e: Effect) => new BufKernel(this, code, d, e)
   }
 
+  import Compose.Arg
+
+  def compile[ArgA <: Arg[_,ArgA],ArgB <: Arg[_,ArgB]](name: String, src: String, dist: ArgA => Dist, effect: ArgA => Effect, builder: List[ByteBuffer] => ArgB) = {
+    val kernel: (Dist,Effect) => BufKernel = compileString(name, src)
+
+    new Kernel1[ArgA,ArgB] {
+      def apply(input: ArgA) = new Future[ArgB] {
+        lazy val future: Future[List[ByteBuffer]] = {
+          val bufIn: List[ByteBuffer] = input.buffers
+          val d: Dist = dist(input)
+          val e: Effect = effect(input)
+          val k = kernel(d, e)
+          k(bufIn:_*)
+        }
+
+        def run: Unit = future.start
+
+        def finish = {
+          val bufOut: List[ByteBuffer] = future.force
+          val result: ArgB = builder(bufOut)
+          result
+        }
+      }
+    }
+  }
+
   def compile1[A: Marshal, B: Marshal](name: String, src: String, dist: Dist1[A], effect: Effect1[A]) = {
     val transA = implicitly[Marshal[A]];
     val transB = implicitly[Marshal[B]];
@@ -51,19 +78,19 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
 
     new Kernel1[A,B] {
       def apply(input: A) = new Future[B] {
-        lazy val future: Future[ByteBuffer] = {
-          val bufIn: ByteBuffer = transA.put(input)
+        lazy val future: Future[List[ByteBuffer]] = {
+          val bufIn: List[ByteBuffer] = transA.toBuffer(input)
           val d: Dist = dist(input)
           val e: Effect = effect(input)
           val k = kernel(d, e)
-          k(bufIn)
+          k(bufIn:_*)
         }
 
         def run: Unit = future.start
 
         def finish = {
-          val bufOut: ByteBuffer = future.force
-          val result: B = transB.get(bufOut)
+          val bufOut: List[ByteBuffer] = future.force
+          val result: B = transB.fromBuffer(bufOut)
           result
         }
       }
@@ -77,20 +104,20 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     val kernel: (Dist,Effect) => BufKernel = compileString(name, src)
     new Kernel2[A1,A2,B] {
       def apply(a1: A1, a2: A2) = new Future[B] {
-        lazy val future: Future[ByteBuffer] = {
-          val bufIn1: ByteBuffer = transA1.put(a1)
-          val bufIn2: ByteBuffer = transA2.put(a2)
+        lazy val future: Future[List[ByteBuffer]] = {
+          val bufIn1: List[ByteBuffer] = transA1.toBuffer(a1)
+          val bufIn2: List[ByteBuffer] = transA2.toBuffer(a2)
           val d: Dist = dist(a1, a2)
           val e: Effect = effect(a1, a2)
           val k = kernel(d, e)
-          k(bufIn1, bufIn2)
+          k((bufIn1 ::: bufIn2):_*)
         }
 
         def run: Unit = future.start
 
         def finish: B = {
-          val bufOut: ByteBuffer = future.force
-          val result: B = transB.get(bufOut)
+          val bufOut: List[ByteBuffer] = future.force
+          val result: B = transB.fromBuffer(bufOut)
           result
         }
       }

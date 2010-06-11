@@ -2,6 +2,7 @@ package firepile
 
 import firepile._
 import firepile.util.BufferBackedArray._
+import firepile.Marshaling._
 
 import java.nio.ByteBuffer
 
