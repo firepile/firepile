@@ -91,6 +91,10 @@ object JVM2CL {
     //  + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
 
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
+      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
+      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
+      + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
+      + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
       + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/classes"
       + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/test-classes"
       + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
@@ -315,7 +319,7 @@ object JVM2CL {
       case _ => ValueType(t.toString)
   }
 
-  object MathCall {
+  object ScalaMathCall {
       def unapply(v: Value): Option[(String,List[Value])] = {
         v match {
         // scala.Math.sin(x)  [deprecated]
@@ -324,10 +328,18 @@ object JVM2CL {
         // scala.math.package$.sin(x)
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.MathCommon"), name, _, _, _), args) => Some((name, args))
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.math.package$"), name, _, _, _), args) => Some((name, args))
-        // firepile.util.Math.sin(x)
-        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("firepile.util.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("firepile.util.Math$"), name, _, _, _), args) => Some((name, args))
         // java.lang.Math.sin(x)
         case GStaticInvoke(SMethodRef(SClassName("java.lang.Math"), name, _, _, _), args) => Some((name, args))
+        case _ => None
+      }
+      }
+  }
+
+  object FirepileMathCall {
+      def unapply(v: Value): Option[(String,List[Value])] = {
+        v match {
+        // firepile.util.Math.sin(x)
+        case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("firepile.util.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("firepile.util.Math$"), name, _, _, _), args) => Some((name, args))
         case _ => None
       }
       }
@@ -345,64 +357,11 @@ object JVM2CL {
     def unapply(v: Value): Option[(String,List[Value])] =
       v match {
       // sin((double) x) --> (double) sin(x)
-      case MathCall(name, List(GCast(FloatTyped(x), d))) if d.equals(SootDoubleType.v) => Some((name, List(x)))
+      case ScalaMathCall(name, List(GCast(FloatTyped(x), d))) if d.equals(SootDoubleType.v) => Some((name, List(x)))
       case _ => None
     }
   }
 
-  // Split library calls into separate object
-  // This avoids an OutOfMemory error in scalac.
-  object MathLibraryCall {
-    def unapply(v: Value) = {
-      val t: Tree = v match {
-        // [NN] Many of these translations aren't right!  I was
-        // translating to functions in math.h, but these are often
-        // different than the math functions supported by OpenCL.
-        case MathCall("toRadians", List(DoubleTyped(x))) => Bin(Bin(x, "*", Id("M_PI")), "/", DoubleLit(180.))
-        case MathCall("toDegrees", List(DoubleTyped(x))) => Bin(Bin(x, "*", DoubleLit(180.)), "/", Id("M_PI"))
-        case MathCall("exp", List(FloatTyped(x))) => Call(Id("exp"), x)
-        // case MathCall("exp", List(DoubleTyped(x))) => Call(Id("exp"), x)
-        case MathCall("log", List(FloatTyped(x))) => Call(Id("log"), x)
-        // case MathCall("log", List(DoubleTyped(x))) => Call(Id("log"), x)
-        case MathCall("sqrt", List(FloatTyped(x))) => Call(Id("sqrt"), x)
-        // case MathCall("sqrt", List(DoubleTyped(x))) => Call(Id("sqrt"), x)
-        case MathCall("IEEEremainder", List(FloatTyped(x), FloatTyped(y))) => Call(Id("remainder"), y, x)
-        // case MathCall("IEEEremainder", List(DoubleTyped(x), DoubleTyped(y))) => Call(Id("remainder"), y, x)
-        case MathCall("ceil", List(FloatTyped(x))) => Call(Id("ceil"), x)
-        // case MathCall("ceil", List(DoubleTyped(x))) => Call(Id("ceil"), x)
-        case MathCall("floor", List(FloatTyped(x))) => Call(Id("floor"), x)
-        // case MathCall("floor", List(DoubleTyped(x))) => Call(Id("floor"), x)
-        case MathCall("rint", List(FloatTyped(x))) => Call(Id("rint"), x)
-        // case MathCall("rint", List(DoubleTyped(x))) => Call(Id("rint"), x)
-        case MathCall("atan2", List(FloatTyped(y), FloatTyped(x))) => Call(Id("atan2"), y, x)
-        // case MathCall("atan2", List(DoubleTyped(y), DoubleTyped(x))) => Call(Id("atan2"), y, x)
-        case MathCall("pow", List(FloatTyped(y), FloatTyped(x))) => Call(Id("pow"), y, x)
-        // case MathCall("pow", List(DoubleTyped(y), DoubleTyped(x))) => Call(Id("pow"), y, x)
-        case MathCall("round", List(FloatTyped(x))) => Cast(ValueType("int"), Call(Id("round"), x))
-        // case MathCall("round", List(DoubleTyped(x))) => Call(Id("round"), x)
-
-        case MathCall("abs", List(IntTyped(x))) => Call(Id("abs"), x)
-        case MathCall("abs", List(FloatTyped(x))) => Call(Id("fabs"), x)
-        case MathCall("abd", List(LongTyped(x))) => Call(Id("abs"), x)
-        // case MathCall("abs", List(DoubleTyped(x))) => Call(Id("fabs"), x)
-
-        case MathCall("max", List(IntTyped(y), IntTyped(x))) => Call(Id("max"), y, x)
-        case MathCall("max", List(LongTyped(y), LongTyped(x))) => Call(Id("max"), y, x)
-        case MathCall("max", List(FloatTyped(y), FloatTyped(x))) => Call(Id("fmax"), y, x)
-        // case MathCall("max", List(DoubleTyped(y), DoubleTyped(x))) => Call(Id("fmax"), y, x)
-
-        case MathCall("min", List(IntTyped(y), IntTyped(x))) => Call(Id("min"), y, x)
-        case MathCall("min", List(LongTyped(y), LongTyped(x))) => Call(Id("min"), y, x)
-        case MathCall("min", List(FloatTyped(y), FloatTyped(x))) => Call(Id("fmin"), y, x)
-        //  case MathCall("min", List(DoubleTyped(y), DoubleTyped(x))) => Call(Id("fmin"), y, x)
-
-        case MathCall("signum", List(x)) => Call(Id("SIGNUM"), x)
-
-        case _ => null
-      }
-      if (t == null) None else Some(t)
-    }
-  }
         object FloatMath {
           def unapply(v: Value) = {
             val t: Tree = v match {
@@ -448,9 +407,17 @@ object JVM2CL {
                   Call(Id("newFloatArray"), List[Tree](size))
 
 
-        case DoubleMath(t) => t
+        // firepile.util.Math.sin(x)
+        case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a)))
+
+        // (float) scala.math.sin((double) x)
         case FloatMath(t) => t
-        // case MathLibraryCall(t) => t
+
+        // scala.math.sin((double) x)
+        case DoubleMath(t) => t
+
+        // scala.math.sin(x)
+        case ScalaMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a)))
 
         case _ => null
       }
@@ -600,9 +567,6 @@ object JVM2CL {
     case GSpecialInvoke(base, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
       Call(Select(base, method.name), args.map(a => translateExp(a)))
-    }
-    case MathCall(name, args) => {
-      Call(Id(name), args.map(a => translateExp(a)))
     }
     case GVirtualInvoke(base, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
