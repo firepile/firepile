@@ -177,6 +177,24 @@ package object firepile {
   class SimpleArrayDist1[T: HasLength] extends Dist1[T] {
     def apply(a: T) = new Dist {
       val totalNumberOfItems = implicitly[HasLength[T]].length(a)
+      /*
+      lazy val totalNumberOfItems = {
+        val len = implicitly[HasLength[T]].length(a)
+        val numThreads = numberOfItemsPerGroup
+        (len + numThreads - 1) / numThreads * numThreads
+      }
+      override lazy val numberOfItemsPerGroup: Int = {
+        val len = implicitly[HasLength[T]].length(a)
+        var numThreads = len / 16
+        var i = 1
+        while (numThreads > i)
+          i = i * 2
+        numThreads = i
+        if (numThreads > 256)
+          numThreads = 256
+        numThreads
+      }
+      */
     }
   }
 
@@ -257,4 +275,6 @@ package object firepile {
   implicit def blockIndexed1[A]: BlockIndexed1[A] = null
   implicit def blockIndexed2[A]: BlockIndexed2[A] = null
   implicit def blockIndexed3[A]: BlockIndexed3[A] = null
+
+  implicit def force[B](f: Future[B]) = f.force
 }
