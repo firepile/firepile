@@ -16,7 +16,7 @@ object TestMR1 {
     {
       val c: Float = time {
         import firepile.Compose._
-        val result = b.mapk(f2Mapper1((x:Float)=>x*2)).reduce(f2Reducer((x:Float,y:Float)=>x+y)).start
+        val result = b.mapk((x:Float)=>x*2).reduce((x:Float,y:Float)=>x+y)(b)
         result.force
       }
       println("c = " + c)
@@ -28,7 +28,7 @@ object TestMR1 {
     {
       val c: BBArray[Float] = time {
         import firepile.Compose._
-        val result = b.mapk(f2Mapper1((x:Float)=>x*2)).start
+        val result = b.mapk((x:Float)=>x*2).apply(b)
         result.force
       }
       println("c = " + c)
@@ -37,7 +37,7 @@ object TestMR1 {
     {
       val c: BBArray[Float] = time {
         import firepile.Compose._
-        val result = b.mapk(f2Mapper1((x:Float)=>x*2)).reduceBlock(f2Reducer((x:Float,y:Float)=>x+y)).start
+        val result = b.mapk(f2Mapper((x:Float)=>x*2)).reduceBlock(f2Reducer((x:Float,y:Float)=>x+y))(b)
         result.force
       }
       println("c = " + c)

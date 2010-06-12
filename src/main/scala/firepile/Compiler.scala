@@ -340,7 +340,7 @@ object Compose {
 
     this : ArgA =>
 
-    def mapk[B,ArgB<:Arg[B,ArgB]](m: Mapper[A,B,ArgA,ArgB])(implicit dev: Device, mb: FixedSizeMarshal[B]) = new MapKernel[A,B,ArgA,ArgB](dev, this, m.trees, m.mapTree, m.builder, m.mab)
+    def mapk[B,ArgB<:Arg[B,ArgB]](m: Mapper[A,B,ArgA,ArgB])(implicit dev: Device, mb: FixedSizeMarshal[B]) = new MapKernel[A,B,ArgA,ArgB](dev, m.trees, m.mapTree, m.builder, m.mab)
     def length: Int
     def arity: Int
     def buffers: List[ByteBuffer]
@@ -352,7 +352,7 @@ object Compose {
 
   class Arg1[A:FixedSizeMarshal](a: BBArray[A]) extends Arg[A,Arg1[A]] {
     val m = idMapper[A]
-    def reduceBlock(r: Reducer[A])(implicit dev: Device) = new MapBlockReduceKernel[A,A,Arg1[A],Arg1[A]](dev, this, m.trees, r.trees, m.mapTree, r.reduceTree, m.builder, m.mab)
+    def reduceBlock(r: Reducer[A])(implicit dev: Device) = new MapBlockReduceKernel[A,A,Arg1[A],Arg1[A]](dev, m.trees, r.trees, m.mapTree, r.reduceTree, m.builder, m.mab)
     def reduce(r: Reducer[A])(implicit dev: Device) = reduceBlock(r)(dev).reduce(r.reduceFun)
     def length = a.length
     def arity = 1
@@ -514,7 +514,7 @@ object Compose {
     Reducer(trees, reduce, f)
   }
 
-  class MapKernel[A:FixedSizeMarshal,B:FixedSizeMarshal,ArgA <: Arg[A,ArgA], ArgB <: Arg[B,ArgB]](dev: Device, input: ArgA, val trees: List[Tree], val mapTree: Tree, builder: List[ByteBuffer] => ArgB, mab: Marshal[ArgB]) extends KernelLike with Future[ArgB] {
+  class MapKernel[A:FixedSizeMarshal,B:FixedSizeMarshal,ArgA <: Arg[A,ArgA], ArgB <: Arg[B,ArgB]](dev: Device, val trees: List[Tree], val mapTree: Tree, builder: List[ByteBuffer] => ArgB, mab: Marshal[ArgB]) extends KernelLike with Function1[ArgA,Future[ArgB]] {
     private val kernelName = Compiler.freshName("kernel")
 
     protected def kernelSrc(trees: List[Tree]): String = {
@@ -537,19 +537,21 @@ object Compose {
       dev.compile[ArgA,ArgB](kernelName, src, d, e, builder)
     }
 
-    private lazy val future = kernel(input)
-    protected def run = future.start
-    protected def finish = future.force
+    def apply(input: ArgA) = new Future[ArgB] {
+      private lazy val future = kernel(input)
+      protected def run: Unit = future.start
+      protected def finish = future.force
+    }
 
     // a.map(this).map(m)
-    def map[Z,ArgZ <: Arg[Z,ArgZ]](m: Mapper[B,Z,ArgB,ArgZ])(implicit zm: FixedSizeMarshal[Z], azm: Marshal[ArgZ]): MapKernel[A,Z,ArgA,ArgZ] = new MapKernel[A,Z,ArgA,ArgZ](dev, input, trees ++ m.trees, compose(mapTree, m.mapTree), m.builder, m.mab)
+    def map[Z,ArgZ <: Arg[Z,ArgZ]](m: Mapper[B,Z,ArgB,ArgZ])(implicit zm: FixedSizeMarshal[Z], azm: Marshal[ArgZ]): MapKernel[A,Z,ArgA,ArgZ] = new MapKernel[A,Z,ArgA,ArgZ](dev, trees ++ m.trees, composeTrees(mapTree, m.mapTree), m.builder, m.mab)
     // a.map(this).reduceBlock(r)
-    def reduceBlock(r: Reducer[B]) = new MapBlockReduceKernel[A,B,ArgA,ArgB](dev, input, trees, r.trees, mapTree, r.reduceTree, builder, mab)
+    def reduceBlock(r: Reducer[B]) = new MapBlockReduceKernel[A,B,ArgA,ArgB](dev, trees, r.trees, mapTree, r.reduceTree, builder, mab)
     // a.map(this).reduce(r)
     def reduce(r: Reducer[B]) = reduceBlock(r).reduce(r.reduceFun)
   }
 
-  class MapBlockReduceKernel[A:FixedSizeMarshal,B:FixedSizeMarshal,ArgA <: Arg[A,ArgA], ArgB <: Arg[B,ArgB]](dev: Device, input: ArgA, val mapTrees: List[Tree], val reduceTrees: List[Tree], val mapTree: Tree, val reduceTree: Tree, val builder: List[ByteBuffer] => ArgB, val mab: Marshal[ArgB]) extends KernelLike with Future[ArgB] {
+  class MapBlockReduceKernel[A:FixedSizeMarshal,B:FixedSizeMarshal,ArgA <: Arg[A,ArgA], ArgB <: Arg[B,ArgB]](dev: Device, val mapTrees: List[Tree], val reduceTrees: List[Tree], val mapTree: Tree, val reduceTree: Tree, val builder: List[ByteBuffer] => ArgB, val mab: Marshal[ArgB]) extends KernelLike with Function1[ArgA,Future[ArgB]] {
 
     self: MapBlockReduceKernel[A,B,ArgA,ArgB] =>
 
@@ -590,67 +592,60 @@ object Compose {
       val numThreads = 128
       val d = (a: ArgA) => new Dist {
         val totalNumberOfItems = (a.length + numThreads - 1) / numThreads
+        println("block reduce: " + a.length + " -> " + totalNumberOfItems)
       }
       val e = (a: ArgA) => new Effect {
         // override val outputSizes = a.length * implicitly[FixedSizeMarshal[B]].size
         override val outputSizes = mab.sizes(a.length / numThreads)
         override val localBufferSizes = (numThreads * implicitly[FixedSizeMarshal[B]].size) :: Nil
+        println("block reduce: " + a.length + " -> " + outputSizes)
       }
       dev.compile[ArgA,ArgB](kernelName, src, d, e, builder)
     }
 
-    private lazy val future = kernel(input)
-    protected def run = future.start
-    protected def finish = future.force
+    def apply(input: ArgA) = new Future[ArgB] {
+      private lazy val future = kernel(input)
+      protected def run: Unit = future.start
+      protected def finish = future.force
+    }
 
     // a.map(that).blockReduce(this).map(m)
-    def map[Z:FixedSizeMarshal,ArgZ<:Arg[Z,ArgZ]](m: Mapper[B,Z,ArgB,ArgZ]) = new ComposeKernel[ArgB,ArgZ](this, (tmp: ArgB) => new MapKernel[B,Z,ArgB,ArgZ](dev, tmp, m.trees, m.mapTree, m.builder, m.mab))
+    def map[Z:FixedSizeMarshal,ArgZ<:Arg[Z,ArgZ]](m: Mapper[B,Z,ArgB,ArgZ]) = new ComposeKernel[ArgA,ArgB,ArgZ](this, new MapKernel[B,Z,ArgB,ArgZ](dev, m.trees, m.mapTree, m.builder, m.mab))
 
     // a.map(this).blockReduce(this).reduce(r)
-    def reduce(r: Reducer[B]): Future[B] = reduce(r.reduceFun)
+    def reduce(r: Reducer[B]): ArgA => Future[B] = reduce(r.reduceFun)
 
-    def reduce(f: (B,B) => B): Future[B] = new Future[B] {
-      def run = self.run
-
-      def finish: B = {
-        val z: ArgB = self.future.force
+    def reduce(f: (B,B) => B): ArgA => Future[B] = (a:ArgA) => new Future[B] {
+      private lazy val future: Future[ArgB] = self(a)
+      protected def run: Unit = future.start
+      protected def finish: B = {
+        val z: ArgB = future.force
         z.reduce(f)
       }
     }
   }
 
-  private def compose(call1: Tree, call2: Tree) = (call1, call2) match {
+  private def composeTrees(call1: Tree, call2: Tree) = (call1, call2) match {
     case ( Call(name1, args1 @ List(_)), Call(name2, List(_)) ) => Call(name2, Call(name1, args1))
     case _ => throw new RuntimeException("Cannot compose " + call1 + " and " + call2 + "; not unary functions.")
   }
 
-  class ComposeKernel[A,B](k1: Future[A], k2: A => Future[B]) extends Future[B] {
-    protected def run: Unit = k1.start
+  class ComposeKernel[X,A,B](k1: Function1[X,Future[A]], k2: A => Future[B]) extends Function1[X,Future[B]] {
+    def apply(x: X) = new Future[B] {
+      private lazy val future = k1(x)
+      protected def run: Unit = future.start
 
-    // This is slow -- intermediate data gets copied back to the host
-    // Should use local memory to copy data.
-    protected def finish: B = {
-      val tmp: A = k1.force
-      val k = k2(tmp)
-      k.start
-      k.force
+      // This is slow -- intermediate data gets copied back to the host
+      // Should use local memory to copy data.
+      protected def finish: B = {
+        val tmp: A = future.force
+        val k = k2(tmp)
+        k.start
+        k.force
+      }
     }
   }
 
   def spawn[B](k: Future[B]) = k.start
-
-  // bitonic sort
-  class SortKernel[A]
-
-  class FilterKernel[A,C<:Iterable[A]](input: C) extends Future[C] {
-    // TODO
-    //
-    // Idea: bitonic sort to put elements matching filter before those
-    // not matching
-    //
-    // Idea: sort each block
-    //
-    protected def run: Unit = {}
-    protected def finish: C = input
-  }
+  def spawn[A,B](k: Function1[A,Future[B]]) = (a:A) => k(a).start
 }

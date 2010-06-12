@@ -27,7 +27,7 @@ object TestDotProduct {
         // val result = (b1,b2).zipWithKernel((x:Float,y:Float)=>x*y).reduceKernel(_+_)
         // result.force
         import firepile.Compose._
-        val result = spawn { (b1,b2).mapk(f2Mapper2((x:Float,y:Float)=>x*y)).reduce(f2Reducer((x:Float,y:Float)=>x+y)) }
+        val result = spawn { (b1,b2).mapk((x:Float,y:Float)=>x*y).reduce((x:Float,y:Float)=>x+y)(b1,b2) }
         result.force
       }
       println("c = " + c)
