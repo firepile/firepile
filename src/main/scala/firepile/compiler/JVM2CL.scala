@@ -85,11 +85,16 @@ object JVM2CL {
 
   private def setup = {
     // java.class.path is broken in Scala, especially when running under sbt
-    Scene.v.setSootClassPath(Scene.v.defaultClassPath
-      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
-      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
-      + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
+    //Scene.v.setSootClassPath(Scene.v.defaultClassPath
+    //  + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
+    //  + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
+    //  + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
 
+    Scene.v.setSootClassPath(Scene.v.defaultClassPath
+      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/classes"
+      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/test-classes"
+      + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
+    
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
     Options.v.setPhaseOption("jb", "use-original-names:true")
@@ -319,7 +324,7 @@ object JVM2CL {
         // scala.math.package$.sin(x)
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.MathCommon"), name, _, _, _), args) => Some((name, args))
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("scala.math.package$"), "MODULE$", _, _)), SMethodRef(SClassName("scala.math.package$"), name, _, _, _), args) => Some((name, args))
-        // firepile.util.Math.sin(x)  TODO: FIX THIS
+        // firepile.util.Math.sin(x)
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(SClassName("firepile.util.Math$"), "MODULE$", _, _)), SMethodRef(SClassName("firepile.util.Math$"), name, _, _, _), args) => Some((name, args))
         // java.lang.Math.sin(x)
         case GStaticInvoke(SMethodRef(SClassName("java.lang.Math"), name, _, _, _), args) => Some((name, args))
@@ -596,6 +601,9 @@ object JVM2CL {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
       Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
+    case MathCall(name, args) => {
+      Call(Id(name), args.map(a => translateExp(a)))
+    }
     case GVirtualInvoke(base, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
 
@@ -683,6 +691,8 @@ object JVM2CL {
             case _ => Nil
           }
         }
+      
+    
       }
 
       val possibleReceivers = getPossibleReceivers(base, method)
@@ -700,6 +710,8 @@ object JVM2CL {
         // polymorphic call--generate a switch
         Call(Id("unimplemented: call to " + methodName(method)), Seq())
       }
+    
+  
     }
     case GInterfaceInvoke(base, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
