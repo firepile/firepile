@@ -28,12 +28,14 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
   }
 
   def run = {
+    /*
     for (b <- buffers)
       printBuffer(b)
 
     buffers.foreach(buffer => {
         println("sending " + buffer.limit + " bytes")
     })
+    */
 
     val d = dist
     val e = effect
@@ -42,7 +44,7 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
     val memOut = e.outputSizes.map(n => dev.global.allocForWrite(n))
     val lenOut = e.outputSizes.map(n => dev.global.allocForRead(fixedSizeMarshal[Int].size))
 
-    println("reading back " + e.outputSizes + " bytes")
+    // println("reading back " + e.outputSizes + " bytes")
 
     val writeEvents = (buffers zip memIn).map{ case (buffer,mem) => mem.write(dev.queue, buffer, false) }
     val writeLenEvents = (buffers zip lenIn).map{ case (buffer,mem) => mem.write(dev.queue, {
@@ -69,37 +71,54 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
     val args1: List[CLByteBuffer] = (memOut zip lenOut).flatMap[CLByteBuffer, Seq[CLByteBuffer]]{ case (mem,len) => mem::len::Nil }.toList
     val args3: List[Object] = (localMem zip localLen).flatMap[Object, Seq[Object]]{ case (mem,len) => mem::len::Nil }.toList
     val args = args0 ::: args1 ::: args3
-    println(args)
     code.setArgs(args:_*)
 
-    println("total items = " + d.totalNumberOfItems)
-    println("items/group = " + d.numberOfItemsPerGroup)
+    val events = (writeEvents.toList ::: writeLenEvents.toList ::: writeLocalLenEvents.toList ::: writeOutLenEvents).filter(_ != null)
 
-    val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems), Array(d.numberOfItemsPerGroup), (writeEvents.toList ::: writeLenEvents.toList ::: writeLocalLenEvents.toList ::: writeOutLenEvents):_*)
+    // println("total items = " + d.totalNumberOfItems)
+    // println("items/group = " + d.numberOfItemsPerGroup)
+
+    val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems),
+        if (localMem == Nil) null else Array(d.numberOfItemsPerGroup), events:_*)
 
     this.runEvent = runEvent
     this.memOut = memOut
+    // this.gc = (memIn ::: memOut ::: lenIn ::: lenOut ::: localLen).toList
   }
 
   var runEvent: CLEvent = null
   var memOut: List[CLByteBuffer] = null
 
+  // var gc: List[CLByteBuffer] = Nil
+  def collect = {
+    // for (m <- gc)
+      // m.finalize
+    // gc = Nil
+    System.gc // force a collection, which will force native CLMem objects to be finalized and thus released.
+  }
+
   def finish = {
+    runEvent.waitFor
+    runEvent = null
     val bufOuts = (effect.outputSizes zip memOut).map {
       case (len,mem) => {
         val bufOut = ByteBuffer.allocateDirect(len).order(ByteOrder.nativeOrder)
 
         // val readEvent = memOut.read(dev.queue, bufOut, false, runEvent)
-        println("runEvent about to be done: " + runEvent)
-        runEvent.waitFor
+        // println("runEvent about to be done: " + runEvent)
+
         val readEvent = mem.read(dev.queue, bufOut, false)
-        println("readEvent about to be done: " + readEvent)
+        // println("readEvent about to be done: " + readEvent)
         readEvent.waitFor
-        println("queue done")
+        // println("queue done")
+
+        collect
+
         bufOut.rewind
         bufOut
       }
     }
+    memOut = null
     dev.queue.finish
     bufOuts
   }
