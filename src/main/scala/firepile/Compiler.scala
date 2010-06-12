@@ -76,13 +76,13 @@ object Compiler {
     case FunDef(returnType, name, List(Formal(formal, _)), _) => ("\n" +
       "inline " + tree.toCL + "\n" +
       "__kernel void " + kernelName + "(                                                           \n" +
-      "  __constant " + formal.toCL + "* a,                                                        \n" +
+      "  __global const " + formal.toCL + "* a,                                                        \n" +
       "  const int a_len,                                                                          \n" +
       "  __global " + returnType.toCL + "* output,                                                 \n" +
       "  const int output_len)                                                                     \n" +
       "{                                                                                           \n" +
       "  int i = get_global_id(0);                                                                 \n" +
-      "  // if (i < a_len) /* should not happen by construction -- # work items == array length    \n" +
+      "  if (i < output_len)                                                                       \n" +
       "    output[i] = " + name + "(a[i]);                                                         \n" +
       "}                                                                                           \n")
     case _ => throw new RuntimeException("unexpected C AST " + tree.toCL)
@@ -92,15 +92,16 @@ object Compiler {
     case FunDef(returnType, name, List(Formal(formal1, _), Formal(formal2, _)), _) => ("\n" +
       "inline " + tree.toCL + "\n" +
       "__kernel void " + kernelName + "(                                                           \n" +
-      "   __constant     " + formal1.toCL + "* a,                                                  \n" +
+      "   __global const     " + formal1.toCL + "* a,                                                  \n" +
       "   const int a_len,                                                                         \n" +
-      "   __constant     " + formal2.toCL + "* b,                                                  \n" +
+      "   __global const     " + formal2.toCL + "* b,                                                  \n" +
       "   const int b_len,                                                                         \n" +
       "   __global " + returnType.toCL + "* output,                                                \n" +
       "   const int output_len)                                                                    \n" +
       "{                                                                                           \n" +
       "   int i = get_global_id(0);                                                                \n" +
-      "   output[i] = " + name + "(a[i], b[i]);                                                    \n" +
+      "   if (i < output_len)                                                                      \n" +
+      "     output[i] = " + name + "(a[i], b[i]);                                                  \n" +
       "}                                                                                           \n")
     case _ => throw new RuntimeException("unexpected C AST " + tree.toCL)
   }
@@ -141,7 +142,6 @@ object Compiler {
     val k = src.getClass
     val apply = findApplyMethod(src, 1)
     val funs = compileRoot(k.getName, signature(apply)).reverse
-    println(funs)
 
     if (funs.isEmpty)
       throw new RuntimeException("Could not compile method in " + k.getName + "." + apply.getName)
@@ -156,7 +156,6 @@ object Compiler {
     val k = src.getClass
     val apply = findApplyMethod(src, 2)
     val funs = compileRoot(k.getName, signature(apply)).reverse
-    println(funs)
 
     if (funs.isEmpty)
       throw new RuntimeException("Could not compile method in " + k.getName + "." + apply.getName)
@@ -181,7 +180,7 @@ object Compiler {
 "#define T " + returnType.toCL + "                                                  \n" +
 "#define blockSize 128                                                              \n" +
 "__kernel void " + kernelName + "(                                                  \n" +
-"  __constant     T *g_idata, /* thread indexed */                                  \n" +
+"  __global const     T *g_idata, /* thread indexed */                                  \n" +
 "  const int g_idata_length,                                                        \n" +
 "  __global T *g_odata,       /* block indexed */                                   \n" +
 "  const int g_odata_length,                                                        \n" +
@@ -337,15 +336,18 @@ object Compose {
   implicit def Arg2Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal] = new Arg2Marshal[A1,A2]
 
   sealed abstract class Arg[A: FixedSizeMarshal,ArgA<:Arg[A,ArgA]] {
-
-    this : ArgA =>
-
+    this: ArgA =>
     def mapk[B,ArgB<:Arg[B,ArgB]](m: Mapper[A,B,ArgA,ArgB])(implicit dev: Device, mb: FixedSizeMarshal[B]) = new MapKernel[A,B,ArgA,ArgB](dev, m.trees, m.mapTree, m.builder, m.mab)
     def length: Int
     def arity: Int
     def buffers: List[ByteBuffer]
     def reduce(f: (A,A) => A) = value.reduceLeft(f)
     def value: BBArray[A]
+  }
+
+  abstract class Argn[A:FixedSizeMarshal,ArgA<:Arg[A,ArgA]] extends Arg[A,ArgA] {
+    this: ArgA =>
+    def zipWith[B,ArgB<:Arg[B,ArgB]](m: Mapper[A,B,ArgA,ArgB])(implicit dev: Device, mb: FixedSizeMarshal[B]) = new MapKernel[A,B,ArgA,ArgB](dev, m.trees, m.mapTree, m.builder, m.mab)
   }
 
   def idMapper[A:FixedSizeMarshal]: Mapper[A,A,Arg1[A],Arg1[A]] = f2Mapper[A,A]((x:A) => x)
@@ -359,34 +361,65 @@ object Compose {
     def buffers = a.buffer :: Nil
     def value = a
   }
-  class Arg2[A1:FixedSizeMarshal, A2:FixedSizeMarshal](a1: BBArray[A1], a2: BBArray[A2]) extends Arg[(A1,A2),Arg2[A1,A2]] {
+  class Arg2[A1:FixedSizeMarshal, A2:FixedSizeMarshal](a1: BBArray[A1], a2: BBArray[A2]) extends Argn[(A1,A2),Arg2[A1,A2]] {
     assert(a1.length == a2.length)
     def length = a1.length
     def arity = 2
-    def zipWith[B](m: Mapper[(A1,A2),B,Arg2[A1,A2],Arg1[B]])(implicit dev: Device, mb: FixedSizeMarshal[B]) = mapk(m)(dev, mb)
     def buffers = a1.buffer :: a2.buffer :: Nil
     def value = a1 zip a2
   }
-  class Arg3[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal](a1: BBArray[A1], a2: BBArray[A2], a3: BBArray[A3]) extends Arg[(A1,A2,A3),Arg3[A1,A2,A3]] {
+  class Arg3[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal](a1: BBArray[A1], a2: BBArray[A2], a3: BBArray[A3]) extends Argn[(A1,A2,A3),Arg3[A1,A2,A3]] {
     assert(a1.length == a2.length)
     assert(a1.length == a3.length)
     def length = a1.length
     def arity = 3
-    def zipWith[B](m: Mapper[(A1,A2,A3),B,Arg3[A1,A2,A3],Arg1[B]])(implicit dev: Device, mb: FixedSizeMarshal[B]) = mapk(m)(dev, mb)
     def buffers = a1.buffer :: a2.buffer :: a3.buffer :: Nil
     def value = BBArray.fromArray((0 until a1.length).map(i => (a1(i),a2(i),a3(i))).toArray)
+  }
+  class Arg4[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal, A4:FixedSizeMarshal](a1: BBArray[A1], a2: BBArray[A2], a3: BBArray[A3], a4: BBArray[A4]) extends Argn[(A1,A2,A3,A4),Arg4[A1,A2,A3,A4]] {
+    assert(a1.length == a2.length)
+    assert(a1.length == a3.length)
+    assert(a1.length == a4.length)
+    def length = a1.length
+    def arity = 4
+    def buffers = a1.buffer :: a2.buffer :: a3.buffer :: a4.buffer :: Nil
+    def value = BBArray.fromArray((0 until a1.length).map(i => (a1(i),a2(i),a3(i),a4(i))).toArray)
+  }
+  class Arg5[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal](a1: BBArray[A1], a2: BBArray[A2], a3: BBArray[A3], a4: BBArray[A4], a5: BBArray[A5]) extends Argn[(A1,A2,A3,A4,A5),Arg5[A1,A2,A3,A4,A5]] {
+    assert(a1.length == a2.length)
+    assert(a1.length == a3.length)
+    assert(a1.length == a4.length)
+    assert(a1.length == a5.length)
+    def length = a1.length
+    def arity = 5
+    def buffers = a1.buffer :: a2.buffer :: a3.buffer :: a4.buffer :: a5.buffer :: Nil
+    def value = BBArray.fromArray((0 until a1.length).map(i => (a1(i),a2(i),a3(i),a4(i),a5(i))).toArray)
+  }
+  class Arg6[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,A6:FixedSizeMarshal](a1: BBArray[A1], a2: BBArray[A2], a3: BBArray[A3], a4: BBArray[A4], a5: BBArray[A5], a6: BBArray[A6]) extends Argn[(A1,A2,A3,A4,A5,A6),Arg6[A1,A2,A3,A4,A5,A6]] {
+    assert(a1.length == a2.length)
+    assert(a1.length == a3.length)
+    assert(a1.length == a4.length)
+    assert(a1.length == a5.length)
+    assert(a1.length == a6.length)
+    def length = a1.length
+    def arity = 6
+    def buffers = a1.buffer :: a2.buffer :: a3.buffer :: a4.buffer :: a5.buffer :: a6.buffer :: Nil
+    def value = BBArray.fromArray((0 until a1.length).map(i => (a1(i),a2(i),a3(i),a4(i),a5(i),a6(i))).toArray)
   }
 
   implicit def Arg1[A:FixedSizeMarshal](a: BBArray[A]) = new Arg1(a)
   implicit def Arg2[A1:FixedSizeMarshal, A2:FixedSizeMarshal](p: (BBArray[A1], BBArray[A2])) = new Arg2(p._1, p._2)
   implicit def Arg3[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal](p: (BBArray[A1], BBArray[A2], BBArray[A3])) = new Arg3(p._1, p._2, p._3)
+  implicit def Arg4[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal, A4:FixedSizeMarshal](p: (BBArray[A1], BBArray[A2], BBArray[A3], BBArray[A4])) = new Arg4(p._1, p._2, p._3, p._4)
+  implicit def Arg5[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal, A4:FixedSizeMarshal, A5:FixedSizeMarshal](p: (BBArray[A1], BBArray[A2], BBArray[A3], BBArray[A4], BBArray[A5])) = new Arg5(p._1, p._2, p._3, p._4, p._5)
+  implicit def Arg6[A1:FixedSizeMarshal, A2:FixedSizeMarshal, A3:FixedSizeMarshal, A4:FixedSizeMarshal, A5:FixedSizeMarshal, A6:FixedSizeMarshal](p: (BBArray[A1], BBArray[A2], BBArray[A3], BBArray[A4], BBArray[A5], BBArray[A6])) = new Arg6(p._1, p._2, p._3, p._4, p._5, p._6)
 
   def generateMapKernel(tree: Tree, kernelName: String): String = tree match {
     case FunDef(returnType, name, formals, _) => ("\n" +
       "__kernel void " + kernelName + "(                                                           \n" +
       (0 until formals.length).map(i => {
         val Formal(formal, _) = formals(i)
-        "   __constant " + formal.toCL + "* " + varNames(i).toString + ",\n" +
+        "   __global const " + formal.toCL + "* " + varNames(i).toString + ",\n" +
         "   const int " + varNames(i).toString + "_len,\n"
       }).mkString("") +
       "   __global " + returnType.toCL + "* output,                                                \n" +
@@ -409,7 +442,7 @@ object Compose {
       "__kernel void " + kernelName + "(                                                           \n" +
       (0 until mformals.length).map(i => {
         val Formal(formal, _) = mformals(i)
-        "   __constant " + formal.toCL + "* " + varNames(i).toString + ",\n" +
+        "   __global const " + formal.toCL + "* " + varNames(i).toString + ",\n" +
         "   const int " + varNames(i).toString + "_len,\n"
       }).mkString("") +
       "   __global " + rreturnType.toCL + "* output,                                               \n" +
@@ -508,6 +541,24 @@ object Compose {
     val mab = implicitly[Marshal[Arg1[B]]]
     new Mapper[(A1,A2,A3),B,Arg3[A1,A2,A3],Arg1[B]](trees, mapTree, builder, mab)
   }
+  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4)=>B): Mapper[(A1,A2,A3,A4),B,Arg4[A1,A2,A3,A4],Arg1[B]] = {
+    val (mapTree, trees) = compileToTree(f, 3)
+    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
+    val mab = implicitly[Marshal[Arg1[B]]]
+    new Mapper[(A1,A2,A3,A4),B,Arg4[A1,A2,A3,A4],Arg1[B]](trees, mapTree, builder, mab)
+  }
+  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4,A5)=>B): Mapper[(A1,A2,A3,A4,A5),B,Arg5[A1,A2,A3,A4,A5],Arg1[B]] = {
+    val (mapTree, trees) = compileToTree(f, 3)
+    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
+    val mab = implicitly[Marshal[Arg1[B]]]
+    new Mapper[(A1,A2,A3,A4,A5),B,Arg5[A1,A2,A3,A4,A5],Arg1[B]](trees, mapTree, builder, mab)
+  }
+  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,A6:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4,A5,A6)=>B): Mapper[(A1,A2,A3,A4,A5,A6),B,Arg6[A1,A2,A3,A4,A5,A6],Arg1[B]] = {
+    val (mapTree, trees) = compileToTree(f, 3)
+    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
+    val mab = implicitly[Marshal[Arg1[B]]]
+    new Mapper[(A1,A2,A3,A4,A5,A6),B,Arg6[A1,A2,A3,A4,A5,A6],Arg1[B]](trees, mapTree, builder, mab)
+  }
 
   implicit def f2Reducer[B:FixedSizeMarshal](f: (B,B)=>B): Reducer[B] = {
     val (reduce, trees) = compileToTree(f, 2)
@@ -571,14 +622,6 @@ object Compose {
         case t => false
       }.headOption
 
-      println(mapTrees)
-      println(mname)
-      println(mapFd)
-
-      println(reduceTrees)
-      println(rname)
-      println(reduceFd)
-
       (mapFd, reduceFd) match {
         case (Some(mapFd : FunDef), Some(reduceFd : FunDef)) => generateMapReduceKernel(mapFd, reduceFd, kernelName)
         case _ => throw new RuntimeException("Cannot find either map or reduce function in generated code: map=" + mapFd + " reduce=" + reduceFd)
@@ -592,6 +635,7 @@ object Compose {
       val numThreads = 128
       val d = (a: ArgA) => new Dist {
         val totalNumberOfItems = (a.length + numThreads - 1) / numThreads
+        override val numberOfItemsPerGroup = numThreads
         println("block reduce: " + a.length + " -> " + totalNumberOfItems)
       }
       val e = (a: ArgA) => new Effect {
