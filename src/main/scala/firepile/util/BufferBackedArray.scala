@@ -66,20 +66,18 @@ object BufferBackedArray {
     def ofDim[A: FixedSizeMarshal](n: Int) = new BBArray[A](n)
   }
 
-  class BBArray[A: FixedSizeMarshal](private val buf: ByteBuffer) extends ArrayLike[A, BBArray[A]] with Iterable[A] {
+  class BBArray[A: FixedSizeMarshal](val buffer: ByteBuffer) extends ArrayLike[A, BBArray[A]] with Iterable[A] {
     def this(n: Int) = this(ByteBuffer.allocate(n * implicitly[FixedSizeMarshal[A]].size).order(ByteOrder.nativeOrder)) // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
 
-    def buffer: ByteBuffer = buf
-
-    // println("created array with buffer of " + buf.limit + " bytes")
+    // println("created array with buffer of " + buffer.limit + " bytes")
 
     override def newBuilder: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*marshal.size)
 
     lazy val marshal = implicitly[FixedSizeMarshal[A]]
 
-    def apply(i: Int): A = marshal.get(buf, i*marshal.size)
-    def update(i: Int, x: A): Unit = marshal.put(buf, i*marshal.size, x)
-    def length: Int = buf.limit / marshal.size
+    def apply(i: Int): A = marshal.get(buffer, i*marshal.size)
+    def update(i: Int, x: A): Unit = marshal.put(buffer, i*marshal.size, x)
+    def length: Int = buffer.limit / marshal.size
   }
 }
 
