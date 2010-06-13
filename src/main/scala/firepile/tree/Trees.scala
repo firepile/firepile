@@ -36,15 +36,14 @@ object Trees {
             case StructLit(_) => 2
             case Call(_,_) => 3
             case Un(_,_) => 4
-            case Cast(_,_) => 5
+            case Cast(_,_) => 19
             case Bin(_,"*",_) => 6
             case Bin(_,"/",_) => 6
             case Bin(_,"%",_) => 6
             case Bin(_,"+",_) => 7
             case Bin(_,"-",_) => 7
-            case Bin(_,"<<",_) => 8
-            case Bin(_,">>",_) => 8
-            case Bin(_,">>>",_) => 8
+            case Bin(_,"<<",_) => 19
+            case Bin(_,">>",_) => 19
             case Bin(_,"^",_) => 9
             case Bin(_,"|",_) => 9
             case Bin(_,"&",_) => 9
@@ -64,7 +63,7 @@ object Trees {
             if (prio(s) >= prio(t))
                 paren(s)
             else
-                s.toCL
+	        s.toCL
           }
         }
     }

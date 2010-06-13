@@ -88,9 +88,6 @@ object JVM2CL {
   private def setup = {
     // java.class.path is broken in Scala, especially when running under sbt
     //Scene.v.setSootClassPath(Scene.v.defaultClassPath
-    //  + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
-    //  + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
-    //  + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
 
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
       + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"

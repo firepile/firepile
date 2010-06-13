@@ -6,7 +6,7 @@ import firepile.Spaces._
 import firepile.util.BufferBackedArray._
 
 object TestTimeMap2c {
-  val floatX2 = (a:Int) => {
+  val bits = (a:Int) => {
         var i = 0
         var j = 0
         while (j < 32) {
@@ -37,9 +37,9 @@ object TestTimeMap2c {
     val a = Array.tabulate(dataSize)(_.toInt)
 
     {
-      println("1 floatX2 compile");
+      println("1 bits compile");
       val k = time {
-          val k: BBArrayMapKernel1[Int,Int] = floatX2
+          val k: BBArrayMapKernel1[Int,Int] = bits
           k
       }
 
