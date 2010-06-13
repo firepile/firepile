@@ -6,7 +6,7 @@ import firepile.Spaces._
 import firepile.util.BufferBackedArray._
 
 object TestTimeMap2d {
-  val floatX2 = (a:Int) => {
+  val bits = (a:Int) => {
         var i = 0
         var j = 0
         while (j < 32) {
@@ -30,7 +30,7 @@ object TestTimeMap2d {
       println(n + " bbarray sequential map x2");
       time {
         for (i <- 0 until n) {
-          val result = b.map(floatX2)
+          val result = b.map(bits)
           result
         }
       }
