@@ -420,7 +420,7 @@ object Compose {
   def idMapper[A:FixedSizeMarshal]: Mapper[A,A,Arg1[A],Arg1[A]] = f2Mapper[A,A]((x:A) => x)
 
   class Arg1[A:FixedSizeMarshal](a: BBArray[A]) extends Arg[A,Arg1[A]] {
-    val m = idMapper[A]
+    lazy val m = idMapper[A]
     def reduceBlock(r: Reducer[A])(implicit dev: Device) = new MapBlockReduceKernel[A,A,Arg1[A],Arg1[A]](dev, m.trees, r.trees, m.mapTree, r.reduceTree, m.builder, m.mab)
     def reduce(r: Reducer[A])(implicit dev: Device) = reduceBlock(r)(dev).reduce(r.reduceFun)
     def length = a.length
