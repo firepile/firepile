@@ -46,7 +46,6 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
 
     // println("reading back " + e.outputSizes + " bytes")
 
-    println("writing to " + dev.queue)
     val writeEvents = (buffers zip memIn).map{ case (buffer,mem) => mem.write(dev.queue, buffer, false) }
     val writeLenEvents = (buffers zip lenIn).map{ case (buffer,mem) => mem.write(dev.queue, {
         val b = ByteBuffer.allocate(fixedSizeMarshal[Int].size).order(ByteOrder.nativeOrder)
@@ -79,7 +78,6 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
     // println("total items = " + d.totalNumberOfItems)
     // println("items/group = " + d.numberOfItemsPerGroup)
 
-    println("kernel to " + dev.queue)
     val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems),
         if (localMem == Nil) null else Array(d.numberOfItemsPerGroup), events:_*)
 
@@ -100,7 +98,6 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
         // val readEvent = memOut.read(dev.queue, bufOut, false, runEvent)
         // println("runEvent about to be done: " + runEvent)
 
-    println("reading " + len + " from " + dev.queue)
         val readEvent = mem.read(dev.queue, bufOut, false)
         // println("readEvent about to be done: " + readEvent)
         readEvent.waitFor
@@ -111,7 +108,6 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
       }
     }
     memOut = null
-    println("finishing " + dev.queue)
     dev.queue.finish
     bufOuts
   }
