@@ -1,5 +1,6 @@
 package firepile
 
+import firepile.util.BufferBackedArray.allocBuffer
 import java.nio.ByteBuffer 
 import java.nio.ByteOrder 
 
@@ -35,7 +36,7 @@ object Marshaling {
     def sizes(len: Int) = size :: Nil
     def align = implicitly[FixedSizeMarshal[A]].align
     def toBuffer(a: A) = {
-      val b = ByteBuffer.allocate(size).order(ByteOrder.nativeOrder)
+      val b = allocBuffer(size)
       implicitly[FixedSizeMarshal[A]].put(b, 0, a)
       b :: Nil
     }

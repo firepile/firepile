@@ -7,6 +7,9 @@ object BufferBackedArray {
   import scala.collection.mutable.Builder
   import firepile.Marshaling._
 
+  def allocBuffer(n: Int) = ByteBuffer.allocate(n).order(ByteOrder.nativeOrder)
+  def allocDirectBuffer(n: Int) = ByteBuffer.allocateDirect(n).order(ByteOrder.nativeOrder)
+
   import scala.collection.generic.CanBuildFrom
   implicit def bbarrayCBFromArray[A: FixedSizeMarshal] = new CanBuildFrom[Array[_],A,BBArray[A]] {
     def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
@@ -18,7 +21,7 @@ object BufferBackedArray {
   }
 
   class BBArrayBuilder[A: FixedSizeMarshal](private var b: ByteBuffer) extends Builder[A, BBArray[A]] {
-    def this(n: Int) = this(ByteBuffer.allocate(n).order(ByteOrder.nativeOrder))
+    def this(n: Int) = this(allocBuffer(n))
 
     override def +=(elem: A) = {
       val pos = b.position
@@ -32,7 +35,7 @@ object BufferBackedArray {
 
       if (b.capacity < pos + m.size) {
         // println("growing at " + pos + " to " + (b.capacity + m.size) * 2)
-        val nb = ByteBuffer.allocate(b.capacity*2).order(ByteOrder.nativeOrder)
+        val nb = allocBuffer(b.capacity*2)
         b = nb.put(b.rewind.asInstanceOf[ByteBuffer])
       }
 
@@ -67,7 +70,17 @@ object BufferBackedArray {
   }
 
   class BBArray[A: FixedSizeMarshal](val buffer: ByteBuffer) extends ArrayLike[A, BBArray[A]] with Iterable[A] {
-    def this(n: Int) = this(ByteBuffer.allocate(n * implicitly[FixedSizeMarshal[A]].size).order(ByteOrder.nativeOrder)) // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
+    def this(n: Int) = this(allocBuffer(n * implicitly[FixedSizeMarshal[A]].size)) // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
+
+    def directCopy =
+      if (buffer.isDirect) {
+        this
+      }
+      else {
+        val copy = allocDirectBuffer(buffer.limit)
+        copy.put(buffer)
+        new BBArray[A](copy)
+      }
 
     // println("created array with buffer of " + buffer.limit + " bytes")
 

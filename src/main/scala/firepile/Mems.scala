@@ -1,6 +1,7 @@
 package firepile
 
-import firepile.util.BufferBackedArray._
+import firepile.util.BufferBackedArray.allocDirectBuffer
+import firepile.util.BufferBackedArray.allocBuffer
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -18,10 +19,16 @@ object Mems {
   }
 
   class GlobalMem(dev: Device) extends Mem[CLByteBuffer] {
+    def allocForRead(buffer: ByteBuffer) = createByteBuffer(CLMem.Usage.Input, buffer, if (buffer.isDirect) false else true)
+    def allocForReadWrite(buffer: ByteBuffer) = createByteBuffer(CLMem.Usage.InputOutput, buffer, if (buffer.isDirect) false else true)
+    def allocForWrite(buffer: ByteBuffer) = createByteBuffer(CLMem.Usage.Output, buffer, if (buffer.isDirect) false else true)
+
+    private def createByteBuffer(kind: CLMem.Usage, b: ByteBuffer, copy: Boolean): CLByteBuffer = dev.context.createByteBuffer(kind, b, copy)
+
     protected def alloc(usage: CLMem.Usage, size: Int): CLByteBuffer = usage match {
-      case CLMem.Usage.Input       => dev.context.createByteBuffer(usage, ByteBuffer.allocate(size).order(ByteOrder.nativeOrder), true)
-      case CLMem.Usage.InputOutput => dev.context.createByteBuffer(usage, ByteBuffer.allocate(size).order(ByteOrder.nativeOrder), true)
-      case CLMem.Usage.Output      => dev.context.createByteBuffer(usage, ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder), true)
+      case CLMem.Usage.Input       => createByteBuffer(usage, allocBuffer(size), true)
+      case CLMem.Usage.InputOutput => createByteBuffer(usage, allocBuffer(size), true)
+      case CLMem.Usage.Output      => createByteBuffer(usage, allocDirectBuffer(size), true)
     }
   }
 

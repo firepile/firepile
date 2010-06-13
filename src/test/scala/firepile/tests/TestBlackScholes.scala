@@ -30,9 +30,9 @@ object TestBlackScholes {
 
     // val h_Call    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
     // val h_Put     = BBArray.tabulate[Float](optionCount)(i => -1.0f)
-    val h_S       = BBArray.tabulate[Float](optionCount)(i => randFloat(5.0f, 30.0f))
-    val h_X       = BBArray.tabulate[Float](optionCount)(i => randFloat(1.0f, 100.0f))
-    val h_T       = BBArray.tabulate[Float](optionCount)(i => randFloat(0.25f, 10.0f))
+    val h_S       = BBArray.tabulate[Float](optionCount)(i => randFloat(5.0f, 30.0f)).directCopy
+    val h_X       = BBArray.tabulate[Float](optionCount)(i => randFloat(1.0f, 100.0f)).directCopy
+    val h_T       = BBArray.tabulate[Float](optionCount)(i => randFloat(0.25f, 10.0f)).directCopy
 
     def BlackScholesK(S: Float, X: Float, T: Float): (Float,Float) = {
           val                    R = 0.02f
