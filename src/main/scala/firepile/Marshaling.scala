@@ -106,22 +106,26 @@ object Marshaling {
     val manifest = Predef.manifest[Double]
   }
 
+  val padTuples = true
+  def alignment[A](m: FixedSizeMarshal[A]) = if (padTuples) (8 max m.align) else m.align
+  def pad[A](m: FixedSizeMarshal[A]) = if (padTuples) 8 else 1
+
   implicit def tuple2Marshal[A: FixedSizeMarshal, B:FixedSizeMarshal] = new T2M[A,B]
 
   class T2M[A: FixedSizeMarshal, B:FixedSizeMarshal] extends FixedSizeMarshal[Tuple2[A,B]] {
     val ma = implicitly[FixedSizeMarshal[A]]
     val mb = implicitly[FixedSizeMarshal[B]]
 
-    lazy val size = (ma.size max mb.align) + mb.size
-    lazy val align = ma.align max mb.align
+    lazy val size = (ma.size max alignment(mb)) + (mb.size max pad(mb))
+    lazy val align = alignment(ma) max alignment(mb)
 
     def put(buf:ByteBuffer, i: Int, x: Tuple2[A,B]) = {
         ma.put(buf, i, x._1)
-        mb.put(buf, i + (ma.size max mb.align), x._2)
+        mb.put(buf, i + (ma.size max alignment(mb)), x._2)
     }
     def get(buf:ByteBuffer, i: Int) = {
         val fst: A = ma.get(buf, i)
-        val snd: B = mb.get(buf, i + (ma.size max mb.align))
+        val snd: B = mb.get(buf, i + (ma.size max alignment(mb)))
         (fst, snd)
     }
 
@@ -135,18 +139,18 @@ object Marshaling {
     val mb = implicitly[FixedSizeMarshal[B]]
     val mc = implicitly[FixedSizeMarshal[C]]
 
-    lazy val size = (ma.size max mb.align) + (mb.size max mc.align) + mc.size
-    lazy val align = ma.align max mb.align max mc.align
+    lazy val size = (ma.size max alignment(mb)) + (mb.size max alignment(mc)) + (mc.size max pad(mc))
+    lazy val align = alignment(ma) max alignment(mb) max alignment(mc)
 
     def put(buf:ByteBuffer, i: Int, x: Tuple3[A,B,C]) = {
         ma.put(buf, i, x._1)
-        mb.put(buf, i + (ma.size max mb.align), x._2)
-        mc.put(buf, i + (ma.size max mb.align) + (mb.size max mc.align), x._3)
+        mb.put(buf, i + (ma.size max alignment(mb)), x._2)
+        mc.put(buf, i + (ma.size max alignment(mb)) + (mb.size max alignment(mc)), x._3)
     }
     def get(buf:ByteBuffer, i: Int) = {
         val fst: A = ma.get(buf, i)
-        val snd: B = mb.get(buf, i + (ma.size max mb.align))
-        val thd: C = mc.get(buf, i + (ma.size max mb.align) + (mb.size max mc.align))
+        val snd: B = mb.get(buf, i + (ma.size max alignment(mb)))
+        val thd: C = mc.get(buf, i + (ma.size max alignment(mb)) + (mb.size max alignment(mc)))
         (fst, snd, thd)
     }
 
@@ -161,29 +165,29 @@ object Marshaling {
     val mc = implicitly[FixedSizeMarshal[C]]
     val md = implicitly[FixedSizeMarshal[D]]
 
-    lazy val size = (ma.size max mb.align) + (mb.size max mc.align) +
-                    (mc.size max md.align) + md.size
-    lazy val align = ma.align max mb.align max mc.align max md.align
+    lazy val size = (ma.size max alignment(mb)) + (mb.size max alignment(mc)) +
+                    (mc.size max alignment(md)) + (md.size max pad(md))
+    lazy val align = alignment(ma) max alignment(mb) max alignment(mc) max alignment(md)
 
     def put(buf:ByteBuffer, i: Int, x: Tuple4[A,B,C,D]) = {
         var j = i
         ma.put(buf, j, x._1)
-        j += ma.size max mb.align
+        j += ma.size max alignment(mb)
         mb.put(buf, j, x._2)
-        j += mb.size max mc.align
+        j += mb.size max alignment(mc)
         mc.put(buf, j, x._3)
-        j += mc.size max md.align
+        j += mc.size max alignment(md)
         md.put(buf, j, x._4)
     }
 
     def get(buf:ByteBuffer, i: Int) = {
         var j = i
         val fst: A = ma.get(buf, j)
-        j += ma.size max mb.align
+        j += ma.size max alignment(mb)
         val snd: B = mb.get(buf, j)
-        j += mb.size max mc.align
+        j += mb.size max alignment(mc)
         val thd: C = mc.get(buf, j)
-        j += mc.size max md.align
+        j += mc.size max alignment(md)
         val frh: D = md.get(buf, j)
         (fst, snd, thd, frh)
     }
@@ -200,34 +204,34 @@ object Marshaling {
     val md = implicitly[FixedSizeMarshal[D]]
     val me = implicitly[FixedSizeMarshal[E]]
 
-    lazy val size = (ma.size max mb.align) + (mb.size max mc.align) +
-                    (mc.size max md.align) + (md.size max me.align) +
-                    me.size
-    lazy val align = ma.align max mb.align max mc.align max md.align max me.align
+    lazy val size = (ma.size max alignment(mb)) + (mb.size max alignment(mc)) +
+                    (mc.size max alignment(md)) + (md.size max alignment(me)) +
+                    (me.size max pad(me))
+    lazy val align = alignment(ma) max alignment(mb) max alignment(mc) max alignment(md) max alignment(me)
 
     def put(buf:ByteBuffer, i: Int, x: Tuple5[A,B,C,D,E]) = {
         var j = i
         ma.put(buf, j, x._1)
-        j += ma.size max mb.align
+        j += ma.size max alignment(mb)
         mb.put(buf, j, x._2)
-        j += mb.size max mc.align
+        j += mb.size max alignment(mc)
         mc.put(buf, j, x._3)
-        j += mc.size max md.align
+        j += mc.size max alignment(md)
         md.put(buf, j, x._4)
-        j += md.size max me.align
+        j += md.size max alignment(me)
         me.put(buf, j, x._5)
     }
 
     def get(buf:ByteBuffer, i: Int) = {
         var j = i
         val fst: A = ma.get(buf, j)
-        j += ma.size max mb.align
+        j += ma.size max alignment(mb)
         val snd: B = mb.get(buf, j)
-        j += mb.size max mc.align
+        j += mb.size max alignment(mc)
         val thd: C = mc.get(buf, j)
-        j += mc.size max md.align
+        j += mc.size max alignment(md)
         val frh: D = md.get(buf, j)
-        j += md.size max me.align
+        j += md.size max alignment(me)
         val fth: E = me.get(buf, j)
         (fst, snd, thd, frh, fth)
     }
@@ -245,38 +249,38 @@ object Marshaling {
     val me = implicitly[FixedSizeMarshal[E]]
     val mf = implicitly[FixedSizeMarshal[F]]
 
-    lazy val size = (ma.size max mb.align) + (mb.size max mc.align) +
-                    (mc.size max md.align) + (md.size max me.align) +
-                    (me.size max mf.align) + mf.size
-    lazy val align = ma.align max mb.align max mc.align max md.align max me.align max mf.align
+    lazy val size = (ma.size max alignment(mb)) + (mb.size max alignment(mc)) +
+                    (mc.size max alignment(md)) + (md.size max alignment(me)) +
+                    (me.size max alignment(mf)) + (mf.size max pad(mf))
+    lazy val align = alignment(ma) max alignment(mb) max alignment(mc) max alignment(md) max alignment(me) max alignment(mf)
 
     def put(buf:ByteBuffer, i: Int, x: Tuple6[A,B,C,D,E,F]) = {
         var j = i
         ma.put(buf, j, x._1)
-        j += ma.size max mb.align
+        j += ma.size max alignment(mb)
         mb.put(buf, j, x._2)
-        j += mb.size max mc.align
+        j += mb.size max alignment(mc)
         mc.put(buf, j, x._3)
-        j += mc.size max md.align
+        j += mc.size max alignment(md)
         md.put(buf, j, x._4)
-        j += md.size max me.align
+        j += md.size max alignment(me)
         me.put(buf, j, x._5)
-        j += me.size max mf.align
+        j += me.size max alignment(mf)
         mf.put(buf, j, x._6)
     }
 
     def get(buf:ByteBuffer, i: Int) = {
         var j = i
         val fst: A = ma.get(buf, j)
-        j += ma.size max mb.align
+        j += ma.size max alignment(mb)
         val snd: B = mb.get(buf, j)
-        j += mb.size max mc.align
+        j += mb.size max alignment(mc)
         val thd: C = mc.get(buf, j)
-        j += mc.size max md.align
+        j += mc.size max alignment(md)
         val frh: D = md.get(buf, j)
-        j += md.size max me.align
+        j += md.size max alignment(me)
         val fth: E = me.get(buf, j)
-        j += me.size max mf.align
+        j += me.size max alignment(mf)
         val sxh: F = mf.get(buf, j)
         (fst, snd, thd, frh, fth, sxh)
     }

@@ -18,6 +18,7 @@ object Trees {
         case s @ Call(_,_) => Eval(s).toCL
         case s @ Cast(_,_) => Eval(s).toCL
         case s @ Assign(_,_) => Eval(s).toCL
+        case s @ StructLit(_) => Eval(s).toCL
         case s => s.toCL
       }
     }
@@ -32,6 +33,7 @@ object Trees {
             case FloatLit(_) => 1
             case DoubleLit(_) => 1
             case Select(_,_) => 2
+            case StructLit(_) => 2
             case Call(_,_) => 3
             case Un(_,_) => 4
             case Cast(_,_) => 5

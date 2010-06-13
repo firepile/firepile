@@ -46,6 +46,7 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
 
     // println("reading back " + e.outputSizes + " bytes")
 
+    println("writing to " + dev.queue)
     val writeEvents = (buffers zip memIn).map{ case (buffer,mem) => mem.write(dev.queue, buffer, false) }
     val writeLenEvents = (buffers zip lenIn).map{ case (buffer,mem) => mem.write(dev.queue, {
         val b = ByteBuffer.allocate(fixedSizeMarshal[Int].size).order(ByteOrder.nativeOrder)
@@ -78,24 +79,16 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
     // println("total items = " + d.totalNumberOfItems)
     // println("items/group = " + d.numberOfItemsPerGroup)
 
+    println("kernel to " + dev.queue)
     val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems),
         if (localMem == Nil) null else Array(d.numberOfItemsPerGroup), events:_*)
 
     this.runEvent = runEvent
     this.memOut = memOut
-    // this.gc = (memIn ::: memOut ::: lenIn ::: lenOut ::: localLen).toList
   }
 
   var runEvent: CLEvent = null
   var memOut: List[CLByteBuffer] = null
-
-  // var gc: List[CLByteBuffer] = Nil
-  def collect = {
-    // for (m <- gc)
-      // m.finalize
-    // gc = Nil
-    System.gc // force a collection, which will force native CLMem objects to be finalized and thus released.
-  }
 
   def finish = {
     runEvent.waitFor
@@ -107,18 +100,18 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
         // val readEvent = memOut.read(dev.queue, bufOut, false, runEvent)
         // println("runEvent about to be done: " + runEvent)
 
+    println("reading " + len + " from " + dev.queue)
         val readEvent = mem.read(dev.queue, bufOut, false)
         // println("readEvent about to be done: " + readEvent)
         readEvent.waitFor
         // println("queue done")
-
-        collect
 
         bufOut.rewind
         bufOut
       }
     }
     memOut = null
+    println("finishing " + dev.queue)
     dev.queue.finish
     bufOuts
   }

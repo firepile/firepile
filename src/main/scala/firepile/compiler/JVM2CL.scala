@@ -265,9 +265,11 @@ object JVM2CL {
   }
 
   private def removeThis(body: List[Tree]): List[Tree] = {
-    symtab.locals.remove(Id("this"))
     body match {
-      case Eval(Assign(Id("this"), _))::ts => removeThis(ts)
+      case Eval(Assign(v: Id, Id("_this")))::ts => {
+        symtab.locals.remove(v)
+        removeThis(ts)
+      }
       case t::ts => t::removeThis(ts)
       case Nil => Nil
     }
@@ -602,14 +604,18 @@ object JVM2CL {
 
     case GNewInvoke(baseTyp, method @ SMethodRef(_, "<init>", _, _, _), args) => {
       if (baseTyp.getSootClass.getName.equals("scala.Tuple2")) {
-        val name = freshName("_U")
-        symtab.addLocalVar(ANY_TYPE, Id(name))
         Cast(StructType("Tuple2"), StructLit(args.map {
           // scala.runtime.BoxesRunTime.boxToFloat(float) : Object
-          case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToInt", _, _, _), List(value)) =>
+          case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToInt", _, _, _), List(value)) => {
+            val name = freshName("union")
+            symtab.addLocalVar(ANY_TYPE, Id(name))
             Comma(Assign(Select(Id(name), "i"), translateExp(value)), Id(name))
-          case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToFloat", _, _, _), List(value)) =>
+          }
+          case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToFloat", _, _, _), List(value)) => {
+            val name = freshName("union")
+            symtab.addLocalVar(ANY_TYPE, Id(name))
             Comma(Assign(Select(Id(name), "f"), translateExp(value)), Id(name))
+          }
           case v => translateExp(v)
         }))
       }
@@ -765,7 +771,14 @@ object JVM2CL {
         case GGoto(target) => GoTo(translateLabel(target))
         case GNop() => Nop
         case GReturnVoid() => Return
-        case GReturn(op) => Return(translateExp(op))
+        case GReturn(op) => Return(translateExp(op)) match {
+          case Return(Cast(typ, StructLit(fields))) => {
+            val tmp = freshName("ret")
+            symtab.addLocalVar(typ, Id(tmp))
+            Seq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), Return(Id(tmp)))
+          }
+          case t => t
+        }
         case GIf(cond, target) => If(translateExp(cond), GoTo(translateLabel(target)), Nop)
         case GInvokeStmt(invokeExpr) => Eval(translateExp(invokeExpr))
 
