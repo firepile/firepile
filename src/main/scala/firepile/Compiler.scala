@@ -308,32 +308,99 @@ object Compose {
 
   implicit def arg2array[A](a: Arg[A,_]) = a.value
 
-  class Arg1Marshal[A:FixedSizeMarshal] extends Marshal[Arg1[A]] {
-    def sizes(a: Arg1[A]) = sizes(a.length)
+  abstract class ArgMarshal[ArgA <: Arg[_,_]] extends Marshal[ArgA] {
+    def sizes(a: ArgA) = sizes(a.length)
+    def sizes(len: Int): List[Int]
+    def align: Int
+    def toBuffer(a: ArgA) = a.buffers
+  }
+
+  class Arg1Marshal[A:FixedSizeMarshal] extends ArgMarshal[Arg1[A]] {
     def sizes(len: Int) = (len * implicitly[FixedSizeMarshal[A]].size) :: Nil
     def align: Int = implicitly[FixedSizeMarshal[A]].align
-    def toBuffer(a: Arg1[A]) = a.buffers
     def fromBuffer(bs: List[ByteBuffer]) = bs match {
       case b :: Nil => new Arg1(new BBArray[A](b))
       case _ => throw new MatchError
     }
   }
 
-  class Arg2Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal] extends Marshal[Arg2[A1,A2]] {
-    def sizes(a: Arg2[A1,A2]) = sizes(a.length)
+  class Arg2Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal] extends ArgMarshal[Arg2[A1,A2]] {
     def sizes(len: Int) = 
         (len * implicitly[FixedSizeMarshal[A1]].size) ::
         (len * implicitly[FixedSizeMarshal[A2]].size) :: Nil
     def align: Int = implicitly[FixedSizeMarshal[A1]].align max implicitly[FixedSizeMarshal[A2]].align
-    def toBuffer(a: Arg2[A1,A2]) = a.buffers
     def fromBuffer(bs: List[ByteBuffer]) = bs match {
       case b1 :: b2 :: Nil => new Arg2(new BBArray[A1](b1), new BBArray[A2](b2))
       case _ => throw new MatchError
     }
   }
 
+  class Arg3Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal] extends ArgMarshal[Arg3[A1,A2,A3]] {
+    def sizes(len: Int) = 
+        (len * implicitly[FixedSizeMarshal[A1]].size) ::
+        (len * implicitly[FixedSizeMarshal[A2]].size) ::
+        (len * implicitly[FixedSizeMarshal[A3]].size) :: Nil
+    def align: Int = implicitly[FixedSizeMarshal[A1]].align max implicitly[FixedSizeMarshal[A2]].align max
+                     implicitly[FixedSizeMarshal[A3]].align
+    def fromBuffer(bs: List[ByteBuffer]) = bs match {
+      case b1 :: b2 :: b3 :: Nil => new Arg3(new BBArray[A1](b1), new BBArray[A2](b2), new BBArray[A3](b3))
+      case _ => throw new MatchError
+    }
+  }
+
+  class Arg4Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal] extends ArgMarshal[Arg4[A1,A2,A3,A4]] {
+    def sizes(len: Int) = 
+        (len * implicitly[FixedSizeMarshal[A1]].size) ::
+        (len * implicitly[FixedSizeMarshal[A2]].size) ::
+        (len * implicitly[FixedSizeMarshal[A3]].size) ::
+        (len * implicitly[FixedSizeMarshal[A4]].size) :: Nil
+    def align: Int = implicitly[FixedSizeMarshal[A1]].align max implicitly[FixedSizeMarshal[A2]].align max
+                     implicitly[FixedSizeMarshal[A3]].align max implicitly[FixedSizeMarshal[A4]].align
+    def fromBuffer(bs: List[ByteBuffer]) = bs match {
+      case b1 :: b2 :: b3 :: b4 :: Nil => new Arg4(new BBArray[A1](b1), new BBArray[A2](b2), new BBArray[A3](b3), new BBArray[A4](b4))
+      case _ => throw new MatchError
+    }
+  }
+
+  class Arg5Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal] extends ArgMarshal[Arg5[A1,A2,A3,A4,A5]] {
+    def sizes(len: Int) = 
+        (len * implicitly[FixedSizeMarshal[A1]].size) ::
+        (len * implicitly[FixedSizeMarshal[A2]].size) ::
+        (len * implicitly[FixedSizeMarshal[A3]].size) ::
+        (len * implicitly[FixedSizeMarshal[A4]].size) ::
+        (len * implicitly[FixedSizeMarshal[A5]].size) :: Nil
+    def align: Int = implicitly[FixedSizeMarshal[A1]].align max implicitly[FixedSizeMarshal[A2]].align max
+                     implicitly[FixedSizeMarshal[A3]].align max implicitly[FixedSizeMarshal[A4]].align max
+                     implicitly[FixedSizeMarshal[A5]].align
+    def fromBuffer(bs: List[ByteBuffer]) = bs match {
+      case b1 :: b2 :: b3 :: b4 :: b5 :: Nil => new Arg5(new BBArray[A1](b1), new BBArray[A2](b2), new BBArray[A3](b3), new BBArray[A4](b4), new BBArray[A5](b5))
+      case _ => throw new MatchError
+    }
+  }
+
+  class Arg6Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,A6:FixedSizeMarshal] extends ArgMarshal[Arg6[A1,A2,A3,A4,A5,A6]] {
+    def sizes(len: Int) = 
+        (len * implicitly[FixedSizeMarshal[A1]].size) ::
+        (len * implicitly[FixedSizeMarshal[A2]].size) ::
+        (len * implicitly[FixedSizeMarshal[A3]].size) ::
+        (len * implicitly[FixedSizeMarshal[A4]].size) ::
+        (len * implicitly[FixedSizeMarshal[A5]].size) ::
+        (len * implicitly[FixedSizeMarshal[A6]].size) :: Nil
+    def align: Int = implicitly[FixedSizeMarshal[A1]].align max implicitly[FixedSizeMarshal[A2]].align max
+                     implicitly[FixedSizeMarshal[A3]].align max implicitly[FixedSizeMarshal[A4]].align max
+                     implicitly[FixedSizeMarshal[A5]].align max implicitly[FixedSizeMarshal[A6]].align
+    def fromBuffer(bs: List[ByteBuffer]) = bs match {
+      case b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: Nil => new Arg6(new BBArray[A1](b1), new BBArray[A2](b2), new BBArray[A3](b3), new BBArray[A4](b4), new BBArray[A5](b5), new BBArray[A6](b6))
+      case _ => throw new MatchError
+    }
+  }
+
   implicit def Arg1Marshal[A:FixedSizeMarshal] = new Arg1Marshal[A]
   implicit def Arg2Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal] = new Arg2Marshal[A1,A2]
+  implicit def Arg3Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal] = new Arg3Marshal[A1,A2,A3]
+  implicit def Arg4Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal] = new Arg4Marshal[A1,A2,A3,A4]
+  implicit def Arg5Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal] = new Arg5Marshal[A1,A2,A3,A4,A5]
+  implicit def Arg6Marshal[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,A6:FixedSizeMarshal] = new Arg6Marshal[A1,A2,A3,A4,A5,A6]
 
   sealed abstract class Arg[A: FixedSizeMarshal,ArgA<:Arg[A,ArgA]] {
     this: ArgA =>
@@ -498,7 +565,51 @@ object Compose {
   trait KernelLike {
     def trees: List[Tree]
 
-    lazy val src = structs + prototypes + functions + kernelSrc(trees)
+    lazy val src = header + structs + prototypes + functions + kernelSrc(trees)
+
+    private def header: String = ("\n" +
+      "typedef union {                                      \n" +
+      "  char b;                                            \n" +
+      "  short s;                                           \n" +
+      "  ushort c;                                          \n" +
+      "  int i;                                             \n" +
+      "  long l;                                            \n" +
+      "  float f;                                           \n" +
+      "  double d;                                          \n" +
+      "  __global void *gp;                                 \n" +
+      "  __local void *lp;                                  \n" +
+      "} __any__;                                           \n" +
+      "struct Tuple2 {                                      \n" +
+      "  __any__ _1;                                        \n" +
+      "  __any__ _2;                                        \n" +
+      "};                                                   \n" +
+      "struct Tuple3 {                                      \n" +
+      "  __any__ _1;                                        \n" +
+      "  __any__ _2;                                        \n" +
+      "  __any__ _3;                                        \n" +
+      "};                                                   \n" +
+      "struct Tuple4 {                                      \n" +
+      "  __any__ _1;                                        \n" +
+      "  __any__ _2;                                        \n" +
+      "  __any__ _3;                                        \n" +
+      "  __any__ _4;                                        \n" +
+      "};                                                   \n" +
+      "struct Tuple5 {                                      \n" +
+      "  __any__ _1;                                        \n" +
+      "  __any__ _2;                                        \n" +
+      "  __any__ _3;                                        \n" +
+      "  __any__ _4;                                        \n" +
+      "  __any__ _5;                                        \n" +
+      "};                                                   \n" +
+      "struct Tuple6 {                                      \n" +
+      "  __any__ _1;                                        \n" +
+      "  __any__ _2;                                        \n" +
+      "  __any__ _3;                                        \n" +
+      "  __any__ _4;                                        \n" +
+      "  __any__ _5;                                        \n" +
+      "  __any__ _6;                                        \n" +
+      "};                                                   \n" +
+      "\n")
 
     private def structs = trees.map {
         case t @ StructDef(name, fields) => t.toCL + "\n"

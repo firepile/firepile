@@ -193,6 +193,12 @@ object Trees {
       def toCL = "{\n" + decls.map((t:Tree) => indent(stmt(t))).mkString("") +
                 indent(body.toCL) + "}"
     }
+    object Comma {
+      def apply(exps: Tree*): Comma = Comma(exps.toList)
+    }
+    case class Comma(exps: List[Tree]) extends Tree {
+      def toCL = exps.map((t:Tree) => t.toCL).mkString("(", ", ", ")")
+    }
     object Seq {
       def apply(stmts: Tree*): Seq = Seq(stmts.toList)
     }
@@ -206,7 +212,7 @@ object Trees {
         def toCL = typ.toCL + " " + name + ";\n"
     }
     object Formal {
-        def apply(typ: Tree, name: Id): Formal = this(typ, name.name)
+        def apply(typ: Tree, name: Id): Formal = Formal(typ, name.name)
     }
     case class Formal(typ: Tree, name: String) extends Tree {
         def toCL = typ.toCL + " " + name
@@ -227,9 +233,9 @@ object Trees {
         def toCL = "__kernel void " + name + formals.map((t:Tree) => t.toCL).mkString("(", ", ", ") {\n") + indent(body.toCL) + "}\n\n"
     }
     object StructDef {
-        def apply(name: Id, fields: List[Tree]): StructDef = this(name.name, fields)
-        def apply(name: Id, fields: Tree*): StructDef = this(name.name, fields.toList)
-        def apply(name: String, fields: Tree*): StructDef = this(name, fields.toList)
+        def apply(name: Id, fields: List[Tree]): StructDef = StructDef(name.name, fields)
+        def apply(name: Id, fields: Tree*): StructDef = StructDef(name.name, fields.toList)
+        def apply(name: String, fields: Tree*): StructDef = StructDef(name, fields.toList)
     }
     case class StructDef(name: String, fields: List[Tree]) extends Tree {
         def toCL = "struct " + name + " {\n" +
@@ -245,6 +251,12 @@ object Trees {
     case class ConstType(typ: Tree) extends Tree {
         def toCL = "const " + typ.toCL
     }
+    object StructLit {
+        def apply(fields: Tree*): StructLit = StructLit(fields.toList)
+    }
+    case class StructLit(fields: List[Tree]) extends Tree {
+        def toCL = "{ " + fields.map((t:Tree) => t.toCL).mkString(", ") + " }"
+    }
     object StructType {
         def apply(name: Id): StructType = StructType(name.name)
     }
@@ -252,7 +264,7 @@ object Trees {
         def toCL = "struct " + name
     }
     object ArrayDef {
-        def apply(name: Id, typ: Tree, size: Tree): ArrayDef = this(name.name, typ, size)
+        def apply(name: Id, typ: Tree, size: Tree): ArrayDef = ArrayDef(name.name, typ, size)
     }
     case class ArrayDef(name: String, typ: Tree, size: Tree) extends Tree {
         def toCL = typ.toCL + " " + name + "[" + size.toCL + "];\n"
