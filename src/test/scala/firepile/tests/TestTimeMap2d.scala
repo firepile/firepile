@@ -26,8 +26,8 @@ object TestTimeMap2d {
     val a = Array.tabulate(dataSize)(_.toInt)
 
     {
-      val bx: BBArray[Float] = a
-      val b: BBArray[Float] = bx.directCopy
+      val bx: BBArray[Int] = a
+      val b: BBArray[Int] = bx.directCopy
       println(n + " bbarray sequential map x2");
       time {
         for (i <- 0 until n) {
