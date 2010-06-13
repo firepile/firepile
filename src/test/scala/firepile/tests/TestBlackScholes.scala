@@ -43,9 +43,15 @@ object TestBlackScholes {
 
       val k = f2Mapper(BlackScholesK _)
       val k2 = Arg3(h_S,h_X,h_T).mapk(k)
+      {
+        // Force compilation once
+        val r = k2(h_S,h_X,h_T)
+        r.force
+      }
+
       val result = time {
         for (i <- 0 until n) {
-          val r = k2.apply(h_S,h_X,h_T)
+          val r = k2(h_S,h_X,h_T)
           r.force
         }
       }
