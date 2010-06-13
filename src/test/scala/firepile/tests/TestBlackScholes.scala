@@ -25,6 +25,7 @@ object TestBlackScholes {
       (min + r * (max - min)).toFloat
     }
 
+    println("BS x " + n + " " + optionCount)
 
 
     // val h_Call    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
