@@ -34,7 +34,8 @@ object TestTimeMap1c {
           k
       }
 
-      val b: BBArray[Float] = a
+      val bx: BBArray[Float] = a
+      val b: BBArray[Float] = bx.directCopy
 
       println(n + " bbarray map x2");
       time {
