@@ -11,6 +11,9 @@ import firepile.util.Math.{sqrt,log,exp}
 
 object TestBlackScholes {
   def main(args: Array[String]) = {
+    val optionCount = if (args.length > 0) args(0).toInt else 4000000
+    val n = if (args.length > 0) args(0).toInt else 10
+
     implicit val gpu: Device = firepile.gpu
 
     import firepile.Compose._
@@ -22,7 +25,6 @@ object TestBlackScholes {
       (min + r * (max - min)).toFloat
     }
 
-    val optionCount = if (args.length > 0) args(0).toInt else 4000000
 
 
     // val h_Call    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
@@ -39,8 +41,10 @@ object TestBlackScholes {
     }
 
       val result = time {
-        val r = Arg3(h_S,h_X,h_T).mapk(f2Mapper(BlackScholesK _)).apply(h_S,h_X,h_T)
-        r.force
+        for (i <- 0 until n) {
+          val r = Arg3(h_S,h_X,h_T).mapk(f2Mapper(BlackScholesK _)).apply(h_S,h_X,h_T)
+          r.force
+        }
       }
 
       // val (h_Call, h_Put) = result.unzip
