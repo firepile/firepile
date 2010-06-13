@@ -688,7 +688,7 @@ object Compose {
       }.mkString("")
     }
 
-    private lazy val kernel = {
+    private val kernel = {
       println(src)
       val d = (a: ArgA) => new Dist {
         def totalNumberOfItems: Int = a.length
@@ -741,7 +741,7 @@ object Compose {
 
     def trees = mapTrees ++ reduceTrees
 
-    private lazy val kernel = {
+    private val kernel = {
       println(src)
       val numThreads = 128
       val d = (a: ArgA) => new Dist {
