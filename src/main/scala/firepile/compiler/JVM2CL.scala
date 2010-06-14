@@ -429,6 +429,29 @@ object JVM2CL {
     }
   }
 
+  object TupleSelect {
+    def unapply(v: Value) = v match {
+        // x._1() --> x._1
+        case GVirtualInvoke(base, SMethodRef(k @ SClassName("scala.Tuple2"), "_1", _, _, _), Nil) => Some(Select(base, "_1"))
+        case GVirtualInvoke(base, SMethodRef(k @ SClassName("scala.Tuple2"), "_2", _, _, _), Nil) => Some(Select(base, "_2"))
+        case GVirtualInvoke(base, SMethodRef(k @ SClassName("scala.Tuple3"), "_1", _, _, _), Nil) => Some(Select(base, "_1"))
+        case GVirtualInvoke(base, SMethodRef(k @ SClassName("scala.Tuple3"), "_2", _, _, _), Nil) => Some(Select(base, "_2"))
+        case GVirtualInvoke(base, SMethodRef(k @ SClassName("scala.Tuple3"), "_3", _, _, _), Nil) => Some(Select(base, "_3"))
+        case _ => None
+    }
+  }
+
+  object UnboxCall {
+    def unapply(v: Value) = v match {
+        // scala.runtime.BoxesRunTime.unboxToFloat(Object) : float
+        case GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "unboxToInt", _, _, _), List(value)) =>
+          Some(Select(Cast(ANY_TYPE, translateExp(value)), "i"))
+        case GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "unboxToFloat", _, _, _), List(value)) =>
+          Some(Select(Cast(ANY_TYPE, translateExp(value)), "f"))
+        case _ => None
+    }
+  }
+
   // Split library calls into separate objects.
   // This avoids an OutOfMemory error in scalac.
   object LibraryCall {
@@ -443,6 +466,9 @@ object JVM2CL {
                 List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Float", _, _, _), Nil))) =>
                   Call(Id("newFloatArray"), List[Tree](size))
 
+
+        case UnboxCall(t) => t
+        case TupleSelect(t) => t
 
         // firepile.util.Math.sin(x)
         case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a)))

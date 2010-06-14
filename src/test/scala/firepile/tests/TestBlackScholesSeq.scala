@@ -33,8 +33,16 @@ object TestBlackScholesSeq {
     def BlackScholesK(S: Float, X: Float, T: Float): (Float,Float) = {
           val                    R = 0.02f
           val                    V = 0.30f
-          val p = BlackScholesBody(S, X, T, R, V)
-          p
+          var a = 0.0f
+          var b = 0.0f
+          var i = 0
+          while (i < 100) {
+            val p = BlackScholesBody(S, X, T, R, V)
+            a += p._1
+            b += p._2
+            i += 1
+          }
+          (a,b)
     }
 
       val result = time {

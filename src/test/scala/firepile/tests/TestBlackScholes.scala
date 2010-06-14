@@ -35,10 +35,19 @@ object TestBlackScholes {
     val h_T       = BBArray.tabulate[Float](optionCount)(i => randFloat(0.25f, 10.0f)).directCopy
 
     def BlackScholesK(S: Float, X: Float, T: Float): (Float,Float) = {
-          val                    R = 0.02f
-          val                    V = 0.30f
+      val                    R = 0.02f
+      val                    V = 0.30f
+      // waste time
+      var i = 0
+      var a = 0.f
+      var b = 0.f
+      while (i < 100) {
           val p = BlackScholesBody(S, X, T, R, V)
-          p
+          a += p._1
+          b += p._2
+          i += 1
+      }
+      (a,b)
     }
 
       import firepile.Marshaling._
@@ -52,7 +61,17 @@ object TestBlackScholes {
         r.force
       }
 
-      val result = time {
+/*
+      var t = 0L
+      for (i <- 0 until n) {
+        val t0 = System.nanoTime
+        val t1 = System.nanoTime
+        t += t1 - t0
+      }
+      println("time " + t/1e9)
+      */
+
+      time {
         for (i <- 0 until n) {
           val r = k2(h_S,h_X,h_T)
           r.force
