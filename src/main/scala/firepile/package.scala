@@ -15,6 +15,7 @@ package object firepile {
   import Wrappers._
   import Spaces._
   import Marshaling._
+  import Args._
 
   private lazy val defaultGPUPlatform: Option[Platform] = {
     platforms.flatMap {
@@ -93,7 +94,12 @@ package object firepile {
   def reduceKernel[A](k: BBArrayReduceKernel1[A])(a: BBArray[A]) = k(a)
 
   def spawn[A,B](k: BBArrayLocalReduceKernel1[A,B])(a: BBArray[A]) = k(a)
+
   def spawn[B](k: Future[B]) = k.start
+  /*
+  def spawn[B](k: Future[B])(implicit dev: Device) = k.start(dev)
+  def spawn[B](dev: Device)(k: Future[B]) = k.start(dev)
+  */
 
   // How to make kernels composable
   // Basic kernels:

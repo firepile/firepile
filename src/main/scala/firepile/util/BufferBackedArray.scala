@@ -19,6 +19,14 @@ object BufferBackedArray {
     def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
     def apply(from: BBArray[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](from.length*implicitly[FixedSizeMarshal[A]].size)
   }
+  implicit def bbarrayCBFromIndexedSeq[A: FixedSizeMarshal] = new CanBuildFrom[IndexedSeq[_],A,BBArray[A]] {
+    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
+    def apply(from: IndexedSeq[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
+  }
+  implicit def bbarrayCBFromTraversable[A: FixedSizeMarshal] = new CanBuildFrom[Traversable[_],A,BBArray[A]] {
+    def apply: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
+    def apply(from: Traversable[_]): Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*implicitly[FixedSizeMarshal[A]].size)
+  }
 
   class BBArrayBuilder[A: FixedSizeMarshal](private var b: ByteBuffer) extends Builder[A, BBArray[A]] {
     def this(n: Int) = this(allocBuffer(n))
@@ -26,12 +34,6 @@ object BufferBackedArray {
     override def +=(elem: A) = {
       val pos = b.position
       val m = implicitly[FixedSizeMarshal[A]]
-
-      // Grow!
-      // println("cap " + b.capacity)
-      // println("limit " + b.limit)
-      // println("pos " + b.position)
-      // println("rem " + b.remaining)
 
       if (b.capacity < pos + m.size) {
         // println("growing at " + pos + " to " + (b.capacity + m.size) * 2)
@@ -70,7 +72,8 @@ object BufferBackedArray {
   }
 
   class BBArray[A: FixedSizeMarshal](val buffer: ByteBuffer) extends ArrayLike[A, BBArray[A]] with Iterable[A] {
-    def this(n: Int) = this(allocBuffer(n * implicitly[FixedSizeMarshal[A]].size)) // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
+    def this(n: Int) = this(allocBuffer(n * implicitly[FixedSizeMarshal[A]].size))
+      // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
 
     def directCopy =
       if (buffer.isDirect) {
@@ -84,7 +87,7 @@ object BufferBackedArray {
 
     // println("created array with buffer of " + buffer.limit + " bytes")
 
-    override def newBuilder: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16*marshal.size)
+    override def newBuilder: Builder[A, BBArray[A]] = new BBArrayBuilder[A](16)
 
     lazy val marshal = implicitly[FixedSizeMarshal[A]]
 

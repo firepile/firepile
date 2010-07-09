@@ -27,75 +27,99 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
     println()
   }
 
+  private val DirectLengths = false
+
   def run = {
     /*
     for (b <- buffers)
       printBuffer(b)
+      */
 
     buffers.foreach(buffer => {
         println("sending " + buffer.limit + " bytes")
     })
-    */
 
     // t0 = System.nanoTime
 
     val d = dist
     val e = effect
     val memIn = buffers.map(buffer =>
-        if (buffer.isDirect)
-          dev.global.allocForRead(buffer)
-        else 
-          dev.global.allocForRead(buffer.limit))
+      if (buffer.isDirect)
+        dev.global.allocForRead(buffer)
+      else 
+        dev.global.allocForRead(buffer.limit))
     val lenIn = buffers.map(buffer => {
-      // dev.global.allocForRead(fixedSizeMarshal[Int].size))
-      val b = allocDirectBuffer(fixedSizeMarshal[Int].size)
-      b.putInt(buffer.limit)
-      b
-      dev.global.allocForRead(b)
+      if (DirectLengths) {
+        val b = allocDirectBuffer(fixedSizeMarshal[Int].size)
+        b.putInt(buffer.limit)
+        dev.global.allocForRead(b)
+      }
+      else
+        dev.global.allocForRead(fixedSizeMarshal[Int].size)
     })
     val memOut = e.outputSizes.map(n => dev.global.allocForWrite(n))
     val lenOut = e.outputSizes.map(n => {
-      // dev.global.allocForRead(fixedSizeMarshal[Int].size))
-      val b = allocDirectBuffer(fixedSizeMarshal[Int].size)
-      b.putInt(n)
-      b
-      dev.global.allocForRead(b)
+      if (DirectLengths) {
+        val b = allocDirectBuffer(fixedSizeMarshal[Int].size)
+        b.putInt(n)
+        dev.global.allocForRead(b)
+      }
+      else
+        dev.global.allocForRead(fixedSizeMarshal[Int].size)
     })
 
-    // println("reading back " + e.outputSizes + " bytes")
+    println("reading back " + e.outputSizes + " bytes")
 
-    val writeEvents = (buffers zip memIn).map{
+    val writeEvents = (buffers zip memIn).map {
       case (buffer,mem) => if (buffer.isDirect) null
                            else mem.write(dev.queue, buffer, false)
     }
-    val writeLenEvents = Nil /* (buffers zip lenIn).map{ case (buffer,mem) => mem.write(dev.queue, {
-        val b = allocBuffer(fixedSizeMarshal[Int].size)
-        b.putInt(buffer.limit)
-        b
-      }, false) } */
-    val writeOutLenEvents = Nil /* (e.outputSizes zip lenOut).map{ case (len,mem) => mem.write(dev.queue, {
-        val b = allocBuffer(fixedSizeMarshal[Int].size)
-        b.putInt(len)
-        b
-      }, false) }
-      */
+    val writeLenEvents =
+      if (DirectLengths)
+        Nil
+      else 
+        (buffers zip lenIn).map {
+          case (buffer,mem) => mem.write(dev.queue, {
+            val b = allocBuffer(fixedSizeMarshal[Int].size)
+            b.putInt(buffer.limit)
+            b
+          }, false)
+        }
+    val writeOutLenEvents = 
+      if (DirectLengths)
+        Nil 
+      else
+        (e.outputSizes zip lenOut).map {
+          case (len,mem) => mem.write(dev.queue, {
+            val b = allocBuffer(fixedSizeMarshal[Int].size)
+            b.putInt(len)
+            b
+          }, false)
+        }
 
     val localMem: List[LocalSize] = e.localBufferSizes.map(size => dev.local.allocForReadWrite(size))
-    // val localLen: List[CLByteBuffer] = e.localBufferSizes.map(size => dev.global.allocForRead(fixedSizeMarshal[Int].size))
-    val localLen = e.localBufferSizes.map(n => {
-      // dev.global.allocForRead(fixedSizeMarshal[Int].size))
-      val b = allocDirectBuffer(fixedSizeMarshal[Int].size)
-      b.putInt(n)
-      b
-      dev.global.allocForRead(b)
-    })
+    val localLen: List[CLByteBuffer] =
+        e.localBufferSizes.map(n => {
+          if (DirectLengths) {
+            val b = allocDirectBuffer(fixedSizeMarshal[Int].size)
+            b.putInt(n)
+            dev.global.allocForRead(b)
+          }
+          else
+            dev.global.allocForRead(fixedSizeMarshal[Int].size)
+        })
 
-    val writeLocalLenEvents = Nil /* (e.localBufferSizes zip lenIn).map{ case (len,mem) => mem.write(dev.queue, {
-        val b = allocBuffer(fixedSizeMarshal[Int].size)
-        b.putInt(len)
-        b
-      }, false) }
-      */
+    val writeLocalLenEvents =
+      if (DirectLengths)
+        Nil 
+      else
+        (e.localBufferSizes zip lenIn).map {
+          case (len,mem) => mem.write(dev.queue, {
+            val b = allocBuffer(fixedSizeMarshal[Int].size)
+            b.putInt(len)
+            b
+          }, false)
+        }
 
     val args0: List[CLByteBuffer] = (memIn zip lenIn).flatMap[CLByteBuffer, Seq[CLByteBuffer]]{ case (mem,len) => mem::len::Nil }.toList
     val args1: List[CLByteBuffer] = (memOut zip lenOut).flatMap[CLByteBuffer, Seq[CLByteBuffer]]{ case (mem,len) => mem::len::Nil }.toList
@@ -105,8 +129,8 @@ class InstantiatedBufKernel(dev: Device, code: CLKernel, val dist: Dist, val eff
 
     val events = (writeEvents.toList ::: writeLenEvents.toList ::: writeLocalLenEvents.toList ::: writeOutLenEvents).filter(_ != null)
 
-    // println("total items = " + d.totalNumberOfItems)
-    // println("items/group = " + d.numberOfItemsPerGroup)
+    println("total items = " + d.totalNumberOfItems)
+    println("items/group = " + d.numberOfItemsPerGroup)
 
     val runEvent = code.enqueueNDRange(dev.queue, Array(d.totalNumberOfItems),
         if (localMem == Nil) null else Array(d.numberOfItemsPerGroup), events:_*)

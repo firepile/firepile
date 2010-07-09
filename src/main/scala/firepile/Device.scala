@@ -3,6 +3,7 @@ package firepile
 import firepile._
 import firepile.util.BufferBackedArray._
 import firepile.Marshaling._
+import firepile.Args._
 
 import java.nio.ByteBuffer
 
@@ -45,7 +46,7 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     (d: Dist, e: Effect) => new BufKernel(this, code, d, e)
   }
 
-  import Compose.Arg
+  import Args.Arg
 
   def compile[ArgA <: Arg[_,ArgA],ArgB <: Arg[_,ArgB]](name: String, src: String, dist: ArgA => Dist, effect: ArgA => Effect, builder: List[ByteBuffer] => ArgB) = {
     val kernel: (Dist,Effect) => BufKernel = compileString(name, src)

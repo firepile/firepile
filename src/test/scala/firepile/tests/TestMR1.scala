@@ -3,6 +3,7 @@ package firepile.tests
 import firepile._
 import firepile.Device
 import firepile.Spaces._
+import firepile.Args._
 import firepile.util.BufferBackedArray._
 
 object TestMR1 {
