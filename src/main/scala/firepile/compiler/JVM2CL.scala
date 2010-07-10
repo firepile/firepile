@@ -149,20 +149,30 @@ object JVM2CL {
 
   trait Task {
     def run: List[Tree]
-    def method: SootMethod
+    def method: SootMethodRef
   }
 
   def mapDef(m: SootMethod, t: Tree) = t
   def reduceDef(m: SootMethod, t: Tree) = t
 
   object CompileMethodTask {
-    def apply(m: SootMethodRef, self: AnyRef = null): CompileMethodTask = CompileMethodTask(m.resolve, self)
+    def apply(m: SootMethod, self: AnyRef = null): CompileMethodTask = CompileMethodTask(m.makeRef, self)
+    def apply(m: SootMethodRef): CompileMethodTask = CompileMethodTask(m, null)
   }
   
-  case class CompileMethodTask(method: SootMethod, self: AnyRef) extends Task {
-    def run = compileMethod(method, self) match {
-      case null => Nil
-      case t => t::Nil
+  case class CompileMethodTask(method: SootMethodRef, self: AnyRef) extends Task {
+    def run = {
+      val m = method
+
+      // Force the class's method bodies to be loaded.
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.HIERARCHY)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.SIGNATURES)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.BODIES)
+        
+      compileMethod(m.resolve, self) match {
+        case null => Nil
+        case t => t::Nil
+      }
     }
   }
 
@@ -192,7 +202,7 @@ object JVM2CL {
   private def findSelf(v: Value, self: AnyRef): AnyRef = null
 
   private def buildCallGraph = {
-    Scene.v.setEntryPoints(worklist.toList.map(p => p.method))
+    Scene.v.setEntryPoints(worklist.toList.map(p => p.method.resolve))
     println("entry points " + Scene.v.getEntryPoints)
     (new CallGraphBuilder).build
     println(Scene.v.getCallGraph)
@@ -275,7 +285,7 @@ object JVM2CL {
       (NamedTyp(nameToClass(str.substring(i + 1, j))), j + 1)
     case '[' =>
       val (tpe, j) = sigToType(str, i + 1)
-      (ParamTyp(NamedTyp("scala.Array"), tpe :: Nil), j)
+      (InstTyp(NamedTyp("scala.Array"), tpe :: Nil), j)
     case '(' =>
       val (tpes, tpe, j) = sigToType0(str, i + 1)
       (MTyp(Nil, tpes, tpe), j)
@@ -814,7 +824,7 @@ def apply(name: String, typeFormals: List[Param], formals: List[Typ], returnType
       case class MTyp(typeFormals: List[Param], formals: List[Typ], returnType: Typ) extends Typ
       case class Param(name: String)
       case class NamedTyp(name: String) extends Typ
-      case class ParamTyp(base: Typ, args: List[Typ]) extends Typ
+      case class InstTyp(base: Typ, args: List[Typ]) extends Typ
 
 
   private def compileMethod(m: SootMethod, self: AnyRef): Tree = {
