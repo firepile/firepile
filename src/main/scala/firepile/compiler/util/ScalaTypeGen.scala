@@ -137,41 +137,28 @@ object ScalaTypeGen {
     }
   }
 
-  def parseScalaSignature(scalaSig: ScalaSig, isPackageObject: Boolean) = {
-    import java.io.{PrintStream, OutputStreamWriter, ByteArrayOutputStream}
-
-    val baos = new ByteArrayOutputStream
-    val stream = new PrintStream(baos)
+  def parseScalaSignature(scalaSig: ScalaSig, isPackageObject: Boolean): List[MyClassDef] = {
     val syms = scalaSig.topLevelClasses ::: scalaSig.topLevelObjects
-    syms.head.parent match {
+    val pkgPath = syms.head.parent match {
       //Partial match
       case Some(p) if (p.name != "<empty>") => {
         val path = p.path
         if (!isPackageObject) {
-          stream.print("package ");
-          stream.print(path);
-          stream.print("\n")
+          path
         }
         else {
           val i = path.lastIndexOf(".")
-          if (i > 0) {
-            stream.print("package ");
-            stream.print(path.substring(0, i))
-            stream.print("\n")
-          }
+          if (i > 0) path.substring(0, i) else ""
         }
       }
-      case _ =>
+      case _ => ""
     }
-    // Print classes
-    val printer = new ScalaSigPrinter(stream, false)
-    for (c <- syms) {
-      printer.printSymbol(c)
-    }
-    baos.toString
+
+    val m = new ClassDefMaker(pkgPath)
+    syms flatMap (m.makeClassDef _)
   }
 
-  class ScalaSigPrinter(stream: java.io.PrintStream, printPrivates: Boolean) {
+  class ClassDefMaker(pkg: String) {
     import java.io.{PrintStream, ByteArrayOutputStream}
     import java.util.regex.Pattern
 
@@ -179,13 +166,19 @@ object ScalaTypeGen {
     import reflect.NameTransformer
     import java.lang.String
 
+    val baos = new ByteArrayOutputStream
+    val stream = new PrintStream(baos)
+
     import stream._
 
     val CONSTRUCTOR_NAME = "<init>"
 
     case class TypeFlags(printRep: Boolean)
 
-    def printSymbol(symbol: Symbol) {printSymbol(0, symbol)}
+    def makeClassDef(symbol: Symbol) = makeSymbol(0, symbol) match {
+      case Some(x: MyClassDef) => Some(x)
+      case _ => None
+    }
 
     //added
 
@@ -199,45 +192,43 @@ object ScalaTypeGen {
       case _ =>
     }
 
-    def printSymbol(level: Int, symbol: Symbol) {
-      if (!symbol.isLocal &&
-      !(symbol.isPrivate && !printPrivates)) {
-        def indent() {for (i <- 1 to level) print("  ")}
-
-        printSymbolAttributes(symbol, true, indent)
+    def makeSymbol(level: Int, symbol: Symbol): Option[MySymbol] = {
+      if (!symbol.isLocal) {
+        // TODO
+        // printSymbolAttributes(symbol, true, indent)
         symbol match {
           case o: ObjectSymbol =>
-          if (!isCaseClassObject(o)) {
-            indent
-            if (o.name == "package") {
-              // print package object
-              printPackageObject(level, o)
+            if (!isCaseClassObject(o)) {
+              if (o.name == "package") {
+                // print package object
+                Some(makePackageObject(level, o))
+              }
+              else {
+                Some(makeObject(level, o))
+              }
             }
-            else {
-              printObject(level, o)
-            }
-          }
-          case c: ClassSymbol if !refinementClass(c) && !c.isModule =>
-          indent
-          printClass(level, c)
-          case m: MethodSymbol =>
-          printMethod(level, m, indent)
-          case a: AliasSymbol =>
-          indent
-          printAlias(level, a)
-          case t: TypeSymbol if !t.isParam && !t.name.matches("_\\$\\d+")=>
-          indent
-          printTypeSymbol(level, t)
-          case s =>
+            else None
+          case c: ClassSymbol if !refinementClass(c) && !c.isModule => makeClass(level, c)
+          case m: MethodSymbol => Some(makeMethod(level, m))
+          case a: AliasSymbol => Some(makeAlias(level, a))
+          case t: TypeSymbol if !t.isParam && !t.name.matches("_\\$\\d+")=> Some(makeTypeSymbol(level, t))
+          case s => None
         }
       }
+      else None
     }
+
+    def makePackageObject(level: Int, symbol: ObjectSymbol): MySymbol = throw new RuntimeException("unimplemented")
+    def makeObject(level: Int, symbol: ObjectSymbol): MySymbol = throw new RuntimeException("unimplemented")
+    def makeMethod(level: Int, symbol: MethodSymbol): MySymbol = throw new RuntimeException("unimplemented")
+    def makeAlias(level: Int, symbol: AliasSymbol): MySymbol = throw new RuntimeException("unimplemented")
+    def makeTypeSymbol(level: Int, symbol: TypeSymbol): MySymbol = throw new RuntimeException("unimplemented")
 
     def isCaseClassObject(o: ObjectSymbol): Boolean = {
       val TypeRefType(prefix, classSymbol: ClassSymbol, typeArgs) = o.infoType
       o.isFinal && (classSymbol.children.find(x => x.isCase && x.isInstanceOf[MethodSymbol]) match {
-      case Some(_) => true
-      case None => false
+        case Some(_) => true
+        case None => false
       })
     }
 
@@ -246,66 +237,60 @@ object ScalaTypeGen {
       case _ => false
     }
 
-    private def printChildren(level: Int, symbol: Symbol) {
-      for (child <- symbol.children) printSymbol(level + 1, child)
+    private def makeChildren(level: Int, symbol: Symbol): List[MySymbol] = {
+      (symbol.children flatMap (child => makeSymbol(level + 1, child))).toList
     }
 
-    def printWithIndent(level: Int, s: String) {
-      def indent() {for (i <- 1 to level) print("  ")}
-      indent;
-      print(s)
-    }
-
-    def printModifiers(symbol: Symbol) {
+    def makeModifiers(symbol: Symbol): List[Modifier] = {
+      val result = ListBuffer[Modifier]()
       // print private access modifier
-      if (symbol.isPrivate) print("private ")
-      else if (symbol.isProtected) print("protected ")
+      if (symbol.isPrivate) result += Private
+      else if (symbol.isProtected) result += Protected
       else symbol match {
         case sym: SymbolInfoSymbol => sym.symbolInfo.privateWithin match {
-          case Some(t: Symbol) => print("private[" + t.name +"] ")
+          case Some(t: Symbol) => result += ScopedPrivate(t.name)
           case _ =>
         }
         case _ =>
       }
 
-      if (symbol.isSealed) print("sealed ")
-      if (symbol.isImplicit) print("implicit ")
-      if (symbol.isFinal && !symbol.isInstanceOf[ObjectSymbol]) print("final ")
-      if (symbol.isOverride) print("override ")
+      if (symbol.isSealed) result += Sealed
+      if (symbol.isImplicit) result += Implicit
+      if (symbol.isFinal && !symbol.isInstanceOf[ObjectSymbol]) result += Final
+      if (symbol.isOverride) result += Override
       if (symbol.isAbstract) symbol match {
-        case c@(_: ClassSymbol | _: ObjectSymbol) if !c.isTrait => print("abstract ")
+        case c@(_: ClassSymbol | _: ObjectSymbol) if !c.isTrait => result += Abstract
         case _ => ()
       }
-      if (symbol.isCase && !symbol.isMethod) print("case ")
+      if (symbol.isCase && !symbol.isMethod) result += Case
+
+      result.toList
     }
 
     private def refinementClass(c: ClassSymbol) = c.name == "<refinement>"
 
-    def printClass(level: Int, c: ClassSymbol) {
+    def makeClass(level: Int, c: ClassSymbol): Option[MyClassDef] = {
       if (c.name == "<local child>" /*scala.tools.nsc.symtab.StdNames.LOCALCHILD.toString()*/ ) {
-        print("\n")
+        None
       }
       else {
-        printModifiers(c)
+        val mods = makeModifiers(c) ::: (if (c.isTrait) List(Trait) else Nil)
         val defaultConstructor = if (c.isCase) getPrinterByConstructor(c) else ""
-        if (c.isTrait) print("trait ") else print("class ")
-        print(processName(c.name))
+        val name = processName(c.name)
         val it = c.infoType
         val classType = it match {
           case PolyType(typeRef, symbols) => PolyTypeWithCons(typeRef, symbols, defaultConstructor)
           case ClassInfoType(a, b) if c.isCase => ClassInfoTypeWithCons(a, b, defaultConstructor)
           case _ => it
         }
-        printType(classType)
-        print(" {")
-        //Print class selftype
-        c.selfType match {
-          case Some(t: Type) => print("\n"); print(" this : " + toString(t) + " =>")
-          case None =>
+        val selfType = c.selfType match {
+          case Some(t: Type) => t
+          case None => null
         }
-        print("\n")
-        printChildren(level, c)
-        printWithIndent(level, "}\n")
+        val children: List[MySymbol] = makeChildren(level, c)
+
+
+        Some(MyClassDef(mods, name, selfType, children))
       }
     }
 
@@ -317,13 +302,17 @@ object ScalaTypeGen {
       case Some(m: MethodSymbol) =>
       val baos = new ByteArrayOutputStream
       val stream = new PrintStream(baos)
-      val printer = new ScalaSigPrinter(stream, printPrivates)
+      val printer = new ScalaSigPrinter(stream, true)
       printer.printMethodType(m.infoType, false)(())
       baos.toString
       case None =>
       ""
       }
     }
+
+    def printModifiers(o: Symbol) = ()
+    def printChildren(level: Int, o: Symbol) = ()
+    def printWithIndent(level: Int, o: String) = ()
 
     def printPackageObject(level: Int, o: ObjectSymbol) {
       printModifiers(o)
@@ -605,21 +594,20 @@ object ScalaTypeGen {
 
   }
 
-  def unpickleFromAnnotation(classFile: ClassFile, isPackageObject: Boolean): String = {
+  def unpickleFromAnnotation(classFile: ClassFile, isPackageObject: Boolean): List[MyClassDef] = {
     val SCALA_SIG_ANNOTATION = "Lscala/reflect/ScalaSignature;"
     val BYTES_VALUE = "bytes"
     import classFile._
     import scalax.rules.scalasig.ClassFileParser.{ConstValueIndex, Annotation}
     import scala.reflect.generic.ByteCodecs
     classFile.annotation(SCALA_SIG_ANNOTATION) match {
-      case None => ""
+      case None => Nil
       case Some(Annotation(_, elements)) =>
-      val bytesElem = elements.find(elem => constant(elem.elementNameIndex) == BYTES_VALUE).get
-      val bytes = ((bytesElem.elementValue match {case ConstValueIndex(index) => constantWrapped(index)})
-      .asInstanceOf[StringBytesPair].bytes)
-      val length = ByteCodecs.decode(bytes)
-      val scalaSig = ScalaSigAttributeParsers.parse(ByteCode(bytes.take(length)))
-      parseScalaSignature(scalaSig, isPackageObject)
+        val bytesElem = elements.find(elem => constant(elem.elementNameIndex) == BYTES_VALUE).get
+        val bytes = ((bytesElem.elementValue match {case ConstValueIndex(index) => constantWrapped(index)}).asInstanceOf[StringBytesPair].bytes)
+        val length = ByteCodecs.decode(bytes)
+        val scalaSig = ScalaSigAttributeParsers.parse(ByteCode(bytes.take(length)))
+        parseScalaSignature(scalaSig, isPackageObject)
     }
   }
 
@@ -635,7 +623,6 @@ object ScalaTypeGen {
   case class InstTyp(base: ScalaType, args: List[ScalaType]) extends ScalaType
 
   private val HACK = true
-  private var sig =""
 
   def getScalaSignature(cname: String):ClassDef = {
 
@@ -663,15 +650,14 @@ object ScalaTypeGen {
 
     //println("printing scalasig")
 
-    sig =
-    classFile.attribute(SCALA_SIG).map(_.byteCode).map(ScalaSigAttributeParsers.parse) match {
+    val sig = classFile.attribute(SCALA_SIG).map(_.byteCode).map(ScalaSigAttributeParsers.parse) match {
       // No entries in ScalaSig attribute implies that the signature is stored in the annotation
       case Some(ScalaSig(_, _, entries)) if entries.length == 0 => unpickleFromAnnotation(classFile, isPackageObject)
-      case Some(scalaSig) => Scalap.parseScalaSignature(scalaSig, isPackageObject)
-      case None => "None"
+      case Some(scalaSig) => parseScalaSignature(scalaSig, isPackageObject)
+      case None => Nil
     }
     println(" ****** Class Definition*************")
-    println(sig.toString())
+    println(sig)
     println(" ************************************")
 
     parseSignature(cname,sig.asInstanceOf[String],bytes)
@@ -805,6 +791,21 @@ object ScalaTypeGen {
     if(!accessflag) hm.put("access","public")
     hm
   }
+
+    abstract sealed class Modifier
+    case object Private extends Modifier
+    case object Protected extends Modifier
+    case class ScopedPrivate(name: String) extends Modifier
+    case object Sealed extends Modifier
+    case object Implicit extends Modifier
+    case object Override extends Modifier
+    case object Final extends Modifier
+    case object Abstract extends Modifier
+    case object Case extends Modifier
+    case object Trait extends Modifier
+
+  sealed abstract class MySymbol
+  case class MyClassDef(modifiers: List[Modifier], name: String, selfType: Type, children: List[MySymbol]) extends MySymbol
 
   class ClassDef {
     var name:String=null
@@ -957,9 +958,8 @@ object ScalaTypeGen {
         case Sig(a:String,b:MTyp) => {
           b match {
             case MTyp(d:List[Param],e:List[ScalaType],f:ScalaType) => {
-              var pl=new ArrayList[ScalaType]()
-              var ct=e.length
-              var j=0
+              val pl=new ArrayList[ScalaType]()
+              val ct=e.length
               pl.add(f)
               for(i <-0 until ct) {
                 pl.add(e(i))
