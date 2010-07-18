@@ -14,19 +14,16 @@ import scala.collection.mutable.HashSet
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 
-//import soot.Type
-
 import scala.Seq
 import scala.collection.mutable.HashMap
 
 object ScalaTypeGen {
   def main(args: Array[String]) = {
     if (args.length != 1) {
-      println("usage: className")
+      println("usage: ScalaTypeGen classname")
       exit(1)
     }
-
-    var cd=getScalaSignature(args(0))
+getScalaSignature(args(0))
   }
 
   def isStatic(flags: Int) = (flags & 0x0008) != 0
@@ -218,11 +215,33 @@ object ScalaTypeGen {
       else None
     }
 
-    def makePackageObject(level: Int, symbol: ObjectSymbol): MySymbol = throw new RuntimeException("unimplemented")
-    def makeObject(level: Int, symbol: ObjectSymbol): MySymbol = throw new RuntimeException("unimplemented")
-    def makeMethod(level: Int, symbol: MethodSymbol): MySymbol = throw new RuntimeException("unimplemented")
-    def makeAlias(level: Int, symbol: AliasSymbol): MySymbol = throw new RuntimeException("unimplemented")
-    def makeTypeSymbol(level: Int, symbol: TypeSymbol): MySymbol = throw new RuntimeException("unimplemented")
+    def makePackageObject(level: Int, symbol: ObjectSymbol): MySymbol = {
+    
+    
+    
+    
+    }
+    def makeObject(level: Int, symbol: ObjectSymbol): MySymbol = {
+    
+    println(" level :::"+ level + " object symbol" + symbol )
+    
+    }
+    def makeMethod(level: Int, symbol: MethodSymbol): MySymbol = {
+    
+    println(" level :::"+ level + " object symbol" + symbol )
+    
+    }
+    def makeAlias(level: Int, symbol: AliasSymbol): MySymbol = {
+    println(" level :::"+ level + " object symbol" + symbol )
+    
+    
+    }
+    def makeTypeSymbol(level: Int, symbol: TypeSymbol): MySymbol = {
+    
+    println(" level :::"+ level + " object symbol" + symbol )
+    
+    }
+    
 
     def isCaseClassObject(o: ObjectSymbol): Boolean = {
       val TypeRefType(prefix, classSymbol: ClassSymbol, typeArgs) = o.infoType
@@ -624,9 +643,7 @@ object ScalaTypeGen {
 
   private val HACK = true
 
-  def getScalaSignature(cname: String):ClassDef = {
-
-    //println(" cname :::"+cname+"    ::::::"+"   name::::"+name)
+  def getScalaSignature(cname: String):Option[ClassDef] = {
 
     val cl = java.lang.Class.forName(cname).getClassLoader
     val is = (if (cl == null) java.lang.ClassLoader.getSystemClassLoader else cl).getResourceAsStream(cname.replace('.', '/') + ".class")
@@ -637,7 +654,6 @@ object ScalaTypeGen {
     val reader = new ByteArrayReader(bytes)
     val cf = new Classfile(reader)
 
-    //val classname=name
     val classname=cname
 
     val encName = Names.encode(if (classname == "scala.AnyRef") "java.lang.Object" else classname)
@@ -656,142 +672,10 @@ object ScalaTypeGen {
       case Some(scalaSig) => parseScalaSignature(scalaSig, isPackageObject)
       case None => Nil
     }
-    println(" ****** Class Definition*************")
-    println(sig)
-    println(" ************************************")
-
-    parseSignature(cname,sig.asInstanceOf[String],bytes)
-  }
-
-  def parseSignature(cname:String,sig:String,bytes:Array[Byte]):ClassDef = {
-    var al=new ArrayList[HashMap[String,String]]()
-
-    var st = new StringTokenizer(sig,"\n")
-    val temp=st.nextToken()
-    var cshm=parseClassSig(temp)
-    var tt ="main"
-
-    while(st.hasMoreElements()){
-      var token=st.nextToken()
-      if((!token.equals("}"))){
-        var s=token.split(" ")
-        tt=((s(3).replace("("," ")).split(" "))(0)
-        val hm=parseMethodSignature(token,tt)
-        if(hm!=null)
-        al.add(hm)
-      }
+    None
     }
 
-    getClassDef(al,cshm,getScalaSig(cname,bytes,tt))
-  }
-
-  def parseMethodSignature(m:String,name:String):HashMap[String,String] = {
-    var hm= new HashMap[String, String]()
-
-    hm.put("name",name)
-    var temp=""
-    var tempt=""
-    var count=1
-    var token=""
-    var st = new StringTokenizer(m,"(): ")
-    st.nextToken()
-    st.nextToken()
-    while(st.hasMoreElements()){
-      tempt=st.nextToken()
-      if(tempt.equals("=")){
-        hm.put("return",token)
-        return(hm)
-      }
-      token=tempt
-      count=count+1
-      if(count%2==0){
-        if(token.startsWith("scala.")){
-          hm.put("return",token)
-          return(hm)
-        }
-        else {
-          temp=token
-        }
-      }
-      else {
-        if(count==3)
-          hm.put("parameter",temp+":"+token)
-        else{
-          var tm= hm.get("parameter") match {
-            case scala.Some(a)=> a;
-            case _=> ""
-          }
-          hm.put("parameter",tm+temp+":"+token)
-        }
-      }
-    }
-    null
-  }
-
-  def getScalaSig(cname:String,bytes:Array[Byte],name:String):List[Sig] = {
-    val reader = new ByteArrayReader(bytes)
-    val cf = new Classfile(reader)
-
-    val sigs =
-    cf.methods flatMap {
-      case z@cf.Member(_, flags, name, tpe, attribs) if true =>
-      val w = new Cf(cf)
-      Some(w.getSig(flags, name, tpe, attribs.asInstanceOf[List[w.cf.Attribute]]))
-      case _ => None
-    }
-
-    println(sigs)
-    sigs
-  }
-
-  def parseClassSig(c:String):HashMap[String,String] = {
-    var hm=new HashMap[String,String]()
-
-    var token=""
-    var s = new StringTokenizer(c," ")
-    var accessflag=false
-    var classflag=false
-    var extendflag=false
-    var withflag=true
-
-    while(s.hasMoreElements()){
-      token=s.nextToken()
-
-      token match {
-
-        case "object" => {hm.put("classtype","object"); classflag=true}
-        case "class" => {hm.put("classtype","class"); classflag=true}
-        case "protected" => {hm.put("access","protected"); accessflag=true}
-        case "private" => {hm.put("access","private"); accessflag=true}
-        case "public" => { hm.put("access", "public"); accessflag=true}
-        case "with" => withflag=true
-        case "{" => ""
-        case "extends" => extendflag=true
-        case _ => {
-          if(classflag) {
-            hm.put("classname",token); classflag=false
-          }
-          else {
-            if(extendflag) {
-              if(withflag){
-                var tm= hm.get("superclass") match {
-                  case scala.Some(a)=> a;
-                  case _=> ""
-                }
-                hm.put("superclass",tm+","+token)
-              }
-            }
-            else
-              hm.put("superclass",token)
-          }
-        }
-      }
-    }
-
-    if(!accessflag) hm.put("access","public")
-    hm
-  }
-
+  
     abstract sealed class Modifier
     case object Private extends Modifier
     case object Protected extends Modifier
@@ -829,149 +713,4 @@ object ScalaTypeGen {
     var fieldScalaType:ScalaType=null
   }
 
-  def getClassDef(al:ArrayList[HashMap[String,String]],hm:HashMap[String,String], sig:List[Sig]):ClassDef = {
-
-    var cd=new ClassDef
-
-    var sthm= buildScalaType(sig)
-
-    cd.name=hm.get("classname") match {
-      case Some(a) => a
-      case _ => ""
-    }
-    cd.access=hm.get("access") match {
-      case Some(a) => a
-      case _ => ""
-    }
-    cd.classtype=hm.get("classtype") match {
-      case Some(a) => a
-      case _ => ""
-    }
-    var st=new StringTokenizer(hm.get("superclass") match {
-      case Some(a) => a
-      case _ => ""
-    },",")
-
-    while(st.hasMoreElements()){
-      val t=st.nextToken()
-
-      if(cd.superclass==null)
-        cd.superclass=List(getClass(t.asInstanceOf[String]))
-      else
-        cd.superclass=cd.superclass:::List(getClass(t.asInstanceOf[String]))
-    }
-
-    var ml:List[MethodDef]=null
-    var tf:FieldDef=null
-    var tfs:List[FieldDef]=null
-    var tm:MethodDef=null
-
-    for( i <- al) {
-      tm=new MethodDef
-      tm.name=i.get("name") match {
-        case Some(a) => a
-        case _ => ""
-      }
-      var p=i.get("parameter") match {
-        case Some(a) => a
-        case _ => ""
-      }
-
-      //println(" Method name is ::::"+tm.name)
-
-      var stal= sthm.get(tm.name)
-
-      var count=1
-      if(stal.size>1&& count<stal.size) {
-        var st=new StringTokenizer(p,",")
-        while(st.hasMoreElements()){
-          var s=(st.nextToken()).split(":")
-          tf=new FieldDef
-          tf.name=s(0)
-          tf.fieldType=getClass(s(1))
-          tf.fieldTypeAsString=s(1)
-          tf.fieldScalaType=stal.get(count)
-          if(tm.params==null)
-            tm.params=List(tf)
-          else
-          tm.params=tm.params:::List(tf)
-          count=count+1
-        }
-      }
-      var r=i.get("return") match {
-        case Some(a) => a
-        case _ => ""
-      }
-      tf=new FieldDef
-      tf.name="return"
-      tf.fieldTypeAsString=r.asInstanceOf[String]
-      //println(" get Class ::"+r)
-      tf.fieldType=getClass(r.asInstanceOf[String])
-      if((stal.size)>0)
-      tf.fieldScalaType=stal.get(0)
-
-      tm.returnType=tf
-
-      if(ml==null)
-        ml=List(tm)
-      else
-        ml=ml:::List(tm)
-    }
-
-    cd.methods=ml
-    cd
-  }
-
-  def getClass(s:String):Class[_] =
-  if(s.indexOf("Array")>0)
-    Class.forName("scala.Array")
-  else if(s.indexOf("?0")> -1||s.indexOf("scala.AnyRef")> -1)
-    classOf[scala.AnyRef]
-  else
-    s match {
-      case "scala.Predef.String" => classOf[java.lang.String]
-      case "scala.Int" => classOf[scala.Int]
-      case "scala.Float" => classOf[scala.Float]
-      case "scala.Long" => classOf[scala.Long]
-      case "scala.Byte" => classOf[scala.Byte]
-      case "scala.Char" => classOf[scala.Char]
-      case "scala.Short" => classOf[scala.Short]
-      case "scala.Double" => classOf[scala.Double]
-      case "scala.Boolean" => classOf[scala.Boolean]
-      case "scala.Unit" => classOf[scala.Unit]
-      case "scala.Null" => classOf[scala.Null]
-      case null => classOf[scala.Null]
-      case "" => classOf[scala.Null]
-      case _ => classOf[scala.Null] // Class.forName(s)
-    }
-
-  def buildScalaType(s:List[Sig]):HashMap[String,ArrayList[ScalaType]] = {
-    var scalaList:HashMap[String,ArrayList[ScalaType]]=new HashMap[String,ArrayList[ScalaType]]()
-
-    val count=(s.length)
-    var sig=s(0)
-    var i=0
-
-    for(i <-0 until count){
-      sig=s(i)
-      sig match {
-        case Sig(a:String,b:MTyp) => {
-          b match {
-            case MTyp(d:List[Param],e:List[ScalaType],f:ScalaType) => {
-              val pl=new ArrayList[ScalaType]()
-              val ct=e.length
-              pl.add(f)
-              for(i <-0 until ct) {
-                pl.add(e(i))
-              }
-              scalaList.put(a,pl)
-            }
-            case  _ =>
-          }
-        }
-        case _ =>
-      }
-    }
-    scalaList
-  }
-}
+ }
