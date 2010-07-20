@@ -160,6 +160,44 @@ object ScalaTypeGen {
 
   }
 
+  def scalaType(typ: Type) = typ match {
+    case  NoType => UnimplementedTyp
+    case  NoPrefixType => UnimplementedTyp
+
+    // ? (self types?)
+    case  ThisType(symbol : Symbol)  => NamedTyp(symbol.name)
+
+    // object X { }
+    case  SingleType(typeRef : Type, symbol : Symbol)  => NamedTyp(symbol.name)
+    // 1.type
+    case  ConstantType(constant : Any)  => UnimplementedTyp
+
+    // ?
+    case  TypeRefType(prefix : Type, symbol : Symbol, typeArgs : Seq[Type])  => UnimplementedTyp
+    // lower <: _ <: upper
+    case  TypeBoundsType(lower : Type, upper : Type)  => UnimplementedTyp
+    // Foo { def m: Int }
+    case  RefinedType(classSym : Symbol, typeRefs : List[Type])  => UnimplementedTyp
+    // ?
+    case  ClassInfoType(symbol : Symbol, typeRefs : Seq[Type])  => UnimplementedTyp
+    // ?
+    case  ClassInfoTypeWithCons(symbol : Symbol, typeRefs : Seq[Type], cons: String)  => UnimplementedTyp
+    // params => result
+    case  MethodType(resultType : Type, paramSymbols : Seq[Symbol])  => UnimplementedTyp
+    // Array[T]
+    case  PolyType(typeRef : Type, symbols : Seq[TypeSymbol])  => InstTyp(scalatype(typeRef), symbols.map { case TypeSymbol(_) => NamedTyp(symbol.path) })
+    // ?
+    case  PolyTypeWithCons(typeRef : Type, symbols : Seq[TypeSymbol], cons: String)  => UnimplementedTyp
+    // params => result
+    case  ImplicitMethodType(resultType : Type, paramSymbols : Seq[Symbol])  => UnimplementedTyp
+    // type @attr1 @attr2 ...
+    case  AnnotatedType(typeRef : Type, attribTreeRefs : List[Int])  => UnimplementedTyp
+    case  AnnotatedWithSelfType(typeRef : Type, symbol : Symbol, attribTreeRefs : List[Int])  => UnimplementedTyp
+    case  DeBruijnIndexType(typeLevel : Int, typeIndex : Int)  => UnimplementedTyp
+    // T forSome { ... }
+    case  ExistentialType(typeRef : Type, symbols : Seq[Symbol])  => UnimplementedTyp
+  }
+
   def getScalaSignature(cname: String): ClassDef = {
 
     val cl = java.lang.Class.forName(cname).getClassLoader
@@ -205,90 +243,48 @@ object ScalaTypeGen {
 
     }
 
-    def getScalaType(sig:List[Sig]) : HashMap[String,ArrayList[ScalaType]] = {
+    def getScalaType(sig:List[Sig]): Map[String, MTyp] = {
+      var scalaList = Map.empty[String, List[ScalaType]]()
 
-      var scalaList:HashMap[String,ArrayList[ScalaType]]=new HashMap[String,ArrayList[ScalaType]]()
-        for(i <-0 until sig.length){
-        sig(i) match {
-
-          case Sig(methodname:String,methodtype:MTyp) => { 
-
-            methodtype match {
-
-              case MTyp(paramNames:List[Param],paramList:List[ScalaType],returntype:ScalaType) => { 
-                var pList=new ArrayList[ScalaType]()
-                  for(i <-0 until paramList.length){
-                  pList.add(paramList(i))
-                }
-                pList.add(returntype)
-                scalaList.put(methodname,pList)
-              }
-              case  _ =>
-
-             }
-            }
-            case _ => 
-
-          }
-
-        }
-
-        scalaList
-
+      sig.foreach {
+        case Sig(methodname, mtyp) => scalaList += methodname -> mtyp
       }
+
+      scalaList
+    }
 
       def getClassDef(myclassdef: MyClassDef, sig :List[Sig]) : ClassDef = {
         val paramList= getScalaType(sig)
 
-        var classdef:ClassDef=null
+        myclassdef match {
+          case MyClassDef(modifiers: List[Modifier], name: String, selfType: Type, children: List[MySymbol]) => {
+            println(" Myclassdef " + name)
+            val methods = children.map {
+                case MyMethodDef(name, returnType, params) => {
+                  val method=new MethodDef
+                  method.name = if (name == "<init>") "this" else name
+                  method.returnType=returnType
+                  val MTyp(pNames, pList, pReturnType) = paramList(method.name)
+                  method.returnScalaType=pReturnType
+                  method.params = (params zip pList) flatMap {
+                      case (MyVarDef(name, varType), pType) => {
+                        val field=new VarDef
+                        field.name=name
+                        field.typ=varType
+                        field.fieldScalaType=pType
+                        Some(field)
+                      }
+                      case _ => None
+                    }.toList
 
-        def gcd(myclassdef:MyClassDef) : ClassDef = {
+                  method
+                }
+                case _ => null
+              }.toList
 
-          myclassdef match {
-            case MyClassDef(modifiers: List[Modifier], name: String, selfType: Type, children: List[MySymbol]) => {
-              println(" Myclassdef " + name)
-              classdef=new ClassDef
-              classdef.name=name
-              classdef.classtype="object"
-              classdef.methods = children.map({
-                  case MyMethodDef(name:String, selfType: Type, children: List[MySymbol]) => {
-                    val method=new MethodDef
-                    method.name=name
-                    if(name.equals("<init>"))
-                      method.name="this"
-                    val pList=paramList.get(method.name)
-                      method.returnType=selfType
-                    var count=0
-                    if(children.length<pList.size)
-                      method.returnScalaType=pList.get(pList.size-1)
-                    method.params = children.map({
-                        case MyFieldDef(name: String, selfType: Type) => {
-                          val field=new FieldDef
-                          field.name=name
-                          field.typ=selfType
-                          // HashMap is always returning ArrayList with Size 1 !!!!!!!!!
-                          println(" count ::"+count+" pliz size::"+pList.size)
-                          if(count<pList.size)
-                            field.fieldScalaType=pList.get(count)
-                          count=count+1
-                          field
-                        }
-                        case _ => null
-                      }).toList
-
-                    method
-                  }
-                  case _ => null
-                }).toList
-
-            }
-            case _  => None
+              ClassDef(name, ...)
           }
-
-          classdef
         }
-
-        gcd(myclassdef)
       }
 
       def unpickleFromAnnotation(classFile: ClassFile, isPackageObject: Boolean): List[MyClassDef] = {
@@ -318,6 +314,7 @@ object ScalaTypeGen {
       case class Param(name: String)
       case class NamedTyp(name: String) extends ScalaType
       case class InstTyp(base: ScalaType, args: List[ScalaType]) extends ScalaType
+      case object UnimplementedTyp extends ScalaType
 
       abstract sealed class Modifier
       case object Private extends Modifier
@@ -331,23 +328,23 @@ object ScalaTypeGen {
       case object Case extends Modifier
       case object Trait extends Modifier
 
-      class ClassDef {
-        var name:String=null
-        var methods:List[MethodDef]=null
-        var superclass:List[Class[_]]=null
-        var traits:List[Class[_]]=null
-        var access:String=null
-        var classtype:String=null
-      }
+      class ClassDef(
+        val name:String,
+        val methods:List[MethodDef],
+        val superclass:List[ScalaType],
+        val traits:List[ScalaType],
+        val access:String,
+        val classtype:String
+      )
 
-      class MethodDef {
-        var name:String=null
-        var returnType:Type=null
-        var returnScalaType:ScalaType=null
-        var params:List[FieldDef]=null
-      }
+      class MethodDef (
+        val name:String,
+        val returnType:Type,
+        val returnScalaType:ScalaType,
+        val params:List[VarDef]
+      )
 
-      class FieldDef {
+      class VarDef {
         var name:String=null
         var typ:Type=null
         var fieldType:Class[_]=null
@@ -359,7 +356,7 @@ object ScalaTypeGen {
       sealed abstract class MySymbol
       case class MyClassDef(modifiers: List[Modifier], name: String, selfType: Type, children: List[MySymbol]) extends MySymbol
       case class MyMethodDef(name:String, selfType: Type, children: List[MySymbol]) extends MySymbol
-      case class MyFieldDef(name:String, selfType: Type) extends MySymbol
+      case class MyVarDef(name:String, selfType: Type) extends MySymbol
 
 
       def parseScalaSignature(scalaSig: ScalaSig, isPackageObject: Boolean): List[MyClassDef] = {
@@ -570,13 +567,13 @@ object ScalaTypeGen {
         cont
       }
 
-      def makeMethodType(t: Type, printResult: Boolean) : (Type, List[MyFieldDef]) = {
+      def makeMethodType(t: Type, printResult: Boolean) : (Type, List[MyVarDef]) = {
 
-        def _pmt(mt: Type {def resultType: Type; def paramSymbols: Seq[Symbol]}) : (Type, List[MyFieldDef]) = {
+        def _pmt(mt: Type {def resultType: Type; def paramSymbols: Seq[Symbol]}) : (Type, List[MyVarDef]) = {
 
           val paramEntries = mt.paramSymbols.map({
-              case ms: MethodSymbol => MyFieldDef(ms.name,ms.infoType)
-              case _ => MyFieldDef("",NoType)
+              case ms: MethodSymbol => MyVarDef(ms.name,ms.infoType)
+              case _ => MyVarDef("",NoType)
             }).toList
 
           /*
@@ -586,7 +583,7 @@ object ScalaTypeGen {
             case imt: ImplicitMethodType => makeMethodType(imt, printResult)
             case x => if (printResult) {
               //print(" : ");
-              (makeType(x),List(MyFieldDef("",NoType)))
+              (makeType(x),List(MyVarDef("",NoType)))
             }
           }
           */
@@ -599,7 +596,7 @@ object ScalaTypeGen {
             makeMethodType(mt, printResult)
           }
           //todo consider another method types
-          case x => (makeType(x),List(MyFieldDef("",NoType)))
+          case x => (makeType(x),List(MyVarDef("",NoType)))
         }
 
         // Print rest of the symbol output
