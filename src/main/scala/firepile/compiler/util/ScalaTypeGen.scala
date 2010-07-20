@@ -237,30 +237,10 @@ object ScalaTypeGen {
 
       }
 
-      def getClass(s:String):Class[_] =
-        s match {
-
-        case "scala.Int" => classOf[scala.Int]
-        case "scala.Float" => classOf[scala.Float]
-        case "scala.Long" => classOf[scala.Long]
-        case "scala.Byte" => classOf[scala.Byte]
-        case "scala.Char" => classOf[scala.Char]
-        case "scala.Short" => classOf[scala.Short]
-        case "scala.Double" => classOf[scala.Double]
-        case "scala.Boolean" => classOf[scala.Boolean]
-        case "scala.Unit" => classOf[scala.Unit]
-        case "scala.Null" => classOf[scala.Null]
-        case null => classOf[scala.Null]
-        case "" => classOf[scala.Null]
-        case _ => Class.forName(s)
-
-      }
-
-
       def getClassDef(myclassdef: MyClassDef, sig :List[Sig]) : ClassDef = {
         val paramList= getScalaType(sig)
 
-          var classdef:ClassDef=null
+        var classdef:ClassDef=null
 
         def gcd(myclassdef:MyClassDef) : ClassDef = {
 
