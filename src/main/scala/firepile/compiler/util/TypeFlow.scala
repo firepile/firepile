@@ -78,12 +78,12 @@ object TypeFlow {
     protected def entryInitialFlow(): Map[String,ScalaType] = {
       val paramMap = new HashMap[String,ScalaType]()
       val methodName = graph.getBody.getMethod.getName
-      val methodDef = getMethodDefByName(methodName) 
+      val methodDef = getMethodDefByName(methodName)
+      val thisMethod = getMethodDefByName("this")
       
       // add this
 //      paramMap += ("this" -> graph.getBody.getThisLocal.getType)
 
-      println("entryInitialFlow: get method by name returned " + methodDef)
 
       // add params
       if (methodDef.params == null)
@@ -94,8 +94,9 @@ object TypeFlow {
       }
 
       // add class fields  ("this" method)
-      for (f <- getMethodDefByName("this").params)
-        paramMap += (f.name -> f.fieldScalaType)
+      if(thisMethod.params != null)
+        for (f <- thisMethod.params)
+          paramMap += (f.name -> f.fieldScalaType)
       
       println("entryInitialFlow generated: " + paramMap)
       paramMap
@@ -103,7 +104,6 @@ object TypeFlow {
 
     protected def flowThrough(inValue: Map[String,ScalaType], unit: SootUnit, outValue: Map[String,ScalaType]): Unit = {
       // Compute gen from getDefs/kill set
-      println("SootUnit: " + unit)
       // Not taking into account kill set since these types will be added to tags
       outValue ++= inValue
 
@@ -114,7 +114,7 @@ object TypeFlow {
         box.getValue match {
           case x: Local => {
             if(! inValue.contains(x.getName))
-              outValue += x.getName -> NamedTyp(x.getType.toString)   // This will need to be mapped from bytecode type to scalatype
+              outValue += x.getName -> bytecodeTypeToScala(x.getType.toString)   // This will need to be mapped from bytecode type to scalatype
           }
           case x => println("wtf " + x + ": " + x.getClass.getName)
         }
@@ -163,9 +163,7 @@ object TypeFlow {
     private def getMethodDefByName(name: String): MethodDef = {
       var mdef: MethodDef = null
 
-      println("getMethodByName: looking for method " + name + " in " + cls.name)
       for ( m <- cls.methods ) {
-        println("getMethodByName: looking at method " + m.name)
         if ( m.name.equals(name) )
            mdef = m
        }
@@ -182,7 +180,7 @@ object TypeFlow {
           case "long" => NamedTyp("scala.Long")
           case "float" => NamedTyp("scala.Float")
           case "double" => NamedTyp("scala.Double")
-          case _ => println("bytecodeTypeToScala: Unhandled type"); NamedTyp("UNHANDLED")
+          case _ => NamedTyp(bctype)
         }
     }
 
