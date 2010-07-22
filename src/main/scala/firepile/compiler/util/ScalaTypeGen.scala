@@ -28,8 +28,7 @@ object ScalaTypeGen {
     }
     val cd= getScalaSignature(args(0))
 
-
-      var name:String=null
+    var name:String=null
     var methods:List[MethodDef]=null
     var superclass:List[Class[_]]=null
     var traits:List[Class[_]]=null

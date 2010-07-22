@@ -99,16 +99,39 @@ object TypeFlow {
       // Not taking into account kill set since these types will be added to tags
       outValue ++= inValue
 
+      // kill
       for (box <- unit.getDefBoxes) {
         box.getValue match {
-          case x: Local if x.getName == "this" => outValue += "this" -> bytecodeTypeToScala(x.getType.toString)
-          case x: Local => {
-            if(! inValue.contains(getName(x)))
-              outValue += getName(x) -> bytecodeTypeToScala(x.getType.toString)
-          }
+          case x: Local => outValue -= getName(x)
           case x => println("wtf " + x + ": " + x.getClass.getName)
         }
       }
+
+      // gen
+      unit match {
+        case GIdentity(x: Local, y: Local) => 
+          outValue += getName(x) -> inValue(getName(y))
+        case GAssignStmt(x: Local, y: Local) => 
+          outValue += getName(x) -> inValue(getName(y))
+
+        // Need to special case: field access, call, maybe others
+        // ex:
+        /*
+        case GAssignStmt(x: Local, GVirtualInvokeExpr(base, method, args)) => 
+          outValue += getName(x) -> lookup return type (ScalaType) of base.method
+        ...
+          */
+
+        // Fall through cases: use the Java type provided by Soot.
+        case GIdentity(x: Local, y) => 
+          outValue += getName(x) -> bytecodeTypeToScala(y.getType.toString)
+        case GAssignStmt(x: Local, y) => 
+          outValue += getName(x) -> bytecodeTypeToScala(y.getType.toString)
+        case x => println("wtf " + x + ": " + x.getClass.getName)
+      }
+
+/*
+      */
       println("flowThrough: " + outValue)
     }
 
@@ -175,7 +198,8 @@ object TypeFlow {
         }
     }
 
-    private def getName(local: Local): String = local.getName + local.getNumber
+    private def getName(local: Local): String =
+      if (local.getName == "this") "this" else local.getName + local.getNumber
 
   }
 }
