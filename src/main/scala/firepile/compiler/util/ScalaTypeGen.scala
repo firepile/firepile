@@ -38,7 +38,6 @@ object ScalaTypeGen {
 
     println(" ::class name ::"+ cd.name)
     println(" :: class type ::"+ cd.classtype)
-    //println(" ::access ::"+cd.access)
     println(" ::Methods ::")
     var c=cd.methods.length
 
@@ -46,8 +45,12 @@ object ScalaTypeGen {
     for (i<-0 until c){
       var m=cd.methods(i)
         println(" Method name:::"+m.name)
-      if (m.returnScalaType!=null)
-        println(" Return Type As ScalaType::"+m.returnScalaType)
+           if (m.returnType!=null)
+        println(" Return Type :"+m.returnType)
+        if (m.returnTypeAsString!=null)
+        println(" Return Type As String::"+m.returnTypeAsString)
+        if(m.returnScalaType!=null)
+        println(" Return Type as Scala Type::"+m.returnScalaType)
       var p=m.params
       if (p!=null){
         var cc=p.length
@@ -55,8 +58,12 @@ object ScalaTypeGen {
           if(p(j)!=null){
             if(p(j).name!=null)
               println(" Param name::"+p(j).name)
-            if(p(j).fieldType!=null)
-              println(" Param Type name::"+p(j).fieldType)
+            if(p(j).fieldTyp!=null)
+              println(" Param Type name::"+p(j).fieldTyp)
+               if(p(j).fieldTypeAsString!=null)
+              println(" Param Type name as String::"+p(j).fieldTypeAsString)
+       //        if(p(j).fieldType!=null)
+       //       println(" Param Type name as Type::"+p(j).fieldType)
             if(p(j).fieldScalaType!=null)
               println(" Param Type As ScalaType::"+p(j).fieldScalaType)
           }
@@ -159,46 +166,39 @@ object ScalaTypeGen {
     }
 
   }
+  
+  
 
-  def scalaType(typ: Type) = typ match {
-    case  NoType => UnimplementedTyp
-    case  NoPrefixType => UnimplementedTyp
-
-    // ? (self types?)
-    case  ThisType(symbol : Symbol)  => NamedTyp(symbol.name)
-
-    // object X { }
-    case  SingleType(typeRef : Type, symbol : Symbol)  => NamedTyp(symbol.name)
-    // 1.type
-    case  ConstantType(constant : Any)  => UnimplementedTyp
-
-    // ?
-    case  TypeRefType(prefix : Type, symbol : Symbol, typeArgs : Seq[Type])  => UnimplementedTyp
-    // lower <: _ <: upper
-    case  TypeBoundsType(lower : Type, upper : Type)  => UnimplementedTyp
-    // Foo { def m: Int }
-    case  RefinedType(classSym : Symbol, typeRefs : List[Type])  => UnimplementedTyp
-    // ?
-    case  ClassInfoType(symbol : Symbol, typeRefs : Seq[Type])  => UnimplementedTyp
-    // ?
-    case  ClassInfoTypeWithCons(symbol : Symbol, typeRefs : Seq[Type], cons: String)  => UnimplementedTyp
-    // params => result
-    case  MethodType(resultType : Type, paramSymbols : Seq[Symbol])  => UnimplementedTyp
-    // Array[T]
-    case  PolyType(typeRef : Type, symbols : Seq[TypeSymbol])  => InstTyp(scalatype(typeRef), symbols.map { case TypeSymbol(_) => NamedTyp(symbol.path) })
-    // ?
-    case  PolyTypeWithCons(typeRef : Type, symbols : Seq[TypeSymbol], cons: String)  => UnimplementedTyp
-    // params => result
-    case  ImplicitMethodType(resultType : Type, paramSymbols : Seq[Symbol])  => UnimplementedTyp
-    // type @attr1 @attr2 ...
-    case  AnnotatedType(typeRef : Type, attribTreeRefs : List[Int])  => UnimplementedTyp
-    case  AnnotatedWithSelfType(typeRef : Type, symbol : Symbol, attribTreeRefs : List[Int])  => UnimplementedTyp
-    case  DeBruijnIndexType(typeLevel : Int, typeIndex : Int)  => UnimplementedTyp
-    // T forSome { ... }
-    case  ExistentialType(typeRef : Type, symbols : Seq[Symbol])  => UnimplementedTyp
+  def scalaType(typ: Type) : ScalaType = {
+  
+  typ match {
+    case  NoType => NamedTyp("NoType")
+    case  NoPrefixType => NamedTyp("java.lang.object")
+    case  ThisType(symbol : Symbol)  => NamedTyp(symbol.path)
+    case  SingleType(typeRef : Type, singleTypeSymbol : Symbol) => NamedTyp(singleTypeSymbol.path)
+    case  ConstantType(constant : Any)  => NamedTyp("scala.Any")
+    case  TypeRefType(prefix : Type, symbol : Symbol, typeArgs : Seq[Type])  => {
+    if(typeArgs.isEmpty)
+    NamedTyp(symbol.path)
+    else
+    InstTyp(NamedTyp(symbol.path), typeArgs.map(i=>scalaType(i)).toList) 
+    }
+    case  TypeBoundsType(lower : Type, upper : Type)  => NamedTyp("tyeboundstype")
+    case  RefinedType(classSym : Symbol, typeRefs : List[Type])  => NamedTyp("refined type")
+    case  ClassInfoType(symbol : Symbol, typeRefs : Seq[Type])  => NamedTyp(" Class info type")
+    case  ClassInfoTypeWithCons(symbol : Symbol, typeRefs : Seq[Type], cons: String)  => NamedTyp("class info type with symbols")
+    case  MethodType(resultType : Type, paramSymbols : Seq[Symbol])  => NamedTyp(" method type")
+    case  PolyType(typeRef : Type, symbols : Seq[TypeSymbol])  => NamedTyp("poly type")
+    case  PolyTypeWithCons(typeRef : Type, symbols : Seq[TypeSymbol], cons: String)  => NamedTyp("poly type with cons")
+    case  ImplicitMethodType(resultType : Type, paramSymbols : Seq[Symbol])  => NamedTyp("Implicit Type")
+    case  AnnotatedType(typeRef : Type, attribTreeRefs : List[Int])  => NamedTyp("Annotated Type")
+    case  AnnotatedWithSelfType(typeRef : Type, symbol : Symbol, attribTreeRefs : List[Int])  => NamedTyp("Annotated type with self type")
+    case  DeBruijnIndexType(typeLevel : Int, typeIndex : Int)  => NamedTyp(" Debruijn Index")
+    case  ExistentialType(typeRef : Type, symbols : Seq[Symbol])  => NamedTyp(" Existential type")
   }
+}
 
-  def getScalaSignature(cname: String): ClassDef = {
+ def getScalaSignature(cname: String): ClassDef = {
 
     val cl = java.lang.Class.forName(cname).getClassLoader
     val is = (if (cl == null) java.lang.ClassLoader.getSystemClassLoader else cl).getResourceAsStream(cname.replace('.', '/') + ".class")
@@ -226,64 +226,40 @@ object ScalaTypeGen {
         case None => None
       }
 
+     sig match {
 
-      val sigs =
-        cf.methods flatMap {
-        case z@cf.Member(_, flags, cname, tpe, attribs) =>
-        val w = new Cf(cf)
-          Some(w.getSig(flags, cname, tpe, attribs.asInstanceOf[List[w.cf.Attribute]]))
-        case _ => None
-      }
-
-      sig match {
-
-        case List(myclassdef :MyClassDef) => getClassDef(myclassdef,sigs)
+        case List(myclassdef :MyClassDef) => getClassDef(myclassdef) 
         case _ => null
       }
 
     }
 
-    def getScalaType(sig:List[Sig]): Map[String, MTyp] = {
-      var scalaList = Map.empty[String, List[ScalaType]]()
 
-      sig.foreach {
-        case Sig(methodname, mtyp) => scalaList += methodname -> mtyp
-      }
-
-      scalaList
-    }
-
-      def getClassDef(myclassdef: MyClassDef, sig :List[Sig]) : ClassDef = {
-        val paramList= getScalaType(sig)
-
+     def getClassDef(myclassdef: MyClassDef) : ClassDef = {
+      
         myclassdef match {
           case MyClassDef(modifiers: List[Modifier], name: String, selfType: Type, children: List[MySymbol]) => {
-            println(" Myclassdef " + name)
-            val methods = children.map {
-                case MyMethodDef(name, returnType, params) => {
-                  val method=new MethodDef
-                  method.name = if (name == "<init>") "this" else name
-                  method.returnType=returnType
-                  val MTyp(pNames, pList, pReturnType) = paramList(method.name)
-                  method.returnScalaType=pReturnType
-                  method.params = (params zip pList) flatMap {
-                      case (MyVarDef(name, varType), pType) => {
-                        val field=new VarDef
-                        field.name=name
-                        field.typ=varType
-                        field.fieldScalaType=pType
-                        Some(field)
+          new ClassDef(
+          name,
+          (children.map {
+                case MyMethodDef(name, returnType, stringReturnType, params) => {
+                new MethodDef(
+                  (if (name == "<init>") "this" else name),
+                  returnType,
+                  scalaType(returnType),
+                  stringReturnType,
+                  params.map {
+                      case MyVarDef(name, varType, stringVarType) => {
+                        new VarDef(name,varType,null,stringVarType,scalaType(varType))
                       }
-                      case _ => None
-                    }.toList
-
-                  method
-                }
-                case _ => null
-              }.toList
-
-              ClassDef(name, ...)
-          }
+                   }.toList)
+                  }
+              }.toList),
+              null,
+              null,
+              "",
+              "")
+           }
         }
       }
 
@@ -341,22 +317,23 @@ object ScalaTypeGen {
         val name:String,
         val returnType:Type,
         val returnScalaType:ScalaType,
+        val returnTypeAsString:String,
         val params:List[VarDef]
       )
 
-      class VarDef {
-        var name:String=null
-        var typ:Type=null
-        var fieldType:Class[_]=null
-        var fieldTypeAsString:String=null
-        var fieldScalaType:ScalaType=null
-      }
+      class VarDef (
+        val name:String,
+        val fieldTyp:Type,
+        val fieldType:Class[_],
+        val fieldTypeAsString:String,
+        val fieldScalaType:ScalaType
+      )
 
 
       sealed abstract class MySymbol
       case class MyClassDef(modifiers: List[Modifier], name: String, selfType: Type, children: List[MySymbol]) extends MySymbol
-      case class MyMethodDef(name:String, selfType: Type, children: List[MySymbol]) extends MySymbol
-      case class MyVarDef(name:String, selfType: Type) extends MySymbol
+      case class MyMethodDef(name:String, selfType: Type, stringSelfType: String, children: List[MySymbol]) extends MySymbol
+      case class MyVarDef(name:String, selfType: Type, stringType: String) extends MySymbol
 
 
       def parseScalaSignature(scalaSig: ScalaSig, isPackageObject: Boolean): List[MyClassDef] = {
@@ -407,8 +384,6 @@ object ScalaTypeGen {
         def makeSymbol(level: Int, symbol: Symbol): Option[MySymbol] = {
 
 
-          //println(" Make Symbol :::"+ symbol ) 
-
           if (!symbol.isLocal) {
             // TODO
             symbol match {
@@ -438,8 +413,6 @@ object ScalaTypeGen {
         private def refinementClass(c: ClassSymbol) = c.name == "<refinement>"
 
         def makeClass(level: Int, c: ClassSymbol): Option[MyClassDef] = {
-
-          //println(" ClassSymbol ::"+ c)
 
           var t:Type = NoType
           if (c.name == "<local child>" /*scala.tools.nsc.symtab.StdNames.LOCALCHILD.toString()*/ ) {
@@ -547,7 +520,7 @@ object ScalaTypeGen {
             case imt: ImplicitMethodType => printMethodType(imt, printResult)({})
             case x => if (printResult) {
               print(" : ");
-              printType(x)
+            //  printType(x)
             }
           }
         }
@@ -560,20 +533,20 @@ object ScalaTypeGen {
             printMethodType(mt, printResult)({})
           }
           //todo consider another method types
-          case x => print(" : "); printType(x)
+          case x => print(" : "); 
+                    //printType(x)
         }
 
         // Print rest of the symbol output
         cont
       }
 
-      def makeMethodType(t: Type, printResult: Boolean) : (Type, List[MyVarDef]) = {
+      def makeMethodType(t: Type, printResult: Boolean) : (Type, String, List[MyVarDef]) = {
 
-        def _pmt(mt: Type {def resultType: Type; def paramSymbols: Seq[Symbol]}) : (Type, List[MyVarDef]) = {
+        def _pmt(mt: Type {def resultType: Type; def paramSymbols: Seq[Symbol]}) : (Type, String, List[MyVarDef]) = {
 
           val paramEntries = mt.paramSymbols.map({
-              case ms: MethodSymbol => MyVarDef(ms.name,ms.infoType)
-              case _ => MyVarDef("",NoType)
+              case ms: MethodSymbol => MyVarDef(ms.name,ms.infoType,toString(ms.infoType)(TypeFlags(true)))
             }).toList
 
           /*
@@ -587,28 +560,27 @@ object ScalaTypeGen {
             }
           }
           */
-          (mt.resultType,paramEntries)
+          (mt.resultType,toString(mt.resultType)(TypeFlags(true)),paramEntries)
         }
-        val (returntype, paramEntries ) =  t match {
+        val (returntype, resulttypestring, paramEntries ) =  t match {
           case mt@MethodType(resType, paramSymbols) => _pmt(mt)
           case mt@ImplicitMethodType(resType, paramSymbols) =>_pmt(mt) 
           case pt@PolyType(mt, typeParams) => {
             makeMethodType(mt, printResult)
           }
           //todo consider another method types
-          case x => (makeType(x),List(MyVarDef("",NoType)))
+          case x => (makeType(x),toString(x)(TypeFlags(true)),List(MyVarDef("",NoType,"notype")))
         }
 
         // Print rest of the symbol output
-        (returntype,paramEntries)
+        (returntype, resulttypestring,paramEntries)
       }
 
       def makeMethod(level: Int, m: MethodSymbol) : MySymbol = {
 
-        //  println(" MethodSymbol ::"+ m)
-
         val n = m.name
-        var returntype:Type= NoType
+        var returnType:Type= NoType
+        var returnTypeString:String=null
         var children:List[MySymbol]=null
         if (underCaseClass(m) && n == CONSTRUCTOR_NAME) None.asInstanceOf[MySymbol]
         if (n.matches(".+\\$default\\$\\d+")) None.asInstanceOf[MySymbol] // skip default function parameters
@@ -622,31 +594,30 @@ object ScalaTypeGen {
         val mod=makeModifiers(m)
         n match {
           case CONSTRUCTOR_NAME =>{
-            val (rtype,c) = makeMethodType(m.infoType,false)
-            returntype=rtype
+            val (rType,rString,c) = makeMethodType(m.infoType,false)
+            returnType=rType
+            returnTypeString=rString
             children=c
           }
           case name => {
-            val (rtype,c) = makeMethodType(m.infoType,false)
-            returntype=rtype
+            val (rtype,rString,c) = makeMethodType(m.infoType,false)
+            returnType=rtype
+            returnTypeString=rString
             children=c
           } 
         }
-        MyMethodDef(n, returntype, children)
+        MyMethodDef(n, returnType,returnTypeString,children)
       }
 
       def makeAlias(level: Int, a: AliasSymbol) : MySymbol = {
-        //  println(" Alias Symbol::"+a)
         val name=a.name
         val t=makeType(a.infoType)
-        println(" Alias Type::"+a.infoType)
         val children=makeChildren(level, a)
         MyClassDef(null, name, t, children)
       }
 
       def makeTypeSymbol(level: Int, t: TypeSymbol) : MySymbol = {
         val typ= makeType(t.infoType)
-        println(" type :*:*:"+ toString(t))
         MyClassDef(null,"type",typ,null)
       }
 
@@ -723,18 +694,14 @@ object ScalaTypeGen {
 
       def makeType(sym: SymbolInfoSymbol)(implicit flags: TypeFlags): Type = makeType(sym.infoType)(flags)
 
-        def makeType(t: Type)(implicit flags: TypeFlags): Type = t
+      def makeType(t: Type)(implicit flags: TypeFlags): Type = t
 
       def makeType(t: Type, sep: String)(implicit flags: TypeFlags): Type  = t
 
-      def printType(sym: SymbolInfoSymbol)(implicit flags: TypeFlags): Unit = printType(sym.infoType)(flags)
-
-      def printType(t: Type)(implicit flags: TypeFlags): Unit = print(toString(t)(flags))
-
-      def printType(t: Type, sep: String)(implicit flags: TypeFlags): Unit = print(toString(t, sep)(flags))
-
+      def toString(sym: SymbolInfoSymbol)(implicit flags: TypeFlags): String = toString(sym.infoType)(flags)
+      
       def toString(t: Type)(implicit flags: TypeFlags): String = toString(t, "")(flags)
-
+      
       def toString(t: Type, sep: String)(implicit flags: TypeFlags) : String = {
         // print type itself
         t match {
