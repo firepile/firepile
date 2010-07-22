@@ -58,16 +58,12 @@ object TypeFlow {
     println("GRIMP\n" + gb)
     val g = new ExceptionalUnitGraph(gb)
 
+
     val tfa = new TypeFlowAnalysis(g, getScalaSignature(className.replaceAll("\\$","")))
   }
 
   class TypeFlowAnalysis(graph: UnitGraph, cls: ClassDef) extends ForwardFlowAnalysis[SootUnit,Map[String,ScalaType]](graph) {
-    // val locals = graph.getBody.getLocals
-    // val localUniverse = new ArrayFlowUniverse(locals.toArray)
-    // val emptySet = new ArrayPackedSet(localUniverse)
     val emptySet: Map[String,ScalaType] = new HashMap[String,ScalaType]()
-    // val unitToGenerateSet = new HashMap[SootUnit,Map[String,SootType]]()
-    // val unitToPreserveSet = new HashMap[SootUnit,Map[String,SootType]]()
 
     doAnalysis
 
@@ -81,12 +77,8 @@ object TypeFlow {
       val methodDef = getMethodDefByName(methodName)
       val thisMethod = getMethodDefByName("this")
       
-      // add this
-//      paramMap += ("this" -> graph.getBody.getThisLocal.getType)
-
-
       // add params
-      if (methodDef.params == null)
+      if( methodDef.params == null)
         println("params is null!!!")
       for (p <- methodDef.params) {
         println(" Adding param " + p.name + " = " + p.fieldScalaType)
@@ -107,14 +99,12 @@ object TypeFlow {
       // Not taking into account kill set since these types will be added to tags
       outValue ++= inValue
 
-      // println("unit = " + unit)
-
-      //for (box <- unit.getUseAndDefBoxes.asInstanceOf[List[ValueBox]])
       for (box <- unit.getDefBoxes) {
         box.getValue match {
+          case x: Local if x.getName == "this" => outValue += "this" -> bytecodeTypeToScala(x.getType.toString)
           case x: Local => {
-            if(! inValue.contains(x.getName))
-              outValue += x.getName -> bytecodeTypeToScala(x.getType.toString)   // This will need to be mapped from bytecode type to scalatype
+            if(! inValue.contains(getName(x)))
+              outValue += getName(x) -> bytecodeTypeToScala(x.getType.toString)
           }
           case x => println("wtf " + x + ": " + x.getClass.getName)
         }
@@ -180,9 +170,12 @@ object TypeFlow {
           case "long" => NamedTyp("scala.Long")
           case "float" => NamedTyp("scala.Float")
           case "double" => NamedTyp("scala.Double")
+          case x if x.endsWith("[]") => InstTyp(NamedTyp("scala.Array"), List(bytecodeTypeToScala(x.substring(0, x.length-2))))
           case _ => NamedTyp(bctype)
         }
     }
+
+    private def getName(local: Local): String = local.getName + local.getNumber
 
   }
 }
