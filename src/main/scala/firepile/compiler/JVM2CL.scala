@@ -46,8 +46,8 @@ import soot.{ArrayType => SootArrayType}
 import soot.{NullType => SootNullType}
 
 import firepile.compiler.util.ScalaTypeGen
-import firepile.compiler.Trees._
-import firepile.compiler.Trees.{Seq=>TreeSeq}
+import firepile.tree.Trees._
+import firepile.tree.Trees.{Seq=>TreeSeq}
 import scala.Seq
 import soot.jimple.{ FloatConstant,
                      DoubleConstant,

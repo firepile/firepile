@@ -29,7 +29,6 @@ object ScalaTypeGen {
     val cd= getScalaSignature(args(0))
 
     println(" ::class name ::"+ cd.name)
-    println(" :: class type ::"+ cd.classtype)
     println(" :: class flag ::"+cd.flags)
     
     
@@ -251,8 +250,8 @@ object ScalaTypeGen {
               case ClassInfoType(symbol, typeRefs) => typeRefs.map{i=> scalaType(i)}.toList}),
               null,
               (selfType match {
-              case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags : Int, _ , _, _) , _ ), _) => flags }),
-              "")
+              case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags : Int, _ , _, _) , _ ), _) => flags })
+              )
             }
          }
       }
@@ -304,7 +303,7 @@ object ScalaTypeGen {
         val methods:List[MethodDef],
         val superclass:List[ScalaType],
         val traits:List[ScalaType],
-        val flags:Long,
+        val flags:Long
       )
 
       class MethodDef (
