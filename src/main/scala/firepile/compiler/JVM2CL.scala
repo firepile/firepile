@@ -46,8 +46,8 @@ import soot.{ArrayType => SootArrayType}
 import soot.{NullType => SootNullType}
 
 import firepile.compiler.util.ScalaTypeGen
-import firepile.tree.Trees._
-import firepile.tree.Trees.{Seq=>TreeSeq}
+import firepile.compiler.Trees._
+import firepile.compiler.Trees.{Seq=>TreeSeq}
 import scala.Seq
 import soot.jimple.{ FloatConstant,
                      DoubleConstant,
@@ -99,16 +99,14 @@ object JVM2CL {
     //Scene.v.setSootClassPath(Scene.v.defaultClassPath
 
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
-      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/classes"
-      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/test-classes"
-      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
-      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
-      + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
-      + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
-      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/classes"
-      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/test-classes"
-      + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
-         
+                  + ";."+";C:/Soot/lib/firepile.jar"
+                  + ";C:/Soot/lib/firepilesoot.jar"
+                  + ";C:/Soot/lib/firepilesoottest.jar"
+                  + ";C:/Soot/lib/soot-2.4.0.jar"
+                  + ";C:/Soot/lib/scalap.jar"
+                  + ";C:/Soot/lib/rt.jar"
+      + ";C:/ScalaOpencl2/firepile/lib/scala-library.jar")
+    
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
     Options.v.setPhaseOption("jb", "use-original-names:true")
@@ -252,11 +250,8 @@ object JVM2CL {
     if (m.isNative)
         return null
     
-    // START OF KISHEN CODE
-    // println(" Before Print Signature ")
-    // ScalaType.getScalaSignature(m.getDeclaringClass.getName,m.getName)
-    // println(" After Print Signature ")
-    
+    ScalaTypeGen.getScalaSignature(m.getDeclaringClass.getName.replaceAll("\\$",""))
+ 
 
     symtab = new SymbolTable(self)
 
@@ -868,14 +863,6 @@ object JVM2CL {
   private def makeFunction(m: SootMethod, result: List[Tree]) : Tree = {
     val paramTree = new ListBuffer[Tree]()
     val varTree = new ListBuffer[Tree]()
-
-    /*
-    if (! m.isStatic) {
-      assert(symtab.thisParam != null)
-      val (id,typ) = symtab.thisParam
-      paramTree += Formal(translateType(typ), id)
-    }
-    */
 
     for (i <- 0 until m.getParameterCount) {
       symtab.params.get(i) match {
