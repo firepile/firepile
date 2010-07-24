@@ -20,6 +20,7 @@ import soot.SootFieldRef
 import soot.grimp.Grimp
 import soot.grimp.GrimpBody
 import soot.options.Options
+import soot.tagkit.Tag
 import scala.collection.mutable.Map
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
@@ -64,6 +65,16 @@ object TypeFlow {
 
 
     val tfa = new TypeFlowAnalysis(g, getScalaSignature(className.replaceAll("\\$","")))
+
+    for (u <- gb.getUnits) {
+      decorateWithTags(u, tfa)
+      for (tgs <- u.getTags) {
+        tgs match {
+          case t: TypeFlowTag => println("Tag: " + t.getLocalName + ":" + t.getScalaType)
+          case _ => 
+        }
+      }
+    }
   }
 
   class TypeFlowAnalysis(graph: UnitGraph, cls: ClassDef) extends ForwardFlowAnalysis[SootUnit,Map[String,ScalaType]](graph) {
@@ -259,5 +270,21 @@ object TypeFlow {
       ftype
     }
   }
+
+  def decorateWithTags(us: SootUnit, typeFlow: TypeFlowAnalysis) = {
+    val out = typeFlow.getFlowAfter(us)
+    for (u <- us.getDefBoxes)
+      u.getValue match {
+        case l: Local => us.addTag(new TypeFlowTag(l.getName, out(l.getName)))
+      }
+  }
+
+  class TypeFlowTag(name: String, stype: ScalaType) extends Tag {
+    def getName = "TypeFlowTag"
+    def getValue: Array[Byte] = throw new RuntimeException("TypeFlowTag has no value for bytecode")
+    def getLocalName = name
+    def getScalaType = stype
+  }
+
 }
 
