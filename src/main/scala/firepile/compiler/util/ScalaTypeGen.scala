@@ -33,9 +33,7 @@ object ScalaTypeGen {
      exit(1)
      }
      
-   if(cd.name!=null)
-    println(" ::class name ::"+ cd.name)
-    if(cd.flags!=null)
+     println(" ::class name ::"+ cd.name)
      println(" :: class flag ::"+cd.flags)
     
     
@@ -429,8 +427,8 @@ object ScalaTypeGen {
             var fieldList =ListBuffer[VarDef]()
             val newchildren:List[MySymbol] = makeChildren(level, c).map {i =>
             i match{
-            case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) { if(!(name.indexOf("_$eq")>0)) {fieldList+= new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType)) 
-                                                             null } else null } else i
+            case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) {fieldList+= new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType)) 
+                                                             null } else i
                }
             }.toList
 
@@ -489,8 +487,8 @@ object ScalaTypeGen {
           var fieldList =ListBuffer[VarDef]()
 	      val newchildren:List[MySymbol] = makeChildren(level, classSymbol).map {i =>
 	      i match{
-	      case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) { if(!(name.indexOf("_$eq")>0)) {fieldList+= new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType)) 
-							       null } else null } else i
+	      case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) { fieldList+= new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType)) 
+							       null } else i
 		 }
 	      }.toList
           MyClassDef(mod, "object "+name, t,fieldList.toList,newchildren.filter(_.isInstanceOf[MySymbol]))
@@ -547,7 +545,7 @@ object ScalaTypeGen {
            makeMethodType(m.infoType,false)
             } 
         }
-        MyMethodDef(m.name,rType,if(m.isAccessor) "field_$eq" else rString,c)
+        MyMethodDef(m.name,rType,if(m.isAccessor && !(m.name.indexOf("_$eq")>0)) "field_$eq" else rString,c)
         
       }
 
