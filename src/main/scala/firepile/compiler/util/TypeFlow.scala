@@ -11,8 +11,12 @@ import soot.toolkits.scalar._
 import soot.Body
 import soot.Scene
 import soot.Local
+import soot.Value
 import soot.ValueBox
 import soot.SootClass
+import soot.ArrayType
+import soot.SootMethodRef
+import soot.SootFieldRef
 import soot.grimp.Grimp
 import soot.grimp.GrimpBody
 import soot.options.Options
@@ -76,7 +80,13 @@ object TypeFlow {
       val methodName = graph.getBody.getMethod.getName
       val methodDef = getMethodDefByName(methodName)
       val thisMethod = getMethodDefByName("this")
-      
+
+      // add class fields
+      if (cls.fields != null)
+        for (vd <- cls.fields)
+           paramMap += vd.name -> vd.fieldScalaType
+
+
       // add params
       if( methodDef.params == null)
         println("params is null!!!")
@@ -85,7 +95,6 @@ object TypeFlow {
         paramMap += (p.name -> p.fieldScalaType)
       }
 
-      // add class fields  ("this" method)
       if(thisMethod.params != null)
         for (f <- thisMethod.params)
           paramMap += (f.name -> f.fieldScalaType)
@@ -121,6 +130,32 @@ object TypeFlow {
           outValue += getName(x) -> lookup return type (ScalaType) of base.method
         ...
           */
+
+        case GAssignStmt(x: Local, GInstanceFieldRef(base, field)) => { // not really used? (getters)
+          outValue += getName(x) -> getFieldType(base, field)
+          println("Assigning " + base.getType.toString + "::" + field.name + " to " + getName(x))
+        }
+        case GAssignStmt(x: Local, GVirtualInvoke(base, method, _)) => {
+          // Inefficient hack since getters aren't in classdef
+          getScalaSignature(base.getType.toString).fields.find(x => x.name.equals(method.name)) match {
+            case Some(y) => outValue += getName(x) -> y.fieldScalaType // must be a field
+            case None =>  outValue += getName(x) -> getMethodRetType(base, method) // must be a method
+          }
+        }
+
+        case GAssignStmt(x: Local, GArrayRef(base, _)) => { 
+          // bytecodeTypeToScala(base.getType.toString) doesn't work here
+          outValue += getName(x) -> bytecodeTypeToScala(base.getType.asInstanceOf[ArrayType].getArrayElementType.toString)
+        }
+
+        case GAssignStmt(x: Local, GInterfaceInvoke(base, method, _)) =>
+          outValue += getName(x) -> getMethodRetType(base, method)
+
+        case GAssignStmt(x: Local, GStaticInvoke(method, _)) =>
+          outValue += getName(x) -> bytecodeTypeToScala(method.returnType.toString)
+
+        case GAssignStmt(x: Local, GStaticFieldRef(field)) =>
+          outValue += getName(x) -> bytecodeTypeToScala(field.`type`.toString)
 
         // Fall through cases: use the Java type provided by Soot.
         case GIdentity(x: Local, y) => 
@@ -173,15 +208,17 @@ object TypeFlow {
       dest ++= source
     }
 
-    private def getMethodDefByName(name: String): MethodDef = {
+    private def getMethodDefByName(searchClass: ClassDef, name: String): MethodDef = {
       var mdef: MethodDef = null
 
-      for ( m <- cls.methods ) {
+      for ( m <- searchClass.methods ) {
         if ( m.name.equals(name) )
            mdef = m
        }
       mdef
     }
+
+    private def getMethodDefByName(name: String): MethodDef = getMethodDefByName(cls, name)
 
     private def bytecodeTypeToScala(bctype: String): ScalaType = {
         bctype match {
@@ -199,8 +236,28 @@ object TypeFlow {
     }
 
     private def getName(local: Local): String =
-      if (local.getName == "this") "this" else local.getName + local.getNumber
+      if (local.getName == "this") "this" else local.getName // + local.getNumber
 
+    private def getMethodRetType(base: Value, method: SootMethodRef): ScalaType = {
+      val cdef = getScalaSignature(base.getType.toString)
+      if (cdef != null)
+        getMethodDefByName(cdef, method.name).returnScalaType
+      else 
+        bytecodeTypeToScala(method.returnType.toString)
+    }
+
+    private def getFieldType(base: Value, field: SootFieldRef): ScalaType = {
+      val cdef = getScalaSignature(base.getType.toString)
+      var ftype: ScalaType = null
+      if (cdef != null)
+        for (vd <- cdef.fields)
+          if (vd.name.equals(field.name))
+             ftype = vd.fieldScalaType
+      else
+        ftype = bytecodeTypeToScala(field.`type`.toString)
+
+      ftype
+    }
   }
 }
 
