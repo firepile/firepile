@@ -8,8 +8,6 @@ import scala.tools.scalap._
 import scala.tools.scalap.{Main => Scalap}
 import scala.tools.scalap.scalax.rules.scalasig._
 
-import soot.{Type => SootType}
-
 import java.util.ArrayList
 import scala.collection.mutable.Queue
 import scala.collection.mutable.HashSet
@@ -26,14 +24,23 @@ object ScalaTypeGen {
       println("usage: ScalaTypeGen classname")
       exit(1)
     }
-    val cd= getScalaSignature(args(0))
-
+    val cd=getScalaSignature(args(0))
+    
+    if(cd!=null)
+    println(" class def ::"+cd)
+     else {
+     println(" class def is null")
+     exit(1)
+     }
+     
+   if(cd.name!=null)
     println(" ::class name ::"+ cd.name)
-    println(" :: class flag ::"+cd.flags)
+    if(cd.flags!=null)
+     println(" :: class flag ::"+cd.flags)
     
     
-    if(cd.params!=null)
-    for(i <- cd.params)
+    if(cd.fields!=null)
+    for(i <- cd.fields)
     println(" class field name ::"+i.name+" class field string ::"+i.fieldTypeAsString+"  class field scala type::"+ i.fieldScalaType)
     
     for(i <- cd.superclass)
@@ -68,6 +75,7 @@ object ScalaTypeGen {
       }
 
     }
+    
 
   }
   //CF file
@@ -172,7 +180,7 @@ object ScalaTypeGen {
     case  ThisType(symbol : Symbol)  => if(symbol.path.indexOf("<empty>")>=0) NamedTyp(symbol.name) else NamedTyp(symbol.path)
     case  SingleType(typeRef : Type, singleTypeSymbol : Symbol) => if(singleTypeSymbol.path.indexOf("<empty>")>=0) NamedTyp(singleTypeSymbol.name) else NamedTyp(singleTypeSymbol.path)
     case  ConstantType(constant : Any)  => NamedTyp("scala.Any")
-    case  TypeRefType(prefix : Type, symbol : Symbol, typeArgs : Seq[Type])  => if(typeArgs.isEmpty) { if(symbol.path.indexOf("<empty>")>=0) NamedTyp(symbol.name) else NamedTyp(symbol.path) }else InstTyp(NamedTyp(symbol.path), typeArgs.map(i=>scalaType(i)).toList) 
+    case  TypeRefType(prefix : Type, symbol : Symbol, typeArgs : Seq[Type])  => if(typeArgs.isEmpty) { if(symbol.path.indexOf("<empty>")>=0) NamedTyp(symbol.name) else NamedTyp(symbol.path) }else InstTyp(NamedTyp(if(symbol.path.indexOf("<empty>")>=0) symbol.name else symbol.path), typeArgs.map(i=>scalaType(i)).toList) 
     case  TypeBoundsType(lower : Type, upper : Type)  => NamedTyp("tyeboundstype")
     case  RefinedType(classSym : Symbol, typeRefs : List[Type])  => NamedTyp("refined type")
     case  ClassInfoType(symbol : Symbol, typeRefs : Seq[Type])  => NamedTyp(" Class info type")
@@ -192,7 +200,7 @@ object ScalaTypeGen {
 
     val cl = java.lang.Class.forName(cname).getClassLoader
     val is = (if (cl == null) java.lang.ClassLoader.getSystemClassLoader else cl).getResourceAsStream(cname.replace('.', '/') + ".class")
-      val bis = new java.io.ByteArrayOutputStream
+    val bis = new java.io.ByteArrayOutputStream
     while (is.available > 0)
       bis.write(is.read)
     val bytes = bis.toByteArray
@@ -202,11 +210,8 @@ object ScalaTypeGen {
     val classname=cname
 
     val encName = Names.encode(if (classname == "scala.AnyRef") "java.lang.Object" else classname)
-
         val isPackageObject = Scalap.isPackageObjectFile(encName)
-
         val classFile = ClassFileParser.parse(ByteCode(bytes))
-
         val SCALA_SIG = "ScalaSig"
 
       val sig = classFile.attribute(SCALA_SIG).map(_.byteCode).map(ScalaSigAttributeParsers.parse) match {
@@ -215,7 +220,7 @@ object ScalaTypeGen {
         case Some(scalaSig) => parseScalaSignature(scalaSig, isPackageObject)
         case None => None
       }
-      
+ 
      sig match {
 
         case List(myclassdef :MyClassDef) => getClassDef(myclassdef) 
@@ -226,7 +231,6 @@ object ScalaTypeGen {
 
      def getClassDef(myclassdef: MyClassDef) : ClassDef = {
       
-           	
         myclassdef match {
           case MyClassDef(modifiers: List[Modifier], name: String, selfType: Type, fields: List[VarDef], children: List[MySymbol]) => {
           new ClassDef(
@@ -299,7 +303,7 @@ object ScalaTypeGen {
 
       class ClassDef(
         val name:String,
-        val params:List[VarDef],
+        val fields:List[VarDef],
         val methods:List[MethodDef],
         val superclass:List[ScalaType],
         val traits:List[ScalaType],
