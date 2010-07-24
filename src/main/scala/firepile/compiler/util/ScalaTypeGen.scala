@@ -34,8 +34,6 @@ object ScalaTypeGen {
      }
      
      println(" ::class name ::"+ cd.name)
-     println(" :: class flag ::"+cd.flags)
-    
     
     if(cd.fields!=null)
     for(i <- cd.fields)
@@ -237,22 +235,27 @@ object ScalaTypeGen {
          (children.map {
                 case MyMethodDef(name, returnType, stringReturnType, params) => {
                 new MethodDef(
-                  (if (name == "<init>") "this" else name),
+                  (if (name == "<init>" || name== "$init$" ) "this" else name),
                   returnType,
                   scalaType(returnType),
                   stringReturnType,
-                  params.map {
+                  (params.map {
                       case MyVarDef(name, varType, stringVarType) => {
                         new VarDef(name,varType,null,stringVarType,scalaType(varType))
                       }
-                   }.toList)
+                      case _ => null
+                   }.toList).filter(_.isInstanceOf[VarDef]))
                   }
               }.toList),
               (selfType match { 
-              case ClassInfoType(symbol, typeRefs) => typeRefs.map{i=> scalaType(i)}.toList}),
+              case ClassInfoType(symbol, typeRefs) => typeRefs.map{i=> scalaType(i)}.toList
+              case PolyType(ClassInfoType(symbol, typeRefs), symbols : Seq[TypeSymbol]) => typeRefs.map{i=> scalaType(i)}.toList
+              }),
               null,
               (selfType match {
-              case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags : Int, _ , _, _) , _ ), _) => flags })
+              case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags : Int, _ , _, _) , _ ), _) => flags 
+              case PolyType(ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags : Int, _ , _, _) , _ ), _), symbols : Seq[TypeSymbol]) => flags
+              })
               )
             }
          }
@@ -427,12 +430,13 @@ object ScalaTypeGen {
             var fieldList =ListBuffer[VarDef]()
             val newchildren:List[MySymbol] = makeChildren(level, c).map {i =>
             i match{
-            case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) {fieldList+= new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType)) 
-                                                             null } else i
+            case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) { 
+                                                               fieldList+=  new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType))
+							       MyMethodDef(name,rType,toString(rType)(TypeFlags(true)),children) } else i
                }
             }.toList
 
-            Some(MyClassDef(mods, "class "+name, t, fieldList.toList, newchildren.filter(_.isInstanceOf[MySymbol])))
+            Some(MyClassDef(mods, if (c.isTrait) "trait "+name else "class "+name, t, fieldList.toList, newchildren.filter(_.isInstanceOf[MySymbol])))
           }
         }
 
@@ -487,8 +491,9 @@ object ScalaTypeGen {
           var fieldList =ListBuffer[VarDef]()
 	      val newchildren:List[MySymbol] = makeChildren(level, classSymbol).map {i =>
 	      i match{
-	      case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) { fieldList+= new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType)) 
-							       null } else i
+	      case MyMethodDef(name,rType,rString,children) => if(rString.equals("field_$eq")) { 
+	                                                       fieldList+=  new VarDef(name,rType,null,toString(rType)(TypeFlags(true)),scalaType(rType))
+							       MyMethodDef(name,rType,toString(rType)(TypeFlags(true)),children) } else i
 		 }
 	      }.toList
           MyClassDef(mod, "object "+name, t,fieldList.toList,newchildren.filter(_.isInstanceOf[MySymbol]))
@@ -523,7 +528,7 @@ object ScalaTypeGen {
             makeMethodType(mt, printResult)
           }
           //todo consider another method types
-          case x => (makeType(x),toString(x)(TypeFlags(true)),List(MyVarDef("",NoType,"notype")))
+          case x => (makeType(x),toString(x)(TypeFlags(true)),List(null))
         }
 
         }
