@@ -29,51 +29,10 @@ object ScalaTypeGen {
       println("Class Def List is null")
       exit(1)
     }
-    for (cd <- cdlist) {
-
-      println("Class Name::" + cd.name)
-      println("Class Type::" + cd.classtype)
-
-      if (cd.fields != null)
-        for (i <- cd.fields)
-          println("Class Field Name:" + i.name + "Class Field As String::" + i.fieldTypeAsString + "Class Field As Scala Type::" + i.fieldScalaType)
-      println("------Super Classes----------")
-      for (i <- cd.superclass)
-        println("Class Name::" + i)
-
-      println("---------------Methods-------------------")
-
-      for (i <- 0 until cd.methods.length) {
-        var m = cd.methods(i)
-        println("Method Name:::" + m.name)
-        if (m.returnType != null)
-          println("Return Type::" + m.returnType)
-        if (m.returnTypeAsString != null)
-          println("Return Type As String::" + m.returnTypeAsString)
-        if (m.returnScalaType != null)
-          println("Return Type as Scala Type::" + m.returnScalaType)
-        var p = m.params
-        if (p != null) {
-          var cc = p.length
-          for (j <- 0 until cc) {
-            if (p(j) != null) {
-              if (p(j).name != null)
-                println("Parameter name::" + p(j).name)
-              if (p(j).fieldTyp != null)
-                println("Parameter Type::" + p(j).fieldTyp)
-              if (p(j).fieldTypeAsString != null)
-                println("Parameter Type As String::" + p(j).fieldTypeAsString)
-              if (p(j).fieldScalaType != null)
-                println("Parameter Type As ScalaType::" + p(j).fieldScalaType)
-            }
-          }
-        }
-
-      }
-
-    }
-
-  }
+    
+    printClassDef(cdlist)
+    
+   }
   //CF file
   implicit def cf2cf(cf: Classfile) = new Cf(cf)
 
@@ -233,15 +192,18 @@ object ScalaTypeGen {
   }
 
   def getClassDef(myClassDef: MyClassDef): ClassDef = {
-
+  
+  var innerClasses = ListBuffer[ClassDef]()
+  
     myClassDef match {
       case MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, fields: List[VarDef], children: List[MySymbol]) => {
         new ClassDef(
           name,
           classtype,
-          fields, (children.map {
+          fields, 
+          (children.map { child => child match { 
             case MyMethodDef(name, returnType, stringReturnType, params) => {
-              new MethodDef((if (name == "<init>" || name == "$init$") "this" else name),
+                new MethodDef((if (name == "<init>" || name == "$init$") "this" else name),
                 returnType,
                 scalaType(returnType),
                 stringReturnType, (params.map {
@@ -250,20 +212,81 @@ object ScalaTypeGen {
                   }
                   case _ => null
                 }.toList).filter(_.isInstanceOf[VarDef]))
-            }
-          }.toList), (selfType match {
+             }
+               case MyClassDef(innerModifiers: List[Modifier], innerName: String, innerClasstype: String, innerSelfType: Type, innerFields: List[VarDef], innerChildren: List[MySymbol]) => innerClasses+=getClassDef(child.asInstanceOf[MyClassDef]); null
+          }}.toList).filter(_.isInstanceOf[MethodDef]), 
+          (selfType match {
             case ClassInfoType(symbol, typeRefs) => typeRefs.map { i => scalaType(i) }.toList
             case PolyType(ClassInfoType(symbol, typeRefs), symbols: Seq[TypeSymbol]) => typeRefs.map { i => scalaType(i) }.toList
           }),
           null, (selfType match {
             case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _) => flags
             case PolyType(ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _), symbols: Seq[TypeSymbol]) => flags
-          })
+          }),
+          innerClasses.toList.filter(_.isInstanceOf[ClassDef])
           )
       }
     }
   }
 
+ def printClassDef(cdList: List[ClassDef]) : Unit = { 
+ 
+ println("---------------------------------------------------------------------------------------")
+    for (cd <- cdList) {
+ 
+       println("Class Name::" + cd.name)
+       println("Class Type::" + cd.classtype)
+ 
+       if (cd.fields != null)
+         for (i <- cd.fields)
+           println("Class Field Name:" + i.name + "Class Field As String::" + i.fieldTypeAsString + "Class Field As Scala Type::" + i.fieldScalaType)
+       
+       println("------Super Classes----------")
+       for (i <- cd.superclass)
+         println("Class Name::" + i)
+         
+          println("---------------Methods-------------------")
+	  
+	        for (i <- 0 until cd.methods.length) {
+	          var m = cd.methods(i)
+	          println("Method Name:::" + m.name)
+	          if (m.returnType != null)
+	            println("Return Type::" + m.returnType)
+	          if (m.returnTypeAsString != null)
+	            println("Return Type As String::" + m.returnTypeAsString)
+	          if (m.returnScalaType != null)
+	            println("Return Type as Scala Type::" + m.returnScalaType)
+	            
+	          var p = m.params
+	          if (p != null) {
+	            var cc = p.length
+	            for (j <- 0 until cc) {
+	              if (p(j) != null) {
+	                if (p(j).name != null)
+	                  println("Parameter name::" + p(j).name)
+	                if (p(j).fieldTyp != null)
+	                  println("Parameter Type::" + p(j).fieldTyp)
+	                if (p(j).fieldTypeAsString != null)
+	                  println("Parameter Type As String::" + p(j).fieldTypeAsString)
+	                if (p(j).fieldScalaType != null)
+	                  println("Parameter Type As ScalaType::" + p(j).fieldScalaType)
+	              }
+	            }
+	          }
+ 
+       if(!cd.innerClasses.isEmpty){
+       println("------------------------Inner Classes -----------------------------------")
+       printClassDef(cd.innerClasses)
+       }
+ 
+      
+       }
+ 
+     }
+
+ 
+ }
+ 
   def unpickleFromAnnotation(classFile: ClassFile, isPackageObject: Boolean): List[MyClassDef] = {
     val SCALA_SIG_ANNOTATION = "Lscala/reflect/ScalaSignature;"
     val BYTES_VALUE = "bytes"
@@ -312,7 +335,8 @@ object ScalaTypeGen {
     val methods: List[MethodDef],
     val superclass: List[ScalaType],
     val traits: List[ScalaType],
-    val flags: Long)
+    val flags: Long,
+    val innerClasses: List[ClassDef])
 
   class MethodDef(
     val name: String,
@@ -545,7 +569,7 @@ object ScalaTypeGen {
     }
 
     def makeAlias(level: Int, a: AliasSymbol): MySymbol = {
-
+      println(" make alias ") 
       val name = a.name
       val t = makeType(a.infoType)
       val children = makeChildren(level, a)
