@@ -230,33 +230,6 @@ object TypeFlow {
              mdef = m
         }
 
-      if ( searchClass.superclass != null && mdef == null) {
-        for ( sc  <- searchClass.superclass ) {
-          sc match {
-            case x: NamedTyp => {
-              if (! x.name.startsWith("java.")) {
-                val superClassDef = getScalaSignature(x.name).head
-                if ( superClassDef.methods != null)
-                  for ( m <- superClassDef.methods ) {
-                    if ( m.name.equals(name) )
-                      mdef = m
-                  }
-              }
-            }
-            case x: InstTyp => {
-              if (! x.base.asInstanceOf[NamedTyp].name.startsWith("java.")) {
-                val superClassDef = getScalaSignature(x.base.asInstanceOf[NamedTyp].name).head
-                if ( superClassDef.methods != null)
-                  for ( m <- superClassDef.methods ) {
-                    if ( m.name.equals(name) )
-                      mdef = m
-                  }
-              }
-            }
-          }
-        }
-      }
-
       mdef
     }
 
@@ -281,7 +254,8 @@ object TypeFlow {
       if (local.getName == "this") "this" else local.getName // + local.getNumber
 
     private def getMethodRetType(base: Value, method: SootMethodRef): ScalaType = {
-      val cdef = getScalaSignature(base.getType.toString).head
+      val cdef = getScalaSignature(method.declaringClass.toString).head
+      //val cdef = getScalaSignature(base.getType.toString).head
       println("getting scalasig for " + base.getType)
       if (cdef != null)
         getMethodDefByName(cdef, method.name).returnScalaType
