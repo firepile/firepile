@@ -193,10 +193,6 @@ object TypeFlow {
         if (in2.contains(varName) && in1(varName) != in2(varName)) {
           in1(varName) match {
             case x : NamedTyp => {
-//               Scene.v.tryLoadClass(x.name, 0)
-//               Scene.v.tryLoadClass(in2(varName).asInstanceOf[NamedTyp].name, 0)
-               val in1SootClass = new SootClass(x.name)
-               println("superclass of " + x.name + " is " + in1SootClass.getSuperclass.getName)
                val in1SootType = (new SootClass(x.name)).getType
                val in2SootType = (new SootClass(in2(varName).asInstanceOf[NamedTyp].name)).getType
                out(varName) = NamedTyp(in1SootType.merge(in2SootType, Scene.v).toString)
@@ -232,7 +228,35 @@ object TypeFlow {
         for ( m <- searchClass.methods ) {
           if ( m.name.equals(name) )
              mdef = m
-       }
+        }
+
+      if ( searchClass.superclass != null && mdef == null) {
+        for ( sc  <- searchClass.superclass ) {
+          sc match {
+            case x: NamedTyp => {
+              if (! x.name.startsWith("java.")) {
+                val superClassDef = getScalaSignature(x.name).head
+                if ( superClassDef.methods != null)
+                  for ( m <- superClassDef.methods ) {
+                    if ( m.name.equals(name) )
+                      mdef = m
+                  }
+              }
+            }
+            case x: InstTyp => {
+              if (! x.base.asInstanceOf[NamedTyp].name.startsWith("java.")) {
+                val superClassDef = getScalaSignature(x.base.asInstanceOf[NamedTyp].name).head
+                if ( superClassDef.methods != null)
+                  for ( m <- superClassDef.methods ) {
+                    if ( m.name.equals(name) )
+                      mdef = m
+                  }
+              }
+            }
+          }
+        }
+      }
+
       mdef
     }
 
