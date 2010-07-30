@@ -63,8 +63,8 @@ object TypeFlow {
     println("GRIMP\n" + gb)
     val g = new ExceptionalUnitGraph(gb)
 
-
-    val tfa = new TypeFlowAnalysis(g, getScalaSignature(className.replaceAll("\\$","")))
+    val classDefs = getScalaSignature(className.replaceAll("\\$",""))
+    val tfa = new TypeFlowAnalysis(g, classDefs.head)
 
     for (u <- gb.getUnits) {
       decorateWithTags(u, tfa)
@@ -148,10 +148,11 @@ object TypeFlow {
         }
         case GAssignStmt(x: Local, GVirtualInvoke(base, method, _)) => {
           // Inefficient hack since getters aren't in classdef
-          getScalaSignature(base.getType.toString).fields.find(x => x.name.equals(method.name)) match {
-            case Some(y) => outValue += getName(x) -> y.fieldScalaType // must be a field
-            case None =>  outValue += getName(x) -> getMethodRetType(base, method) // must be a method
-          }
+//          getScalaSignature(base.getType.toString).head.fields.find(x => x.name.equals(method.name)) match {
+//            case Some(y) => outValue += getName(x) -> y.fieldScalaType // must be a field
+//            case None =>  outValue += getName(x) -> getMethodRetType(base, method) // must be a method
+            outValue += getName(x) -> getMethodRetType(base, method) 
+//          }
         }
 
         case GAssignStmt(x: Local, GArrayRef(base, _)) => { 
@@ -159,8 +160,10 @@ object TypeFlow {
           outValue += getName(x) -> bytecodeTypeToScala(base.getType.asInstanceOf[ArrayType].getArrayElementType.toString)
         }
 
-        case GAssignStmt(x: Local, GInterfaceInvoke(base, method, _)) =>
+        case GAssignStmt(x: Local, GInterfaceInvoke(base, method, _)) => {
+          println("Assignment from " + base.asInstanceOf[Object].toString)
           outValue += getName(x) -> getMethodRetType(base, method)
+        }
 
         case GAssignStmt(x: Local, GStaticInvoke(method, _)) =>
           outValue += getName(x) -> bytecodeTypeToScala(method.returnType.toString)
@@ -190,6 +193,10 @@ object TypeFlow {
         if (in2.contains(varName) && in1(varName) != in2(varName)) {
           in1(varName) match {
             case x : NamedTyp => {
+//               Scene.v.tryLoadClass(x.name, 0)
+//               Scene.v.tryLoadClass(in2(varName).asInstanceOf[NamedTyp].name, 0)
+               val in1SootClass = new SootClass(x.name)
+               println("superclass of " + x.name + " is " + in1SootClass.getSuperclass.getName)
                val in1SootType = (new SootClass(x.name)).getType
                val in2SootType = (new SootClass(in2(varName).asInstanceOf[NamedTyp].name)).getType
                out(varName) = NamedTyp(in1SootType.merge(in2SootType, Scene.v).toString)
@@ -221,10 +228,10 @@ object TypeFlow {
 
     private def getMethodDefByName(searchClass: ClassDef, name: String): MethodDef = {
       var mdef: MethodDef = null
-
-      for ( m <- searchClass.methods ) {
-        if ( m.name.equals(name) )
-           mdef = m
+      if ( searchClass.methods != null)
+        for ( m <- searchClass.methods ) {
+          if ( m.name.equals(name) )
+             mdef = m
        }
       mdef
     }
@@ -250,7 +257,8 @@ object TypeFlow {
       if (local.getName == "this") "this" else local.getName // + local.getNumber
 
     private def getMethodRetType(base: Value, method: SootMethodRef): ScalaType = {
-      val cdef = getScalaSignature(base.getType.toString)
+      val cdef = getScalaSignature(base.getType.toString).head
+      println("getting scalasig for " + base.getType)
       if (cdef != null)
         getMethodDefByName(cdef, method.name).returnScalaType
       else 
@@ -258,7 +266,7 @@ object TypeFlow {
     }
 
     private def getFieldType(base: Value, field: SootFieldRef): ScalaType = {
-      val cdef = getScalaSignature(base.getType.toString)
+      val cdef = getScalaSignature(base.getType.toString).head
       var ftype: ScalaType = null
       if (cdef != null)
         for (vd <- cdef.fields)
