@@ -193,6 +193,7 @@ object ScalaTypeGen {
 
   def getClassDef(myClassDef: MyClassDef): ClassDef = {
   
+ 
   var innerClasses = ListBuffer[ClassDef]()
   
     myClassDef match {
@@ -216,10 +217,12 @@ object ScalaTypeGen {
                case MyClassDef(innerModifiers: List[Modifier], innerName: String, innerClasstype: String, innerSelfType: Type, innerFields: List[VarDef], innerChildren: List[MySymbol]) => innerClasses+=getClassDef(child.asInstanceOf[MyClassDef]); null
           }}.toList).filter(_.isInstanceOf[MethodDef]), 
           (selfType match {
+            case TypeRefType(prefix: Type, symbol: Symbol, typeRefs: Seq[Type]) => typeRefs.map { i => scalaType(i) }.toList
             case ClassInfoType(symbol, typeRefs) => typeRefs.map { i => scalaType(i) }.toList
             case PolyType(ClassInfoType(symbol, typeRefs), symbols: Seq[TypeSymbol]) => typeRefs.map { i => scalaType(i) }.toList
           }),
-          null, (selfType match {
+          (selfType match {
+            case TypeRefType(_,TypeSymbol(SymbolInfo(_, _, flags: Int, _, _, _)),_) => flags
             case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _) => flags
             case PolyType(ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _), symbols: Seq[TypeSymbol]) => flags
           }),
@@ -334,7 +337,6 @@ object ScalaTypeGen {
     val fields: List[VarDef],
     val methods: List[MethodDef],
     val superclass: List[ScalaType],
-    val traits: List[ScalaType],
     val flags: Long,
     val innerClasses: List[ClassDef])
 
