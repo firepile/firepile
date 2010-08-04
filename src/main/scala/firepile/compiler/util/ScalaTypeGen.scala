@@ -128,28 +128,28 @@ object ScalaTypeGen {
         }
   import TYPEVARIANT._
   
-  def getVar(t: Symbol) = if (t.isCovariant) COVARIANT else if (t.isContravariant) CONTRAVARIANT else INVARIANT
+  def getVar(s:String, t: Symbol) = if (t.isCovariant) ParamTyp(s,COVARIANT) else if (t.isContravariant) ParamTyp(s,CONTRAVARIANT) else NamedTyp(s)
 
   def scalaType(typ: Type): ScalaType = {
     typ match {
-      case NoType => ParamTyp("NoType",INVARIANT)
-      case NoPrefixType => ParamTyp("java.lang.object",INVARIANT)
-      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) ParamTyp(symbol.name,getVar(symbol)) else ParamTyp(symbol.path,getVar(symbol))
-      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) ParamTyp(singleTypeSymbol.name,getVar(singleTypeSymbol)) else ParamTyp(singleTypeSymbol.path,getVar(singleTypeSymbol))
-      case ConstantType(constant: Any) => ParamTyp("scala.Any",INVARIANT)
-      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) ParamTyp(symbol.name,getVar(symbol)) else ParamTyp(symbol.path,getVar(symbol)) } else InstTyp(ParamTyp(if (symbol.path.indexOf("<empty>") >= 0) symbol.name else symbol.path, getVar(symbol)), typeArgs.map(i => scalaType(i)).toList)
-      case TypeBoundsType(lower: Type, upper: Type) => NamedTyp("tyeboundstype")
-      case RefinedType(classSym: Symbol, typeRefs: List[Type]) => NamedTyp("refined type")
-      case ClassInfoType(symbol: Symbol, typeRefs: Seq[Type]) => NamedTyp(" Class info type")
-      case ClassInfoTypeWithCons(symbol: Symbol, typeRefs: Seq[Type], cons: String) => NamedTyp("class info type with symbols")
+      case NoType => NamedTyp("NoType")
+      case NoPrefixType => NamedTyp("java.lang.object")
+      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol)
+      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) getVar(singleTypeSymbol.name,singleTypeSymbol) else getVar(singleTypeSymbol.path,singleTypeSymbol)
+      case ConstantType(constant: Any) => NamedTyp("scala.Any")
+      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol) } else InstTyp((if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol)), typeArgs.map(i => scalaType(i)).toList)
+      case TypeBoundsType(lower: Type, upper: Type) => NamedTyp("TyeBoundsType")
+      case RefinedType(classSym: Symbol, typeRefs: List[Type]) => NamedTyp("RefinedType")
+      case ClassInfoType(symbol: Symbol, typeRefs: Seq[Type]) => NamedTyp(" ClassInfoType")
+      case ClassInfoTypeWithCons(symbol: Symbol, typeRefs: Seq[Type], cons: String) => NamedTyp("ClassInfoType")
       case MethodType(resultType: Type, paramSymbols: Seq[Symbol]) => NamedTyp("MethodType")
       case PolyType(typeRef: Type, symbols: Seq[TypeSymbol]) => scalaType(typeRef)
-      case PolyTypeWithCons(typeRef: Type, symbols: Seq[TypeSymbol], cons: String) => NamedTyp("poly type with cons")
-      case ImplicitMethodType(resultType: Type, paramSymbols: Seq[Symbol]) => NamedTyp("Implicit Type")
+      case PolyTypeWithCons(typeRef: Type, symbols: Seq[TypeSymbol], cons: String) => NamedTyp("PolyType")
+      case ImplicitMethodType(resultType: Type, paramSymbols: Seq[Symbol]) => NamedTyp("ImplicitType")
       case AnnotatedType(typeRef: Type, attribTreeRefs: List[Int]) => scalaType(typeRef)
-      case AnnotatedWithSelfType(typeRef: Type, symbol: Symbol, attribTreeRefs: List[Int]) => NamedTyp("Annotated type with self type")
-      case DeBruijnIndexType(typeLevel: Int, typeIndex: Int) => NamedTyp(" Debruijn Index")
-      case ExistentialType(typeRef: Type, symbols: Seq[Symbol]) => NamedTyp(" Existential type")
+      case AnnotatedWithSelfType(typeRef: Type, symbol: Symbol, attribTreeRefs: List[Int]) => NamedTyp("AnnotatedType")
+      case DeBruijnIndexType(typeLevel: Int, typeIndex: Int) => NamedTyp(" DebruijnIndex")
+      case ExistentialType(typeRef: Type, symbols: Seq[Symbol]) => NamedTyp(" ExistentialType")
     }
   }
 
