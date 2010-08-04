@@ -132,12 +132,12 @@ object ScalaTypeGen {
 
   def scalaType(typ: Type): ScalaType = {
     typ match {
-      case NoType => NamedType("NoType",INVARIANT)
-      case NoPrefixType => NamedType("java.lang.object",INVARIANT)
-      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) NamedType(symbol.name,getVar(symbol)) else NamedType(symbol.path,getVar(symbol))
-      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) NamedType(singleTypeSymbol.name,getVar(singleTypeSymbol)) else NamedType(singleTypeSymbol.path,getVar(singleTypeSymbol))
-      case ConstantType(constant: Any) => NamedType("scala.Any",INVARIANT)
-      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) NamedType(symbol.name,getVar(symbol)) else NamedType(symbol.path,getVar(symbol)) } else InstTyp(NamedType(if (symbol.path.indexOf("<empty>") >= 0) symbol.name else symbol.path, getVar(symbol)), typeArgs.map(i => scalaType(i)).toList)
+      case NoType => ParamTyp("NoType",INVARIANT)
+      case NoPrefixType => ParamTyp("java.lang.object",INVARIANT)
+      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) ParamTyp(symbol.name,getVar(symbol)) else ParamTyp(symbol.path,getVar(symbol))
+      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) ParamTyp(singleTypeSymbol.name,getVar(singleTypeSymbol)) else ParamTyp(singleTypeSymbol.path,getVar(singleTypeSymbol))
+      case ConstantType(constant: Any) => ParamTyp("scala.Any",INVARIANT)
+      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) ParamTyp(symbol.name,getVar(symbol)) else ParamTyp(symbol.path,getVar(symbol)) } else InstTyp(ParamTyp(if (symbol.path.indexOf("<empty>") >= 0) symbol.name else symbol.path, getVar(symbol)), typeArgs.map(i => scalaType(i)).toList)
       case TypeBoundsType(lower: Type, upper: Type) => NamedTyp("tyeboundstype")
       case RefinedType(classSym: Symbol, typeRefs: List[Type]) => NamedTyp("refined type")
       case ClassInfoType(symbol: Symbol, typeRefs: Seq[Type]) => NamedTyp(" Class info type")
@@ -324,7 +324,7 @@ object ScalaTypeGen {
   case class MTyp(typeFormals: List[Param], formals: List[ScalaType], returnType: ScalaType) extends ScalaType
   case class Param(name: String)
   case class NamedTyp(name: String) extends ScalaType
-  case class NamedType(name: String, typ: TYPEVARIANT) extends ScalaType
+  case class ParamTyp(name: String, typ: TYPEVARIANT) extends ScalaType
   case class InstTyp(base: ScalaType, args: List[ScalaType]) extends ScalaType
   case object UnimplementedTyp extends ScalaType
 
