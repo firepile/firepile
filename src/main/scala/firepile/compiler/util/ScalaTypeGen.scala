@@ -121,15 +121,17 @@ object ScalaTypeGen {
     }
 
   }
+  
+  def getVar(typ:String, t: Symbol) = if (t.isCovariant) typ+":+" else if (t.isContravariant) typ+":-" else typ
 
   def scalaType(typ: Type): ScalaType = {
     typ match {
       case NoType => NamedTyp("NoType")
       case NoPrefixType => NamedTyp("java.lang.object")
-      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) NamedTyp(symbol.name) else NamedTyp(symbol.path)
-      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) NamedTyp(singleTypeSymbol.name) else NamedTyp(singleTypeSymbol.path)
+      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) NamedTyp(getVar(symbol.name,symbol)) else NamedTyp(getVar(symbol.path,symbol))
+      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) NamedTyp(getVar(singleTypeSymbol.name,singleTypeSymbol)) else NamedTyp(getVar(singleTypeSymbol.path,singleTypeSymbol))
       case ConstantType(constant: Any) => NamedTyp("scala.Any")
-      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) NamedTyp(symbol.name) else NamedTyp(symbol.path) } else InstTyp(NamedTyp(if (symbol.path.indexOf("<empty>") >= 0) symbol.name else symbol.path), typeArgs.map(i => scalaType(i)).toList)
+      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) NamedTyp(getVar(symbol.name,symbol)) else NamedTyp(getVar(symbol.path,symbol)) } else InstTyp(NamedTyp(if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol)), typeArgs.map(i => scalaType(i)).toList)
       case TypeBoundsType(lower: Type, upper: Type) => NamedTyp("tyeboundstype")
       case RefinedType(classSym: Symbol, typeRefs: List[Type]) => NamedTyp("refined type")
       case ClassInfoType(symbol: Symbol, typeRefs: Seq[Type]) => NamedTyp(" Class info type")
@@ -723,8 +725,8 @@ object ScalaTypeGen {
       }
     }
 
-    def getVariance(t: TypeSymbol) = if (t.isCovariant) "+" else if (t.isContravariant) "-" else ""
-
+   def getVariance(t: TypeSymbol) = if (t.isCovariant) "+" else if (t.isContravariant) "-" else ""
+   
     def toString(symbol: Symbol): String = symbol match {
       case symbol: TypeSymbol => {
         val attrs = (for (a <- symbol.attributes) yield toString(a)).mkString(" ")
