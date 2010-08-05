@@ -178,6 +178,7 @@ object ScalaTypeGen {
       case None => None
     }
     
+ 
      sig match {
 
       case List(myclassdef: MyClassDef) => List(getClassDef(myclassdef))
@@ -442,7 +443,9 @@ object ScalaTypeGen {
       } else {
         val mods = makeModifiers(c) ::: (if (c.isTrait) List(Trait) else Nil)
         val defaultConstructor = if (c.isCase) getPrinterByConstructor(c) else ""
-        val name = processName(c.name)
+        val name = c match { 
+                   case ClassSymbol(SymbolInfo(_, owner : Symbol,_, _, _, _),_) => if(!owner.path.equals("<empty>")) owner.path.replace("<empty>.","") +"."+ processName(c.name) else processName(c.name)
+                   case _ => processName(c.name) } 
         t = c.infoType
         val classType = t match {
           case PolyType(typeRef, symbols) => PolyTypeWithCons(typeRef, symbols, defaultConstructor)
@@ -501,7 +504,7 @@ object ScalaTypeGen {
     }
 
     def makePackageObject(level: Int, o: ObjectSymbol): MySymbol = {
-
+      
       val mod = makeModifiers(o)
       val name = o.symbolInfo.owner.name
       val TypeRefType(prefix, classSymbol: ClassSymbol, typeArgs) = o.infoType
@@ -514,7 +517,10 @@ object ScalaTypeGen {
     def makeObject(level: Int, o: ObjectSymbol): MySymbol = {
 
       val mod = makeModifiers(o)
-      val name = o.name
+      val name = o match { 
+                   case ObjectSymbol(SymbolInfo(_, owner : Symbol,_, _, _, _)) =>if(!owner.path.equals("<empty>")) owner.path.replace("<empty>.","") +"."+ o.name else o.name
+                   case _ => o.name } 
+                   
       val TypeRefType(prefix, classSymbol: ClassSymbol, typeArgs) = o.infoType
       val t = makeType(classSymbol)
       var fieldList = ListBuffer[VarDef]()
