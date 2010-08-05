@@ -321,12 +321,39 @@ object ScalaTypeGen {
   }
     
   sealed class ScalaType
-  case class MTyp(typeFormals: List[Param], formals: List[ScalaType], returnType: ScalaType) extends ScalaType
-  case class Param(name: String)
-  case class NamedTyp(name: String) extends ScalaType
-  case class ParamTyp(name: String, typ: TYPEVARIANT) extends ScalaType
-  case class InstTyp(base: ScalaType, args: List[ScalaType]) extends ScalaType
-  case object UnimplementedTyp extends ScalaType
+  case class MTyp(typeFormals: List[Param], formals: List[ScalaType], returnType: ScalaType) extends ScalaType {
+  override def equals(other: Any ) = other match {
+  case MTyp(tF: List[Param], f: List[ScalaType], rT: ScalaType) => if ( tF ==typeFormals && formals == f && returnType.equals(rT)) true else false
+  case _ => false
+   }
+  }
+  case class Param(name: String) {
+  override def equals(other: Any) = other match {
+  case Param(n: String) => if(n.equals(name)) true else false
+  case _ => false
+   }
+  }
+  case class NamedTyp(name: String) extends ScalaType {
+  override def equals(other: Any) = other match {
+  case NamedTyp(n: String) => if(n.equals(name)) true else false
+  case _ => false
+   }
+  }
+  case class ParamTyp(name: String, typ: TYPEVARIANT) extends ScalaType {
+  override def equals(other: Any) = other match {
+  case ParamTyp(n: String, t: TYPEVARIANT) => if(n.equals(name) && t == typ ) true else false
+  case _ => false
+     }
+  }
+  case class InstTyp(base: ScalaType, args: List[ScalaType]) extends ScalaType {
+  override def equals(other: Any) = other match {
+  case InstTyp(b: ScalaType, a: List[ScalaType]) => { if ( (b match { case NamedTyp(name: String) => if(b.asInstanceOf[NamedTyp].equals(base)) true else false 
+                                                                      case ParamTyp(name: String, typ: TYPEVARIANT) => if(b.asInstanceOf[ParamTyp].equals(base)) true else false
+                                                                      case _ => false }) && a == args ) true else false }
+  case _ => false
+     }
+  }
+  case object UnimplementedTyp extends ScalaType 
 
   abstract sealed class Modifier
   case object Private extends Modifier
