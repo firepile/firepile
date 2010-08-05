@@ -177,8 +177,8 @@ object ScalaTypeGen {
       case Some(scalaSig) => parseScalaSignature(scalaSig, isPackageObject)
       case None => None
     }
-
-    sig match {
+    
+     sig match {
 
       case List(myclassdef: MyClassDef) => List(getClassDef(myclassdef))
       case scala.None => null
@@ -189,7 +189,7 @@ object ScalaTypeGen {
   }
 
   def getListClassDef(myClassDefList: List[MyClassDef]): List[ClassDef] = {
-
+  
     var fieldList = ListBuffer[ClassDef]()
 
     for (i <- myClassDefList)
@@ -201,7 +201,6 @@ object ScalaTypeGen {
 
   def getClassDef(myClassDef: MyClassDef): ClassDef = {
   
- 
   var innerClasses = ListBuffer[ClassDef]()
   
     myClassDef match {
@@ -462,6 +461,7 @@ object ScalaTypeGen {
               fieldList += new VarDef(name, rType, null, toString(rType)(TypeFlags(true)), scalaType(rType))
               MyMethodDef(name, rType, toString(rType)(TypeFlags(true)), children)
             } else i
+            case MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, fields: List[VarDef], children: List[MySymbol]) => i
             case _ => null
           }
         }.toList
@@ -580,7 +580,6 @@ object ScalaTypeGen {
     }
 
     def makeAlias(level: Int, a: AliasSymbol): MySymbol = {
-      println(" make alias ") 
       val name = a.name
       val t = makeType(a.infoType)
       val children = makeChildren(level, a)
