@@ -178,8 +178,7 @@ object ScalaTypeGen {
       case None => None
     }
     
- 
-     sig match {
+    sig match {
 
       case List(myclassdef: MyClassDef) => List(getClassDef(myclassdef))
       case scala.None => null
@@ -202,6 +201,8 @@ object ScalaTypeGen {
 
   def getClassDef(myClassDef: MyClassDef): ClassDef = {
   
+  var classTypeFlag = false 
+  var classScalaType:ScalaType =null
   var innerClasses = ListBuffer[ClassDef]()
   
     myClassDef match {
@@ -212,7 +213,12 @@ object ScalaTypeGen {
           fields, 
           (children.map { child => child match { 
             case MyMethodDef(name, returnType, stringReturnType, params) => {
-                new MethodDef((if (name == "<init>" || name == "$init$") "this" else name),
+                new MethodDef((if (name == "<init>" || name == "$init$") {
+                if(!classTypeFlag){ 
+                classScalaType=scalaType(returnType) 
+                classTypeFlag=true} 
+                "this"} 
+                else name),
                 returnType,
                 scalaType(returnType),
                 stringReturnType, (params.map {
@@ -234,7 +240,8 @@ object ScalaTypeGen {
             case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _) => flags
             case PolyType(ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _), symbols: Seq[TypeSymbol]) => flags
           }),
-          innerClasses.toList.filter(_.isInstanceOf[ClassDef])
+          innerClasses.toList.filter(_.isInstanceOf[ClassDef]),
+          if(classScalaType==null) NamedTyp(name) else classScalaType
           )
       }
     }
@@ -247,6 +254,7 @@ object ScalaTypeGen {
  
        println("Class Name::" + cd.name)
        println("Class Type::" + cd.classtype)
+       println("Class Scala Type::"+cd.scalatype)
  
        if (cd.fields != null)
          for (i <- cd.fields)
@@ -374,7 +382,8 @@ object ScalaTypeGen {
     val methods: List[MethodDef],
     val superclass: List[ScalaType],
     val flags: Long,
-    val innerClasses: List[ClassDef])
+    val innerClasses: List[ClassDef],
+    val scalatype: ScalaType)
 
   class MethodDef(
     val name: String,
@@ -463,7 +472,8 @@ object ScalaTypeGen {
     private def refinementClass(c: ClassSymbol) = c.name == "<refinement>"
 
     def makeClass(level: Int, c: ClassSymbol): Option[MyClassDef] = {
-
+    println(" Class Symbol ::" + c ) 
+    
       var t: Type = NoType
       if (c.name == "<local child>" /*scala.tools.nsc.symtab.StdNames.LOCALCHILD.toString()*/ ) {
         None
