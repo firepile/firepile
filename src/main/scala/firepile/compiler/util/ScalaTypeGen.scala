@@ -472,7 +472,6 @@ object ScalaTypeGen {
     private def refinementClass(c: ClassSymbol) = c.name == "<refinement>"
 
     def makeClass(level: Int, c: ClassSymbol): Option[MyClassDef] = {
-    println(" Class Symbol ::" + c ) 
     
       var t: Type = NoType
       if (c.name == "<local child>" /*scala.tools.nsc.symtab.StdNames.LOCALCHILD.toString()*/ ) {
