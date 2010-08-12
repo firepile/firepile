@@ -405,7 +405,8 @@ object TypeFlow {
             }
           }
 
-          ab.toList.distinct
+          //ab.toList.distinct
+          distinct(ab.toList)
         }
 
         def subst(t: ScalaType, formals: List[ScalaType], actuals: List[ScalaType]): ScalaType = 
@@ -434,8 +435,9 @@ object TypeFlow {
           lb ++= collectSuperDefs(cd).flatMap(d => d.superclass.map(sc => matchFormalToActual(sc)))
         }
 
-        superTypeCache += bottom -> lb.toList.distinct
-        lb.toList.distinct
+        superTypeCache += bottom -> distinct(lb.toList)
+        //lb.toList.distinct
+        distinct(lb.toList)
       }
 
    }
@@ -498,6 +500,13 @@ object TypeFlow {
     // Need to create our own version of intersect to better maintain order
     stripToBaseTypeName(lst1).intersect(stripToBaseTypeName(lst2)).head
   }
+
+  private def distinct[A](list: List[A]): List[A] = list match { 
+    case Nil => Nil
+    case x :: xs => if(distinct(xs).contains(x)) distinct(xs)
+                    else x :: distinct(xs)
+  }
+  
 
   private def stripToBaseTypeName(st: ScalaType): ScalaType = st match {
     case x: NamedTyp => x
