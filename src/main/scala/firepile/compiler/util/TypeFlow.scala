@@ -459,7 +459,7 @@ object TypeFlow {
                   case COVARIANT => lub(t._2._1, t._2._2)
                   case CONTRAVARIANT => commonAncestor(List(t._2._1, new NamedTyp("scala.Nothing")), List(t._2._2, new NamedTyp("scala.Nothing")))
                 }
-                case x: NamedTyp => if (!t._2._1.asInstanceOf[NamedTyp].equals(t._2._2.asInstanceOf[NamedTyp])) NamedTyp("scala.Any") else t._2._1
+                case x: NamedTyp => { println("x = " + x + "\nt._2 = " + t._2); if (!t._2._1.equals(t._2._2)) NamedTyp("scala.Any") else t._2._1 }
                 case _ => new NamedTyp("scala.Any")
               })
 
