@@ -89,7 +89,7 @@ object TypeFlow {
     else 
       classDefs = getScalaSignature(className.replaceAll("\\$",""))
 
-    println("SUPERCLASSES: " + getSuperClassDefs(classDefs))
+    println("SUPERCLASSES: " + getSupertypes(classDefs))
 
     println("Got ClassDef for " + classDefs.head.name)
     val tfa = new TypeFlowAnalysis(g, classDefs.head)
@@ -159,7 +159,6 @@ object TypeFlow {
 
     protected def flowThrough(inValue: Map[String,ScalaType], unit: SootUnit, outValue: Map[String,ScalaType]): Unit = {
       // Compute gen from getDefs/kill set
-      // Not taking into account kill set since these types will be added to tags
       outValue ++= inValue
 
       // kill
@@ -210,6 +209,15 @@ object TypeFlow {
         case GAssignStmt(x: Local, GStaticFieldRef(field)) =>
           outValue += getName(x) -> bytecodeTypeToScala(field.`type`.toString)
 
+        case GIdentity(x: Local, GNew(typ)) => { println("IDENTITY FROM NEW"); outValue += getName(x) -> getScalaSignature(typ.toString).head.scalatype }
+        
+        case GAssignStmt(x: Local, GNew(typ)) => { println("ASSIGNMENT FROM NEW"); outValue += getName(x) -> getScalaSignature(typ.toString).head.scalatype }
+
+        case GIdentity(x: Local, GNewInvoke(base, method, args)) => { println("IDENTITY FROM NEW INVOKE"); }
+        case GAssignStmt(x: Local, GNewInvoke(base, method, args)) => { println("ASSIGNMENT FROM NEW INVOKE"); }
+        case GIdentity(x: Local, GSpecialInvoke(base, method, args)) => { println("IDENTITY FROM SPECIAL INVOKE"); }
+        case GAssignStmt(x: Local, GSpecialInvoke(base, method, args)) => { println("ASSIGNMENT FROM SPECIAL INVOKE"); }
+        
         case GIdentity(x: Local, GParameterRef(_, _)) =>  
           outValue += getName(x) -> inValue(getName(x))
 
@@ -218,7 +226,7 @@ object TypeFlow {
           outValue += getName(x) -> bytecodeTypeToScala(y.getType.toString)
         case GAssignStmt(x: Local, y) => 
           outValue += getName(x) -> bytecodeTypeToScala(y.getType.toString)
-        case x => { }// println("wtf " + x + ": " + x.getClass.getName)
+        case x =>  println("wtf " + x + ": " + x.getClass.getName)
       }
 
 /*
@@ -232,27 +240,8 @@ object TypeFlow {
       println("in1: " + in1)
       println("in2: " + in2)
       for (varName <- in1.keys)
-        if (in2.contains(varName) && in1(varName) != in2(varName)) {
+        if (in2.contains(varName) && in1(varName) != in2(varName)) 
           out(varName) = lub(in1(varName), in2(varName))
-/*          in1(varName) match {
-            case x : NamedTyp => {
-               val in1SootType = (new SootClass(x.name)).getType
-               val in2SootType = (new SootClass(in2(varName).asInstanceOf[NamedTyp].name)).getType
-               out(varName) = NamedTyp(in1SootType.merge(in2SootType, Scene.v).toString)
-            }
-            case x : InstTyp => {
-              x.base match {
-                case y : NamedTyp => {
-                  val in1SootType = (new SootClass(y.name)).getType
-                  val in2SootType = (new SootClass(in2(varName).asInstanceOf[InstTyp].base.asInstanceOf[NamedTyp].name)).getType
-                  out(varName) = NamedTyp(in1SootType.merge(in2SootType, Scene.v).toString)
-                }
-                case _ => println("InstTyp not matched")
-              }
-            }
-            case _ => println("ScalaType not matched in merge")
-*/          
-        }
         else
           out += (varName -> in1(varName))
 
@@ -345,7 +334,9 @@ object TypeFlow {
       if (local.getName == "this") "this" else local.getName // + local.getNumber
 
     private def getMethodRetType(base: Value, method: SootMethodRef): ScalaType = {
-      val cdef = getScalaSignature(method.declaringClass.toString).head
+      // val cdef = getScalaSignature(method.declaringClass.toString).head
+      println("getMethodRetType: " + base.getType.toString + "::" + method.name)
+      val cdef = getScalaSignature(base.getType.toString.replaceAll("\\$","")).head
       //val cdef = getScalaSignature(base.getType.toString).head
       println("getting scalasig for " + base.getType)
       if (cdef != null)
@@ -370,11 +361,24 @@ object TypeFlow {
   }
 
 
-    def getSuperClassDefs(bottom: String): List[ScalaType] = getSuperClassDefs(getScalaSignature(bottom))
+    def getSupertypes(bottom: String): List[ScalaType] = getSupertypes(getScalaSignature(bottom))
 
-    def getSuperClassDefs(bottom: List[ClassDef]): List[ScalaType] = {
+    def getSupertypes(bottom: ScalaType): List[ScalaType] = bottom match {
+      case NamedTyp(name) => getSupertypes(getScalaSignature(name))
+      case InstTyp(base, _) => getSupertypes(getScalaSignature(name))
+      case ParamTyp(name, vr) => List(new ParamTyp(name, vr), new ParamTyp("scala.Any", vr))
+    }
+
+    def getSupertypes(bottom: List[ClassDef]): List[ScalaType] = {
       if (superTypeCache.contains(bottom)) superTypeCache(bottom)
       else {
+        val actualsLB = new ListBuffer[ScalaType]()
+
+        for (cd <- bottom)
+          if (cd.scalatype != null && cd.scalatype.isInstanceOf[InstTyp])
+            actualsLB.appendAll(cd.scalatype.asInstanceOf[InstTyp].args)
+
+        val actuals = actualsLB.toList
 
         val lb = new ListBuffer[ScalaType]()
 
@@ -385,9 +389,11 @@ object TypeFlow {
               val classDefs = sc match {
                 case x: NamedTyp if !x.name.startsWith("java.") => getScalaSignature(x.name)
                 case x: NamedTyp if x.name.startsWith("java.") => Nil 
-                case InstTyp(base: NamedTyp, _) => getScalaSignature(base.name)
+                case InstTyp(base: NamedTyp, args: List[ScalaType]) => {
+                  getScalaSignature(base.name)
+                }
                 case null => null
-                case x  => throw new RuntimeException("ScalaType " + x + " not matched in getSuperClassDefs")
+                case x  => throw new RuntimeException("ScalaType " + x + " not matched in getSupertypes")
               }
 
               // for generic names (A, B, etc) that do not have classes use scala.Any
@@ -401,10 +407,31 @@ object TypeFlow {
 
           ab.toList.distinct
         }
+
+        def subst(t: ScalaType, formals: List[ScalaType], actuals: List[ScalaType]): ScalaType = 
+          t match {
+            case s: NamedTyp => s
+            // case s @ InstTyp(base, args: List[NamedTyp]) => s
+            case InstTyp(base, args) => new InstTyp(base, args.map(a => subst(a, formals, actuals))) 
+            // case s @ ParamTyp(name, _) => { println("ParamTyp: " + s + " formals " + formals + " actuals " + actuals); (formals zip actuals).find(_._1.name == name) match {
+            // There are some cases where the formals contain NamedTyp as well as ParamTyp
+            case s @ ParamTyp(name, _) => (formals zip actuals).find(_._1 match { case x: NamedTyp => x.name == name
+                                                    case x: ParamTyp => x.name == name
+                                                    case _ => false }) match {
+                                                      case Some(t) => t._2
+                                                      case None => s 
+                                                    } 
+          }
+
+        def matchFormalToActual(t: ScalaType) = t match {
+          case x: NamedTyp => x
+          case x @ InstTyp(base, args: List[ParamTyp]) => subst(x, args, actuals)
+          case _ => null
+        }
      
         for (cd <- bottom) { 
-          if( cd.superclass != null) lb ++= cd.superclass
-          lb ++= collectSuperDefs(cd).flatMap(d => d.superclass)
+          if( cd.superclass != null) lb ++= cd.superclass.map(sc => matchFormalToActual(sc))
+          lb ++= collectSuperDefs(cd).flatMap(d => d.superclass.map(sc => matchFormalToActual(sc)))
         }
 
         superTypeCache += bottom -> lb.toList.distinct
@@ -418,19 +445,33 @@ object TypeFlow {
       else {
         typ1 match {
           case x: NamedTyp => typ2 match {
-            case y: NamedTyp => commonAncestor(typ1 :: getSuperClassDefs(x.name), typ2 :: getSuperClassDefs(y.name))
+            case y: NamedTyp => commonAncestor(typ1 :: getSupertypes(x), typ2 :: getSupertypes(y.name))
             case InstTyp(base: NamedTyp, args: List[ScalaType]) => lub(x, base)
-            case ParamTyp(name: String, typVar: TYPEVARIANT) => commonAncestor(getSuperClassDefs(x.name), getSuperClassDefs(name))
           }
           case InstTyp(base1: NamedTyp, args1: List[ScalaType]) => typ2 match {
             case y: NamedTyp => lub(base1, y)
-            case InstTyp(base2: NamedTyp, args2: List[ScalaType]) => { println("lub matched typ1 = " + typ1 + " typ2 = " + typ2); new InstTyp(lub(base1, base2), args1.zip(args2).map(i => lub(i._1, i._2))) }
-            case ParamTyp(name: String, typVar: TYPEVARIANT) => commonAncestor(getSuperClassDefs(base1.name), getSuperClassDefs(name))
+            case InstTyp(base2: NamedTyp, args2: List[ScalaType]) => { 
+              val baseLUBs = getScalaSignature(lub(base1, base2).asInstanceOf[NamedTyp].name).head
+              val paramTypsWithActuals = baseLUBs.scalatype.asInstanceOf[InstTyp].args.zip(args1 zip args2)
+
+              val newArgs = paramTypsWithActuals.map(t => t._1 match {
+                case ParamTyp(name, vr) => vr match {
+                  case COVARIANT => lub(t._2._1, t._2._2)
+                  case CONTRAVARIANT => commonAncestor(List(t._2._1, new NamedTyp("scala.Nothing")), List(t._2._2, new NamedTyp("scala.Nothing")))
+                }
+                case x: NamedTyp => if (!t._2._1.asInstanceOf[NamedTyp].equals(t._2._2.asInstanceOf[NamedTyp])) NamedTyp("scala.Any") else t._2._1
+                case _ => new NamedTyp("scala.Any")
+              })
+
+              println("lub matched typ1 = " + typ1 + " typ2 = " + typ2)
+              // new InstTyp(lub(base1, base2), args1.zip(args2).map(i => lub(i._1, i._2)))
+              new InstTyp(lub(base1, base2), newArgs)
+            }
           }
           case ParamTyp(name: String, typVar: TYPEVARIANT) => typ2 match {
             case y: NamedTyp => lub(y, typ1)
             case y: InstTyp => lub(y, typ1)
-            case y: ParamTyp => if(name.equals(y.name)) return y else commonAncestor(getSuperClassDefs(name), getSuperClassDefs(y.name))
+            case y: ParamTyp => if(name.equals(y.name)) return y else commonAncestor(getSupertypes(typ1), getSupertypes(y))
           }
           case _ => typ1
         }
@@ -450,22 +491,22 @@ object TypeFlow {
     }
 
   private def commonAncestor(lst1: List[ScalaType], lst2: List[ScalaType]): ScalaType = {
-    println("commonAncestor: lst1 = " + stripToBaseType(lst1))
-    println("lst2 = " + stripToBaseType(lst2))
-    println("intersection = " + stripToBaseType(lst1).intersect(stripToBaseType(lst2)))
+    println("commonAncestor: lst1 = " + stripToBaseTypeName(lst1))
+    println("lst2 = " + stripToBaseTypeName(lst2))
+    println("intersection = " + stripToBaseTypeName(lst1).intersect(stripToBaseTypeName(lst2)))
 
     // Need to create our own version of intersect to better maintain order
-    stripToBaseType(lst1).intersect(stripToBaseType(lst2)).head
+    stripToBaseTypeName(lst1).intersect(stripToBaseTypeName(lst2)).head
   }
 
-  private def stripToBaseType(st: ScalaType): ScalaType = st match {
+  private def stripToBaseTypeName(st: ScalaType): ScalaType = st match {
     case x: NamedTyp => x
     case x: InstTyp => x.base
     case x: ParamTyp => new NamedTyp(x.name)
     case _ => st
   }
 
-  private def stripToBaseType(st: List[ScalaType]): List[ScalaType] = st.map(s => stripToBaseType(s))
+  private def stripToBaseTypeName(st: List[ScalaType]): List[ScalaType] = st.map(s => stripToBaseTypeName(s))
 
 
   def decorateWithTags(us: SootUnit, typeFlow: TypeFlowAnalysis) = {
