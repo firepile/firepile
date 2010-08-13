@@ -419,7 +419,8 @@ object TypeFlow {
             }
           }
 
-          ab.toList.distinct
+          // ab.toList.distinct
+          distinct(ab.toList)
         }
 
         def subst(t: ScalaType, formals: List[ScalaType], actuals: List[ScalaType]): ScalaType = 
@@ -448,15 +449,15 @@ object TypeFlow {
           lb ++= collectSuperDefs(cd).flatMap(d => d.superclass.map(sc => matchFormalToActual(sc)))
         }
 
-        superTypeCache += bottom -> lb.toList.distinct
-        lb.toList.distinct
+        superTypeCache += bottom -> distinct(lb.toList) // lb.toList.distinct
+        //lb.toList.distinct
+        distinct(lb.toList)
       }
 
-   }
+  }
 
-   def lub(typ1: ScalaType, typ2: ScalaType): ScalaType = {
-      if (typ1.equals(typ2)) typ1
-      else {
+  def lub(typ1: ScalaType, typ2: ScalaType): ScalaType = { 
+    if (typ1.equals(typ2)) typ1 else {
         typ1 match {
           case x: NamedTyp => typ2 match {
             case y: NamedTyp => commonAncestor(typ1 :: getSupertypes(x), typ2 :: getSupertypes(y.name))
@@ -470,16 +471,25 @@ object TypeFlow {
 
               val newArgs = paramTypsWithActuals.map(t => t._1 match {
                 case ParamTyp(name, vr) => vr match {
-                  case COVARIANT => lub(t._2._1, t._2._2)
-                  case CONTRAVARIANT => commonAncestor(List(t._2._1, new NamedTyp("scala.Nothing")), List(t._2._2, new NamedTyp("scala.Nothing")))
+                  case COVARIANT => Some((t._1, lub(t._2._1, t._2._2)))
+                  case CONTRAVARIANT => Some((t._1, commonAncestor(List(t._2._1, new NamedTyp("scala.Nothing")), List(t._2._2, new NamedTyp("scala.Nothing")))))
                 }
-                case x: NamedTyp => { println("x = " + x + "\nt._2 = " + t._2); if (!t._2._1.equals(t._2._2)) NamedTyp("scala.Any") else t._2._1 }
+                // INVARIANT
+                case x: NamedTyp => { println("x = " + x + "\nt._2 = " + t._2); if (!t._2._1.equals(t._2._2)) None else Some((t._1, t._2._1)) }
                 case _ => new NamedTyp("scala.Any")
               })
 
               println("lub matched typ1 = " + typ1 + " typ2 = " + typ2)
               // new InstTyp(lub(base1, base2), args1.zip(args2).map(i => lub(i._1, i._2)))
-              new InstTyp(lub(base1, base2), newArgs)
+
+              println("NEW ARGS = " + newArgs.filter(n => n != None).map(a => a match { case Some(x: (NamedTyp, ScalaType)) => x._1 }))
+              val argPairs = newArgs.filter(n => n != None).map(a => a match { case Some(x: (NamedTyp, ScalaType)) => x })
+              println("Supertypes of lub(base1, base2) = " + getSupertypes(lub(base1, base2)))
+              val superTypeMatchingArgs = getSupertypeWithMatchingArgs(lub(base1, base2), argPairs.map(a => a._1 ))
+              superTypeMatchingArgs match {
+                case InstTyp(base, args) => new InstTyp(base, argPairs.map(na => na._2))
+                case x: NamedTyp => x
+              }
             }
           }
           case ParamTyp(name: String, typVar: TYPEVARIANT) => typ2 match {
@@ -489,7 +499,7 @@ object TypeFlow {
           }
           case _ => typ1
         }
-      }
+    }
 
       
       /*
@@ -513,7 +523,23 @@ object TypeFlow {
     stripToBaseTypeName(lst1).intersect(stripToBaseTypeName(lst2)).head
   }
 
-  
+  private def getSupertypeWithMatchingArgs(base: ScalaType, args: List[ScalaType]): ScalaType = {
+    val matching = (getScalaSignature(base.asInstanceOf[NamedTyp].name).head.scalatype :: getSupertypes(base)).find(st => st match {
+      case InstTyp(base, scArgs) => { println("scArgs = " + scArgs); (scArgs zip args).filter(s => s._1 == s._2).length == scArgs.length }
+      case x: NamedTyp => true
+    })
+   
+    println("getSupertypeWithMatchingArgs(" + base + ", " + args + ") = " + matching)
+    matching match { case Some(x: ScalaType) => x }
+  }
+
+  private def distinct[A](list: List[A]): List[A] = list match {
+    case Nil => Nil
+    case x :: xs => if(distinct(xs).contains(x)) distinct(xs)
+                    else x :: distinct(xs)
+  }
+
+
 
   private def stripToBaseTypeName(st: ScalaType): ScalaType = st match {
     case x: NamedTyp => x
