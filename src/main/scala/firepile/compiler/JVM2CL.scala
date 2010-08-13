@@ -98,14 +98,26 @@ object JVM2CL {
     // java.class.path is broken in Scala, especially when running under sbt
     //Scene.v.setSootClassPath(Scene.v.defaultClassPath
 
+    if(System.getProperty("os.name").toLowerCase().startsWith("win"))
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
-                  + ";."+";C:/Soot/lib/firepile.jar"
-                  + ";C:/Soot/lib/firepilesoot.jar"
-                  + ";C:/Soot/lib/firepilesoottest.jar"
-                  + ";C:/Soot/lib/soot-2.4.0.jar"
-                  + ";C:/Soot/lib/scalap.jar"
-                  + ";C:/Soot/lib/rt.jar"
-      + ";C:/ScalaOpencl2/firepile/lib/scala-library.jar")
+                  + ";."+";C:/ScalaWorld/Type-Specific-Compiler/lib/firepiletest.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/firepiletypespecific.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/soot-2.4.0.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/scalap.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/rt.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/jce.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/scala-library.jar")
+    else
+    Scene.v.setSootClassPath(Scene.v.defaultClassPath
+      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/classes"
+      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/test-classes"
+      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
+      + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
+      + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
+      + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
+      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/classes"
+      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/test-classes"
+      + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
     
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)

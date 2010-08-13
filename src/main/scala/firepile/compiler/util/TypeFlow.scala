@@ -43,6 +43,16 @@ object TypeFlow {
     val methodName = args(1)
     var b: Body = null
 
+    if(System.getProperty("os.name").toLowerCase().startsWith("win"))
+    Scene.v.setSootClassPath(Scene.v.defaultClassPath
+                  + ";."+";C:/ScalaWorld/Type-Specific-Compiler/lib/firepiletest.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/firepiletypespecific.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/soot-2.4.0.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/scalap.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/rt.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/jce.jar"
+                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/scala-library.jar")
+    else
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
       + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/classes"
       + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/test-classes"
