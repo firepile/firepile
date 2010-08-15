@@ -556,6 +556,7 @@ object TypeFlow {
     for (u <- us.getDefBoxes)
       u.getValue match {
         case l: Local => us.addTag(new TypeFlowTag(l.getName, out(l.getName)))
+        case _ =>  {}
       }
   }
 
