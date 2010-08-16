@@ -17,6 +17,7 @@ import soot.SootClass
 import soot.ArrayType
 import soot.SootMethodRef
 import soot.SootFieldRef
+import soot.SootMethod
 import soot.grimp.Grimp
 import soot.grimp.GrimpBody
 import soot.options.Options
@@ -40,7 +41,7 @@ object TypeFlow {
     }
 
     var className = args(0)
-    val methodName = args(1)
+    val methodSig = args(1)
     var b: Body = null
 
     if(System.getProperty("os.name").toLowerCase().startsWith("win"))
@@ -74,7 +75,8 @@ object TypeFlow {
     c.setApplicationClass
 
     for (m <- c.methodIterator) {
-      if (m.getName.equals(methodName)) {
+      println("Checking: " + m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef) + " for " + methodSig)
+      if ((m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)).equals(methodSig)) {
         if (! m.isConcrete)
           throw new RuntimeException("Can only run TypeFlow on concrete methods")
         b = m.retrieveActiveBody
@@ -83,7 +85,19 @@ object TypeFlow {
     }
 
     if (b == null)
-      throw new RuntimeException("Method " + methodName + " not found in class " + className)
+      println("Method " + methodSig + " not found in class " + className + ". Checking for raw name.")
+
+    for (m <- c.methodIterator) {
+      if (m.getName.equals(methodSig)) {
+        if (! m.isConcrete)
+          throw new RuntimeException("Can only run TypeFlow on concrete methods")
+        b = m.retrieveActiveBody
+        className = m.getDeclaringClass.getName
+      }
+    }
+
+    if (b == null)
+      throw new RuntimeException("Method " + methodSig + " not found in class " + className)
 
     println("declaring class is " + className) 
     val gb = Grimp.v().newBody(b, "gb")
@@ -144,10 +158,14 @@ object TypeFlow {
       val paramMap = new HashMap[String,ScalaType]()
       val methodName = graph.getBody.getMethod.getName
       val methodSig = methodName + soot.AbstractJasminClass.jasminDescriptorOf(graph.getBody.getMethod.makeRef)
-      val methodDef = getMethodDefByName(methodName)
-      val thisMethod = getMethodDefByName("this")
+      val methodDef = getMethodDefBySig(methodSig)
+      val thisMethod = getThisMethod(cls)
+
 
       println("entryInitialFlow for: " + methodSig)
+      println("methodSig from ScalaType: " + jasminSigFromMethodDef(methodDef))
+
+      assert(methodSig == jasminSigFromMethodDef(methodDef))
 
       // add class fields
       if (cls.fields != null)
@@ -185,6 +203,7 @@ object TypeFlow {
           case x => println("wtf " + x + ": " + x.getClass.getName)
         }
       }
+      
 
       // gen
       unit match {
@@ -238,7 +257,7 @@ object TypeFlow {
         case GIdentity(x: Local, GParameterRef(_, index)) => {
           // outValue += getName(x) -> inValue(getName(x))
           // NOTE: The following code will also need to change to match full signatures
-          val param = getMethodDefByName(graph.getBody.getMethod.getName).params(index)
+          val param = getMethodDefBySig(getMethodSig(graph.getBody.getMethod)).params(index)
           outValue += getName(x) -> param.fieldScalaType
         }
 
@@ -276,24 +295,24 @@ object TypeFlow {
       dest ++= source
     }
 
-    private def getMethodDefByName(searchClass: ClassDef, name: String): MethodDef = {
+    private def getMethodDefBySig(searchClass: ClassDef, sig: String): MethodDef = {
       var mdef: MethodDef = null
 
-      mdef = searchThisMethodDefs(searchClass, name)
+      mdef = searchThisMethodDefs(searchClass, sig)
       if ( mdef == null )
-        mdef = searchSuperMethodDefs(searchClass, name)
+        mdef = searchSuperMethodDefs(searchClass, sig)
 
       mdef
     }
 
-    private def searchThisMethodDefs(searchClass: ClassDef, name: String): MethodDef = {
+    private def searchThisMethodDefs(searchClass: ClassDef, sig: String): MethodDef = {
       var mdef: MethodDef = null
 
       println("searchThisMethodDefs: Searching class " + searchClass.name)
 
       if ( searchClass.methods != null)
         for ( m <- searchClass.methods ) {
-          if ( m.name.equals(name) ) {
+          if ( jasminSigFromMethodDef(m).equals(sig) ) {
              mdef = m
           }
         }
@@ -301,7 +320,21 @@ object TypeFlow {
       mdef 
     }
 
-    private def searchSuperMethodDefs(searchClass: ClassDef, name: String): MethodDef = {
+    def getMethodSig(method: SootMethod): String = method.getName + soot.AbstractJasminClass.jasminDescriptorOf(method.makeRef)
+
+    private def getThisMethod(searchClass: ClassDef): MethodDef = {
+      var mdef: MethodDef = null
+
+      if (searchClass.methods != null)
+        for (m <- searchClass.methods) {
+          if (m.name.equals("this"))
+            mdef = m
+        }
+
+      mdef
+    }
+
+    private def searchSuperMethodDefs(searchClass: ClassDef, sig: String): MethodDef = {
       var mdef: MethodDef = null
       if (searchClass.superclass == null)
         println("superclasses are NULL!!!!")
@@ -315,7 +348,7 @@ object TypeFlow {
 
           if ( scAsClassDef != null) {
             println("searchSuperMethodDefs: searching " + scAsClassDef.name)
-            mdef = searchThisMethodDefs(scAsClassDef, name)
+            mdef = searchThisMethodDefs(scAsClassDef, sig)
             if ( mdef == null && scAsClassDef.superclass != null)
               for( ssc <- scAsClassDef.superclass) { 
                 val sscAsClassDef = sc match {
@@ -323,7 +356,7 @@ object TypeFlow {
                   case InstTyp(base: NamedTyp, _) => getScalaSignature(base.name).head
                   case _ => null
                 }
-                mdef = searchSuperMethodDefs(sscAsClassDef, name)
+                mdef = searchSuperMethodDefs(sscAsClassDef, sig)
                 if (mdef != null) return mdef
               }
           }
@@ -334,14 +367,14 @@ object TypeFlow {
     }
 
 
-    private def getMethodDefByName(name: String): MethodDef = getMethodDefByName(cls, name)
+    private def getMethodDefBySig(sig: String): MethodDef = getMethodDefBySig(cls, sig)
 
     private def jasminSigFromMethodDef(method: MethodDef): String = {
       method.name + "(" + method.params.map(p => p.fieldScalaType match {
         case NamedTyp(n: String) => matchBasicType(n)
-        case InstTyp(base: NamedTyp, args: List[NamedTyp]) if base.name == "Array" => "[" + matchBasicType(args.head.name)
+        case InstTyp(base: NamedTyp, args: List[NamedTyp]) if base.name == "scala.Array" => "[" + matchBasicType(args.head.name)
         case InstTyp(base: NamedTyp, _) => matchBasicType(base.name)
-      }) + ")" + matchBasicType(method.returnScalaType match {
+      }).mkString + ")" + matchBasicType(method.returnScalaType match {
                                   case NamedTyp(name) => name
                                   case InstTyp(NamedTyp(name), _) => name })
 
@@ -357,7 +390,8 @@ object TypeFlow {
       case "scala.Float" => "F"
       case "scala.Double" => "D"
       case "java.lang.Object" => "Ljava/lang/Object;"
-      case _ => // CONVERT TO FORM LIKE java.lang.Object
+      case "scala.Predef.String" => "Ljava/lang/String;"
+      case x => "L" + x.replaceAll("\\.", "/") + ";"
     }
 
     private def bytecodeTypeToScala(bctype: String): ScalaType = {
@@ -385,7 +419,7 @@ object TypeFlow {
       //val cdef = getScalaSignature(base.getType.toString).head
       println("getting scalasig for " + base.getType)
       if (cdef != null)
-        getMethodDefByName(cdef, method.name).returnScalaType
+        getMethodDefBySig(cdef, getMethodSig(method.resolve)).returnScalaType
       else 
         bytecodeTypeToScala(method.returnType.toString)
     }
