@@ -143,8 +143,11 @@ object TypeFlow {
     protected def entryInitialFlow(): Map[String,ScalaType] = {
       val paramMap = new HashMap[String,ScalaType]()
       val methodName = graph.getBody.getMethod.getName
+      val methodSig = methodName + soot.AbstractJasminClass.jasminDescriptorOf(graph.getBody.getMethod.makeRef)
       val methodDef = getMethodDefByName(methodName)
       val thisMethod = getMethodDefByName("this")
+
+      println("entryInitialFlow for: " + methodSig)
 
       // add class fields
       if (cls.fields != null)
@@ -232,8 +235,12 @@ object TypeFlow {
         case GIdentity(x: Local, GSpecialInvoke(base, method, args)) => { println("IDENTITY FROM SPECIAL INVOKE"); }
         case GAssignStmt(x: Local, GSpecialInvoke(base, method, args)) => { println("ASSIGNMENT FROM SPECIAL INVOKE"); }
         
-        case GIdentity(x: Local, GParameterRef(_, _)) =>  
-          outValue += getName(x) -> inValue(getName(x))
+        case GIdentity(x: Local, GParameterRef(_, index)) => {
+          // outValue += getName(x) -> inValue(getName(x))
+          // NOTE: The following code will also need to change to match full signatures
+          val param = getMethodDefByName(graph.getBody.getMethod.getName).params(index)
+          outValue += getName(x) -> param.fieldScalaType
+        }
 
         // Fall through cases: use the Java type provided by Soot.
         case GIdentity(x: Local, y) => 
@@ -328,6 +335,30 @@ object TypeFlow {
 
 
     private def getMethodDefByName(name: String): MethodDef = getMethodDefByName(cls, name)
+
+    private def jasminSigFromMethodDef(method: MethodDef): String = {
+      method.name + "(" + method.params.map(p => p.fieldScalaType match {
+        case NamedTyp(n: String) => matchBasicType(n)
+        case InstTyp(base: NamedTyp, args: List[NamedTyp]) if base.name == "Array" => "[" + matchBasicType(args.head.name)
+        case InstTyp(base: NamedTyp, _) => matchBasicType(base.name)
+      }) + ")" + matchBasicType(method.returnScalaType match {
+                                  case NamedTyp(name) => name
+                                  case InstTyp(NamedTyp(name), _) => name })
+
+    }
+
+    def matchBasicType(typ: String) = typ match {
+      case "scala.Unit" => "V"
+      case "scala.Boolean" => "Z"
+      case "scala.Byte" => "B"
+      case "scala.Short" => "S"
+      case "scala.Int" => "I"
+      case "scala.Long" => "J"
+      case "scala.Float" => "F"
+      case "scala.Double" => "D"
+      case "java.lang.Object" => "Ljava/lang/Object;"
+      case _ => // CONVERT TO FORM LIKE java.lang.Object
+    }
 
     private def bytecodeTypeToScala(bctype: String): ScalaType = {
         bctype match {
@@ -555,8 +586,8 @@ object TypeFlow {
     val out = typeFlow.getFlowAfter(us)
     for (u <- us.getDefBoxes)
       u.getValue match {
-        case l: Local => us.addTag(new TypeFlowTag(l.getName, out(l.getName)))
-        case _ =>  {}
+        case l: Local => us.addTag(new TypeFlowTag(l.getName, out(l.getName))) 
+        case x =>  { }
       }
   }
 
