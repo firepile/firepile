@@ -187,6 +187,9 @@ object Trees {
     case class Case(index: Tree, body: Tree) extends Tree {
         def toCL = "case " + index.toCL + ": {\n" + indent(stmt(body)) + "}\n"
     }
+    case object Break extends Tree {
+      def toCL = "break;\n"
+    }
     case class Default(body: Tree) extends Tree {
         def toCL = "default: {\n" + indent(stmt(body)) + "}\n"
     }
@@ -243,6 +246,26 @@ object Trees {
                          fields.map((t:Tree) => indent(t.toCL)).mkString("") +
                         "};\n\n"
     }
+    object UnionDef {
+        def apply(name: Id, fields: List[Tree]): UnionDef = UnionDef(name.name, fields)
+        def apply(name: Id, fields: Tree*): UnionDef = UnionDef(name.name, fields.toList)
+        def apply(name: String, fields: Tree*): UnionDef = UnionDef(name, fields.toList)
+    }
+    case class UnionDef(name: String, fields: List[Tree]) extends Tree {
+        def toCL = "union " + name + " {\n" +
+                         fields.map((t:Tree) => indent(t.toCL)).mkString("") +
+                        "};\n\n"
+    }
+    object EnumDef {
+      def apply(name: Id, elements: List[Tree]): EnumDef = EnumDef(name.name, elements)
+      def apply(name: Id, elements: Tree*): EnumDef = EnumDef(name.name, elements.toList)
+      def apply(name: String, elements: Tree*): EnumDef = EnumDef(name, elements.toList)
+    }
+    case class EnumDef(name: String, elements: List[Tree]) extends Tree {
+      def toCL = "enum " + name + " {\n" +
+                   elements.map((t:Tree) => indent(t.toCL)).mkString(",") + 
+                   "};\n\n"
+    }
     case class ValueType(name: String) extends Tree {
         def toCL = name
     }
@@ -263,6 +286,18 @@ object Trees {
     }
     case class StructType(name: String) extends Tree {
         def toCL = "struct " + name
+    }
+    object EnumType {
+      def apply(name: Id): EnumType = EnumType(name.name)
+    }
+    case class EnumType(name: String) extends Tree {
+      def toCL = "enum " + name
+    }
+    object UnionType {
+      def apply(name: Id): UnionType = UnionType(name.name)
+    }
+    case class UnionType(name: String) extends Tree {
+      def toCL = " " + name
     }
     object ArrayDef {
         def apply(name: Id, typ: Tree, size: Tree): ArrayDef = ArrayDef(name.name, typ, size)

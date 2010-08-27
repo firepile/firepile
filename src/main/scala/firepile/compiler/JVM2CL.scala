@@ -26,6 +26,7 @@ import soot.SootMethodRef
 import soot.Modifier
 import soot.toolkits.graph.ExceptionalUnitGraph
 import soot.toolkits.graph.UnitGraph
+import soot.Hierarchy
 import soot.jimple.JimpleBody
 import soot.jimple.Jimple
 import soot.grimp.Grimp
@@ -46,6 +47,8 @@ import soot.{ArrayType => SootArrayType}
 import soot.{NullType => SootNullType}
 
 import firepile.compiler.util.ScalaTypeGen
+import firepile.compiler.util.ScalaTypeGen.{getScalaSignature,
+                                            ClassDef}
 import firepile.tree.Trees._
 import firepile.tree.Trees.{Seq=>TreeSeq}
 import scala.Seq
@@ -73,6 +76,7 @@ object JVM2CL {
 
   private val makeCallGraph = true
   private val HACK = false
+  private var activeHierarchy: Hierarchy  = null
 
   setup
 
@@ -117,7 +121,14 @@ object JVM2CL {
       + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
       + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/classes"
       + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/test-classes"
-      + ":.:tests:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
+      + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
+      + ":.:tests:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
+   
+    // Manually add basic classes to scene for testing VirtualInvoke
+    Scene.v.addBasicClass("VirtualInvokeA")
+    Scene.v.addBasicClass("VirtualInvokeB")
+    Scene.v.addBasicClass("VirtualInvokeC")
+    Scene.v.addBasicClass("VirtualInvokeX")
     
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
@@ -130,6 +141,8 @@ object JVM2CL {
     Options.v.set_allow_phantom_refs(true)
     if (makeCallGraph)
       Options.v.set_whole_program(true)
+
+    activeHierarchy = Scene.v.getActiveHierarchy
   }
 
   def methodName(m: SootMethod): String = mangleName(m.getDeclaringClass.getName + m.getName)
@@ -167,11 +180,21 @@ object JVM2CL {
   def reduceDef(m: SootMethod, t: Tree) = t
 
   object CompileMethodTask {
-    def apply(m: SootMethod, self: AnyRef = null): CompileMethodTask = CompileMethodTask(m.makeRef, self)
-    def apply(m: SootMethodRef): CompileMethodTask = CompileMethodTask(m, null)
+    def apply(m: SootMethod, self: AnyRef): CompileMethodTask = CompileMethodTask(m.makeRef, self, false)
+    def apply(m: SootMethod, self: AnyRef, takesThis: Boolean): CompileMethodTask = CompileMethodTask(m.makeRef, self, takesThis)
+    def apply(m: SootMethodRef, self: AnyRef): CompileMethodTask = CompileMethodTask(m, self, false)
+    def apply(m: SootMethodRef): CompileMethodTask = CompileMethodTask(m, null, false)
+  }
+
+  case class CompileMethodTree(t: Tree) extends Task {
+    def run = {
+      List(compileMethod(t))
+    }
+
+    def method = null
   }
   
-  case class CompileMethodTask(method: SootMethodRef, self: AnyRef) extends Task {
+  case class CompileMethodTask(method: SootMethodRef, self: AnyRef, takesThis: Boolean) extends Task {
     def run = {
       val m = method
 
@@ -180,7 +203,7 @@ object JVM2CL {
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.SIGNATURES)
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.BODIES)
         
-      compileMethod(m.resolve, self) match {
+      compileMethod(m.resolve, self, takesThis) match {
         case null => Nil
         case t => t::Nil
       }
@@ -233,7 +256,7 @@ object JVM2CL {
       val ts = task.run
       results ++= ts
     }
-    results.toList
+    classtab.dumpClassTable ::: results.toList
   }
 
   def isStatic(flags: Int) = (flags & 0x0008) != 0
@@ -253,7 +276,7 @@ object JVM2CL {
     buffer.toString()
   }
 
-  private def compileMethod(m: SootMethod, self: AnyRef): Tree = {
+  private def compileMethod(m: SootMethod, self: AnyRef, takesThis: Boolean = false): Tree = {
     println("-------------------------------------------------------")
     println(m)
 
@@ -281,7 +304,8 @@ object JVM2CL {
 
     val body = translateUnits(units, Nil)
     val labeled = insertLabels(units, body, Nil)
-    val fun = makeFunction(m, removeThis(labeled))
+
+    val fun = makeFunction(m, removeThis(labeled), takesThis)
 
       // TODO: don't removeThis for normal methods; do removeThis for closures
       // TODO: verify that this is not used in the body of the method
@@ -295,6 +319,20 @@ object JVM2CL {
     println(fun.toCL)
 
     fun
+  }
+
+  private def compileMethod(m: Tree): Tree = {
+    println("-------------------------------------------------------")
+
+    println()
+    println("Result tree:")
+    println(m)
+
+    println()
+    println("Result CL:")
+    println(m.toCL)
+
+    m
   }
 
   private def removeThis(body: List[Tree]): List[Tree] = {
@@ -350,7 +388,39 @@ object JVM2CL {
     }
   }
 
+  private class ClassTable {
+    val knownClasses = new HashMap[SootClass,(Tree /* struct */, Tree /* union */)]()
+    val enumElements = new ListBuffer[Id]()
+
+    def addClass(cls: SootClass) = {
+      if (!knownClasses.contains(cls)) {
+        enumElements += Id(cls.getName + "_ID")
+        
+        val scalaSig = getScalaSignature(cls.getName).head
+
+        if (scalaSig == null)
+          throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
+
+        val struct = StructDef(Id(cls.getName), VarDef(IntType, Id("__id")) :: scalaSig.fields.map(f => VarDef(ValueType(f.fieldTypeAsString), f.name)))
+        // maybe we should also call addClass on list returned from getDirectSubclassesOf(cls)
+        val union = UnionDef(Id(cls.getName + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getDirectSubclassesOfIncluding(cls).map(sc => VarDef(StructType(sc.getName), Id("_"+sc.getName))).toList)
+
+        knownClasses += cls -> (struct, union)
+      }
+    }
+
+    def dumpClassTable = {
+      val classtable = List[Tree](StructDef(Id("Object"), VarDef(IntType, Id("__id"))),
+                              EnumDef(Id("KNOWN_CLASSES"), enumElements.toList)) ::: knownClasses.values.map(v => TreeSeq(v._1, v._2)).toList
+      println("CLASSTABLE CL:")
+      classtable.foreach((ct: Tree) => println(ct.toCL))
+      classtable
+    }
+  }
+
   private var symtab: SymbolTable = null
+
+  private val classtab: ClassTable = new ClassTable()
 
   private def translateLabel(u: SootUnit): String = u match {
     case target : Stmt => {
@@ -792,14 +862,56 @@ object JVM2CL {
 
       assert(possibleReceivers.length > 0)
 
+      val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+
       if (possibleReceivers.length == 1) {
         // monomorphic call
         // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
+        println("Monomorphic call to " + methodName(method))
         Call(Id(methodName(method)), args.map(a => translateExp(a)))
       }
       else {
         // polymorphic call--generate a switch
-        Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
+        val methodReceiversRef = ListBuffer[SootMethod]()
+        val argsToPass = args.map(a => translateExp(a))    // Will need to cast "self" to appropriate type
+
+        for (pr <- possibleReceivers) {
+          val i = pr.methodIterator
+          while (i.hasNext) {
+            val m = i.next
+            if (! m.isAbstract) {
+              val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+              println("Checking method: " + sig + " against " + methodSig)
+              if (sig.equals(methodSig)) {
+                println("Adding CompileMethodTask(" + method + ", " + pr + ")")
+                worklist += CompileMethodTask(m, pr, true)
+                methodReceiversRef += m
+                classtab.addClass(pr)
+              }
+            }
+          }
+        }
+
+        val methodFormals: List[Tree] = compileMethod(method.resolve, null, false) match {
+          case FunDef(_, _, formals, _) => formals
+          case _ => Nil
+        }
+
+        val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
+            case Formal(_, name) => Id(name)
+            case _ => Id("Wtf: No Name?")
+        })
+
+        val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
+
+        val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName)),Id("cls")) :: methodFormalIds)), Break))))
+        
+        // add appropriate formal parameters for call
+        worklist += new CompileMethodTree(FunDef(ValueType("void"),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
+        
+    // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
+        // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
+        Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
       }
     
   
@@ -872,9 +984,12 @@ object JVM2CL {
    case Nil => resultWithLabels
   }
 
-  private def makeFunction(m: SootMethod, result: List[Tree]) : Tree = {
+  private def makeFunction(m: SootMethod, result: List[Tree], takesThis: Boolean) : Tree = {
     val paramTree = new ListBuffer[Tree]()
     val varTree = new ListBuffer[Tree]()
+
+    if (takesThis)
+      paramTree += Formal(symtab.thisParam._2, symtab.thisParam._1)
 
     for (i <- 0 until m.getParameterCount) {
       symtab.params.get(i) match {
