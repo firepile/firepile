@@ -52,6 +52,7 @@ import firepile.compiler.util.ScalaTypeGen.{getScalaSignature,
                                             VarDef,
                                             NamedTyp,
                                             InstTyp}
+import firepile.compiler.util.TypeFlow.getSupertypes
 import firepile.tree.Trees._
 import firepile.tree.Trees.{Seq=>TreeSeq}
 import scala.Seq
@@ -408,12 +409,21 @@ object JVM2CL {
       if (!knownClasses.contains(cls)) {
         enumElements += Id(cls.getName + "_ID")
         
-        val scalaSig = getScalaSignature(cls.getName).head
+        val scalaSig = getScalaSignature(cls.getName)
 
         if (scalaSig == null)
           throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
 
-        val struct = StructDef(Id(cls.getName), VarDef(IntType, Id("__id")) :: scalaSig.fields.map(f => VarDef(translateType(f), f.name)))
+        val superTypeStructs = getSupertypes(scalaSig).filter(st => st match { 
+            case NamedTyp(name: String) if name.equals("scala.ScalaObject") => false
+            case NamedTyp(name: String) if name.equals("java.lang.Object") => false
+            case _ => true }).map(st => st match {
+            case NamedTyp(n: String) => VarDef(StructType(n), Id("_"+n))
+            case InstTyp(base: NamedTyp, _) => VarDef(StructType(base.name), Id("_"+base.name))
+            case _ => VarDef(Id("UNKNOWN"), Id("_UNKNOWN"))
+        })
+
+        val struct = StructDef(Id(cls.getName), VarDef(IntType, Id("__id")) :: superTypeStructs ::: scalaSig.head.fields.map(f => VarDef(translateType(f), f.name)))
         // maybe we should also call addClass on list returned from getDirectSubclassesOf(cls)
         val union = UnionDef(Id(cls.getName + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => VarDef(StructType(sc.getName), Id("_"+sc.getName))).toList)
 
