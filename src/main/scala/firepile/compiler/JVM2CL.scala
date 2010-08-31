@@ -48,7 +48,10 @@ import soot.{NullType => SootNullType}
 
 import firepile.compiler.util.ScalaTypeGen
 import firepile.compiler.util.ScalaTypeGen.{getScalaSignature,
-                                            ClassDef}
+                                            ClassDef,
+                                            VarDef,
+                                            NamedTyp,
+                                            InstTyp}
 import firepile.tree.Trees._
 import firepile.tree.Trees.{Seq=>TreeSeq}
 import scala.Seq
@@ -129,6 +132,10 @@ object JVM2CL {
     Scene.v.addBasicClass("VirtualInvokeB")
     Scene.v.addBasicClass("VirtualInvokeC")
     Scene.v.addBasicClass("VirtualInvokeX")
+    Scene.v.addBasicClass("Point")
+    Scene.v.addBasicClass("Point1D")
+    Scene.v.addBasicClass("Point2D")
+    Scene.v.addBasicClass("Point3D")
     
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
@@ -356,7 +363,12 @@ object JVM2CL {
     var thisParam: (Id, Tree) = null
 
     def addThisParam(typ: SootType, id: Id) = {
-      thisParam = (id, translateType(typ))
+      val typUnion = translateType(typ) match {
+        case PtrType(v: ValueType) => PtrType(ValueType(v.name + "_intr"))
+        case ValueType(name: String) => ValueType(name + "_intr")
+        case x => x
+      }
+      thisParam = (id, typUnion)
     }
 
     def addParamVar(typ: SootType, index: Int, id: Id) = {
@@ -401,9 +413,9 @@ object JVM2CL {
         if (scalaSig == null)
           throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
 
-        val struct = StructDef(Id(cls.getName), VarDef(IntType, Id("__id")) :: scalaSig.fields.map(f => VarDef(ValueType(f.fieldTypeAsString), f.name)))
+        val struct = StructDef(Id(cls.getName), VarDef(IntType, Id("__id")) :: scalaSig.fields.map(f => VarDef(translateType(f), f.name)))
         // maybe we should also call addClass on list returned from getDirectSubclassesOf(cls)
-        val union = UnionDef(Id(cls.getName + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getDirectSubclassesOfIncluding(cls).map(sc => VarDef(StructType(sc.getName), Id("_"+sc.getName))).toList)
+        val union = UnionDef(Id(cls.getName + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => VarDef(StructType(sc.getName), Id("_"+sc.getName))).toList)
 
         knownClasses += cls -> (struct, union)
       }
@@ -461,6 +473,24 @@ object JVM2CL {
       // TODO: array types
       case _ => ValueType(t.toString)
   }
+
+  private def translateType(t: VarDef): Tree = t.fieldScalaType match {
+    case NamedTyp(s: String) => s match {
+      case "scala.Unit" => PtrType(ValueType("void"))
+      case "scala.Boolean" => ValueType("BOOL")
+      case "scala.Byte" => ValueType("char")
+      case "scala.Char" => ValueType("char")
+      case "scala.Short" => ValueType("short")
+      case "scala.Int" => ValueType("int")
+      case "scala.Long" => ValueType("long")
+      case "scala.Float" => ValueType("float")
+      case "scala.Double" => ValueType("double")
+      case "java.lang.String" => PtrType(ValueType("char"))
+      case x => PtrType(ValueType(x))
+    }
+    case _ => PtrType(ValueType(t.fieldTypeAsString))
+  }
+
 
   object ScalaMathCall {
       def unapply(v: Value): Option[(String,List[Value])] = {
@@ -762,11 +792,12 @@ object JVM2CL {
       Call(Id(method.name), args.map(a => translateExp(a)))
     }
     case GSpecialInvoke(base, method, args) => {
-      worklist += CompileMethodTask(method, findSelf(base, symtab.self))
-      Call(Select(base, method.name), args.map(a => translateExp(a)))
+      worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
+      //Call(Select(base, method.name), Id("_this") :: args.map(a => translateExp(a)))
+      Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
     }
     case GVirtualInvoke(base, method, args) => {
-      worklist += CompileMethodTask(method, findSelf(base, symtab.self))
+      worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
 
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
       // Then generate a call to a dispatch method:
@@ -868,7 +899,7 @@ object JVM2CL {
         // monomorphic call
         // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
         println("Monomorphic call to " + methodName(method))
-        Call(Id(methodName(method)), args.map(a => translateExp(a)))
+        Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
       }
       else {
         // polymorphic call--generate a switch
@@ -904,10 +935,10 @@ object JVM2CL {
 
         val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
 
-        val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName)),Id("cls")) :: methodFormalIds)), Break))))
+        val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName+"_intr")),Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
         
         // add appropriate formal parameters for call
-        worklist += new CompileMethodTree(FunDef(ValueType("void"),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
+        worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
         
     // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
         // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
