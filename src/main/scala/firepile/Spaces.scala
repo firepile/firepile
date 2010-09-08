@@ -187,7 +187,7 @@ object Spaces {
     def apply(p: Pt): A = backing(space.index(p))
     def update(p: Pt, x: A): Unit = { backing(space.index(p)) = x }
   }
-  class LocalThreadIndexed[Pt <: Point[Pt], A: FixedSizeMarshal](config: Config[Pt]) extends Indexed[Pt,A](config.localThreadIdSpace) with Barrier
+  class LocalThreadIndexed[Pt <: Point[Pt], A: FixedSizeMarshal](config: Config[Pt]) extends Indexed[Pt,A](config.localThreadIdSpace)
   class LocalThreadIndexed1[A: FixedSizeMarshal](config: Config1) extends LocalThreadIndexed[Point1, A](config)
   class LocalThreadIndexed2[A: FixedSizeMarshal](config: Config2) extends LocalThreadIndexed[Point2, A](config)
   class LocalThreadIndexed3[A: FixedSizeMarshal](config: Config3) extends LocalThreadIndexed[Point3, A](config)
