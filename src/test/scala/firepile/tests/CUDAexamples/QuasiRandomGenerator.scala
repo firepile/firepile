@@ -119,21 +119,16 @@ def GPU_QuasirandomGenerator(d_Output: GlobalFloat, c_Table: final UInt, seed: U
     val localID_y: UInt    = getLocalId(1)
     val globalSize_x: UInt = getGlobalSize(0)
  
-    var pos: UInt = 0
-    
-    for (pos <- globalID_x until N) {
+    for (pos <- globalID_x until N by globalSize_x) {
         var result: UInt = 0
         var data: UInt = seed + pos
 
-        for(val bit:Int <- 0 until QRNG_RESOLUTION){
+        for(bit:Int <- 0 until QRNG_RESOLUTION){
             if(data & 1) result ^= c_Table(bit+localID_y*QRNG_RESOLUTION)
-            bit++
             data >>= 1
             }
 
         d_Output(mul24(localID_y,N) + pos) = (Float)(result + 1) * INT_SCALE
-        
-        pos += globalSize_x
     }
 }
 
@@ -184,10 +179,9 @@ def GPU_InverseCND(d_Output: GlobalFloat, pathN: UInt,iDevice: UInt,nDevice: UIn
     val globalID: UInt   = getGlobalId(0)
     val globalSize: UInt = getGlobalSize(0)
 
-    for(val pos: UInt <- globalID until pathN){
+    for(pos: UInt <- globalID until pathN by globalSize){
         val d = (float)(iDevice*pathN + pos + 1) * q
         d_Output[pos] = MoroInvCNDgpu(d)
-        pos += globalSize
     }
   }
 }

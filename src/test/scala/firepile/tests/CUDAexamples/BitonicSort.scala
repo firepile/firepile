@@ -350,11 +350,11 @@ def GPU_bitonicMergeGlobal(d_DstKey: GlobalUIntP, d_DstVal: GlobalUIntP, d_SrcKe
     val keyB: UInt = d_SrcKey(pos + stride)
     val valB: UInt = d_SrcVal(pos + stride)
 
-    ComparatorPrivate(
-        keyA.p, valA.p,
-        keyB.p, valB.p,
-        ddd
-    )
+    // ComparatorPrivate
+    if( (keyA > keyB) == dir ){
+        (keyA, keyB) = (keyB, keyA)
+        (valA, valB) = (valB, valA)
+    }
 
     d_DstKey(pos +      0) = keyA
     d_DstVal(pos +      0) = valA
@@ -362,6 +362,8 @@ def GPU_bitonicMergeGlobal(d_DstKey: GlobalUIntP, d_DstVal: GlobalUIntP, d_SrcKe
     d_DstVal(pos + stride) = valB
 }
 
+// @local Array[UInt]
+// @global Array[UInt]
 def GPU_bitonicMergeLocal(d_DstKey: GlobalUIntP, d_DstVal: GlobalUIntP, d_SrcKey: GlobalUIntP, d_SrcVal: GlobalUIntP,
     arrayLength: UInt,
     size: UInt,
