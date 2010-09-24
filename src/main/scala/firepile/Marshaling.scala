@@ -107,6 +107,85 @@ object Marshaling {
     val manifest = Predef.manifest[Double]
   }
 
+
+  // Local memory marshal
+  trait Local[A: Marshal] {
+    def value: A // called only from gpu
+  }
+
+
+  implicit object LZM extends Local[Boolean] {
+    val size = 1
+    val align = 1
+    // def put(buf:ByteBuffer, i: Int, x: Boolean) = buf.put(i, if (x) 1 else 0)
+    // def get(buf:ByteBuffer, i: Int) = if (buf.get(i) == 0) false else true
+    val manifest = Predef.manifest[Boolean]
+  }
+
+  implicit object LBM extends Local[Byte] {
+    val size = 1
+    val align = 1
+    // def put(buf:ByteBuffer, i: Int, x: Byte) = buf.put(i, x)
+    // def get(buf:ByteBuffer, i: Int) = buf.get(i)
+    val manifest = Predef.manifest[Byte]
+  }
+
+  implicit object LSM extends Local[Short] {
+    val size = 2
+    val align = 2
+    // def put(buf:ByteBuffer, i: Int, x: Short) = buf.putShort(i, x)
+    // def get(buf:ByteBuffer, i: Int) = buf.getShort(i)
+    val manifest = Predef.manifest[Short]
+  }
+
+  implicit object LCM extends Local[Char] {
+    val size = 2
+    val align = 2
+    // def put(buf:ByteBuffer, i: Int, x: Char) = buf.putChar(i, x)
+    // def get(buf:ByteBuffer, i: Int) = buf.getChar(i)
+    val manifest = Predef.manifest[Char]
+  }
+
+  implicit object LIM extends Local[Int] {
+    val size = 4
+    val align = 4
+    // def put(buf:ByteBuffer, i: Int, x: Int) = buf.putInt(i, x)
+    // def get(buf:ByteBuffer, i: Int) = buf.getInt(i)
+    val manifest = Predef.manifest[Int]
+  }
+
+  implicit object LLM extends Local[Long] {
+    val size = 8
+    val align = 8
+    // def put(buf:ByteBuffer, i: Int, x: Long) = buf.putLong(i, x)
+    // def get(buf:ByteBuffer, i: Int) = buf.getLong(i)
+    val manifest = Predef.manifest[Long]
+  }
+
+  implicit object LFM extends Local[Float] {
+    val size = 4
+    val align = 4
+    // def put(buf:ByteBuffer, i: Int, x: Float) = buf.putFloat(i, x)
+    // def get(buf:ByteBuffer, i: Int) = buf.getFloat(i)
+    val manifest = Predef.manifest[Float]
+  }
+
+  implicit object LDM extends Local[Double] {
+    val size = 8
+    val align = 8
+    // def put(buf:ByteBuffer, i: Int, x: Double) = buf.putDouble(i, x)
+    // def get(buf:ByteBuffer, i: Int) = buf.getDouble(i)
+    val manifest = Predef.manifest[Double]
+  }
+
+  // Dummy Array2
+  class Array2[A]
+
+
+  // class LocalArray[A: FixedSizeMarshal](val value: Array[A])
+  class LocalArray[A: FixedSizeMarshal](length: Int) extends Local[Array[A]]
+  class LocalArray2[A: FixedSizeMarshal](length0: Int, length1: Int) extends Local[Array2[A]]
+
   val padTuples = true
   def alignment[A](m: FixedSizeMarshal[A]) = if (padTuples) (8 max m.align) else m.align
   def pad[A](m: FixedSizeMarshal[A]) = if (padTuples) 8 else 1
