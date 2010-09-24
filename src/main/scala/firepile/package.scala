@@ -61,9 +61,9 @@ package object firepile {
     }
   }
 
-  implicit def bi12bb[A: FixedSizeMarshal](a: BlockIndexed1[A]): BBArray[A] = a.backing
-  implicit def bi22bb[A: FixedSizeMarshal](a: BlockIndexed2[A]): BBArray[A] = a.backing
-  implicit def bi32bb[A: FixedSizeMarshal](a: BlockIndexed3[A]): BBArray[A] = a.backing
+  implicit def bi12bb[A: FixedSizeMarshal](a: GroupIndexed1[A]): BBArray[A] = a.backing
+  implicit def bi22bb[A: FixedSizeMarshal](a: GroupIndexed2[A]): BBArray[A] = a.backing
+  implicit def bi32bb[A: FixedSizeMarshal](a: GroupIndexed3[A]): BBArray[A] = a.backing
 
   implicit def ti12bb[A: FixedSizeMarshal](a: ThreadIndexed1[A]): BBArray[A] = a.backing
   implicit def ti22bb[A: FixedSizeMarshal](a: ThreadIndexed2[A]): BBArray[A] = a.backing
@@ -144,7 +144,7 @@ package object firepile {
   implicit def f2bbarrayMapk1[A,B](f: A => B)(implicit baMarshal: FixedSizeMarshal[A], bMarshal: FixedSizeMarshal[B], dev: Device): BBArrayMapKernel1[A,B] =
         Compiler.f2bbarrayMapk1[A,B](f)(baMarshal, bMarshal, dev)
 
-  implicit def f2bbarrayLocalReducek1[A,B,L](f: BBArray[A] => BlockIndexed1[B] => (Id1, LocalThreadIndexed1[L]) => Unit)(implicit localMarshal: FixedSizeMarshal[L], aaMarshal: FixedSizeMarshal[A], bMarshal: FixedSizeMarshal[B], dev: Device): BBArrayLocalReduceKernel1[A,B] =
+  implicit def f2bbarrayLocalReducek1[A,B,L](f: BBArray[A] => GroupIndexed1[B] => (Id1, LocalIndexed1[L]) => Unit)(implicit localMarshal: FixedSizeMarshal[L], aaMarshal: FixedSizeMarshal[A], bMarshal: FixedSizeMarshal[B], dev: Device): BBArrayLocalReduceKernel1[A,B] =
         Compiler.f2bbarrayLocalReducek1[A,B,L](f)(localMarshal, aaMarshal, bMarshal, dev)
 
   implicit def f2bbarrayMapk2[A1,A2,B](f: (A1,A2) => B)(implicit aMarshal1: FixedSizeMarshal[A1], aMarshal2: FixedSizeMarshal[A2], bMarshal: FixedSizeMarshal[B], dev: Device): BBArrayMapKernel2[A1,A2,B] =
@@ -275,12 +275,12 @@ package object firepile {
   implicit val id1: Id1 = null
   implicit val id2: Id2 = null
   implicit val id3: Id3 = null
-  implicit def localIndexed1[A]: LocalThreadIndexed1[A] = null
-  implicit def localIndexed2[A]: LocalThreadIndexed2[A] = null
-  implicit def localIndexed3[A]: LocalThreadIndexed3[A] = null
-  implicit def blockIndexed1[A]: BlockIndexed1[A] = null
-  implicit def blockIndexed2[A]: BlockIndexed2[A] = null
-  implicit def blockIndexed3[A]: BlockIndexed3[A] = null
+  implicit def localIndexed1[A]: LocalIndexed1[A] = null
+  implicit def localIndexed2[A]: LocalIndexed2[A] = null
+  implicit def localIndexed3[A]: LocalIndexed3[A] = null
+  implicit def blockIndexed1[A]: GroupIndexed1[A] = null
+  implicit def blockIndexed2[A]: GroupIndexed2[A] = null
+  implicit def blockIndexed3[A]: GroupIndexed3[A] = null
 
   implicit def force[B](f: Future[B]) = f.force
 }

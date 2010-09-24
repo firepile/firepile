@@ -109,8 +109,8 @@ object Marshaling {
 
 
   // Local memory marshal
-  trait Local[A: Marshal] {
-    def value: A // called only from gpu
+  abstract class Local[A: Marshal] {
+    // def value: A // called only from gpu
   }
 
 
@@ -179,12 +179,13 @@ object Marshaling {
   }
 
   // Dummy Array2
-  class Array2[A]
+  class Array2[A: FixedSizeMarshal]
 
+  // implicit def ArrayMarshal[A: FixedSizeMarshal: Manifest]: ArrayMarshal[A] = new ArrayMarshal[A]
 
   // class LocalArray[A: FixedSizeMarshal](val value: Array[A])
-  class LocalArray[A: FixedSizeMarshal](length: Int) extends Local[Array[A]]
-  class LocalArray2[A: FixedSizeMarshal](length0: Int, length1: Int) extends Local[Array2[A]]
+  // class LocalArray[A: FixedSizeMarshal](length: Int) extends Local[Array[A]]
+  // class LocalArray2[A: FixedSizeMarshal](length0: Int, length1: Int) extends Local[Array2[A]]
 
   val padTuples = true
   def alignment[A](m: FixedSizeMarshal[A]) = if (padTuples) (8 max m.align) else m.align

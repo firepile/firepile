@@ -132,54 +132,59 @@ object Spaces {
   implicit def point22int(p: Point2) = (p.x,p.y)
   implicit def point32int(p: Point3) = (p.x,p.y,p.z)
 
-  class Ident[Pt <: Point[Pt]](val config: Config[Pt], val block: Pt, val localThread: Pt) {
-    def thread: Pt = block * config.localThreadIdSpace.extent + localThread
+  class Ident[Pt <: Point[Pt]](val config: Config[Pt], val group: Pt, val local: Pt) {
+    def thread: Pt = group * config.localIdSpace.extent + local
     def global = thread
   }
 
-  class Id1(config: Config1, block: Point1, localThread: Point1) extends Ident[Point1](config, block, localThread)
-  class Id2(config: Config2, block: Point2, localThread: Point2) extends Ident[Point2](config, block, localThread)
-  class Id3(config: Config3, block: Point3, localThread: Point3) extends Ident[Point3](config, block, localThread)
+  class Id1(config: Config1, group: Point1, local: Point1) extends Ident[Point1](config, group, local)
+  class Id2(config: Config2, group: Point2, local: Point2) extends Ident[Point2](config, group, local)
+  class Id3(config: Config3, group: Point3, local: Point3) extends Ident[Point3](config, group, local)
 
   /** Index space */
   trait Config[Pt <: Point[Pt]] {
-    /** Space of global thread ids; must be blockIdSpace * localThreadIdSpace */
+    /** Space of global thread ids; must be groupIdSpace * localIdSpace */
     def threadIdSpace: IdSpace[Pt]
-    /** Space of block (work group) ids */
-    def blockIdSpace: IdSpace[Pt]
-    /** Space of local thread (work item) ids witin a block.  All blocks have the same local space. */
-    def localThreadIdSpace: IdSpace[Pt]
+    /** Space of group (work group) ids */
+    def groupIdSpace: IdSpace[Pt]
+    /** Space of local thread (work item) ids witin a group.  All groups have the same local space. */
+    def localIdSpace: IdSpace[Pt]
 
     def threadIds = threadIdSpace.iterator
-    def blockIds = blockIdSpace.iterator
-    def localThreadIds = localThreadIdSpace.iterator
+    def groupIds = groupIdSpace.iterator
+    def localIds = localIdSpace.iterator
 
-    /** Return the block ID of a given global thread ID */
-    def blockIdOfThread(p: Pt) = p / blockIdSpace.extent
-    def localThreadIdOfThread(p: Pt) = p % blockIdSpace.extent
+    /** Return the group ID of a given global thread ID */
+    def groupIdOfThread(p: Pt) = p / groupIdSpace.extent
+    def localIdOfThread(p: Pt) = p % groupIdSpace.extent
 
     def numThreads = threadIdSpace.length
-    def numBlocks = blockIdSpace.length
-    def numThreadsPerBlock = localThreadIdSpace.length
+    def numGroups = groupIdSpace.length
+    def numThreadsPerGroup = localIdSpace.length
+
+    def groupSize = numThreadsPerGroup
+    def localSize = numThreadsPerGroup
+    def globalSize = numThreads
+    def gridSize = numThreads
   }
 
-  class Config1(val maxBlock: Point1, val maxLocalThread: Point1) extends Config[Point1] {
+  class Config1(val maxGroup: Point1, val maxLocal: Point1) extends Config[Point1] {
     type Pt = Point1
-    def threadIdSpace = new IdSpace1(maxBlock * maxLocalThread)
-    def blockIdSpace = new IdSpace1(maxBlock)
-    def localThreadIdSpace = new IdSpace1(maxLocalThread)
+    def threadIdSpace = new IdSpace1(maxGroup * maxLocal)
+    def groupIdSpace = new IdSpace1(maxGroup)
+    def localIdSpace = new IdSpace1(maxLocal)
   }
-  class Config2(val maxBlock: Point2, val maxLocalThread: Point2) extends Config[Point2] {
+  class Config2(val maxGroup: Point2, val maxLocal: Point2) extends Config[Point2] {
     type Pt = Point2
-    def threadIdSpace = new IdSpace2(maxBlock * maxLocalThread)
-    def blockIdSpace = new IdSpace2(maxBlock)
-    def localThreadIdSpace = new IdSpace2(maxLocalThread)
+    def threadIdSpace = new IdSpace2(maxGroup * maxLocal)
+    def groupIdSpace = new IdSpace2(maxGroup)
+    def localIdSpace = new IdSpace2(maxLocal)
   }
-  class Config3(val maxBlock: Point3, val maxLocalThread: Point3) extends Config[Point3] {
+  class Config3(val maxGroup: Point3, val maxLocal: Point3) extends Config[Point3] {
     type Pt = Point3
-    def threadIdSpace = new IdSpace3(maxBlock * maxLocalThread)
-    def blockIdSpace = new IdSpace3(maxBlock)
-    def localThreadIdSpace = new IdSpace3(maxLocalThread)
+    def threadIdSpace = new IdSpace3(maxGroup * maxLocal)
+    def groupIdSpace = new IdSpace3(maxGroup)
+    def localIdSpace = new IdSpace3(maxLocal)
   }
 
   class Indexed[Pt <: Point[Pt], A: FixedSizeMarshal](space: IdSpace[Pt]) {
@@ -187,15 +192,15 @@ object Spaces {
     def apply(p: Pt): A = backing(space.index(p))
     def update(p: Pt, x: A): Unit = { backing(space.index(p)) = x }
   }
-  class LocalThreadIndexed[Pt <: Point[Pt], A: FixedSizeMarshal](config: Config[Pt]) extends Indexed[Pt,A](config.localThreadIdSpace)
-  class LocalThreadIndexed1[A: FixedSizeMarshal](config: Config1) extends LocalThreadIndexed[Point1, A](config)
-  class LocalThreadIndexed2[A: FixedSizeMarshal](config: Config2) extends LocalThreadIndexed[Point2, A](config)
-  class LocalThreadIndexed3[A: FixedSizeMarshal](config: Config3) extends LocalThreadIndexed[Point3, A](config)
+  class LocalIndexed[Pt <: Point[Pt], A: FixedSizeMarshal](config: Config[Pt]) extends Indexed[Pt,A](config.localIdSpace)
+  class LocalIndexed1[A: FixedSizeMarshal](config: Config1) extends LocalIndexed[Point1, A](config)
+  class LocalIndexed2[A: FixedSizeMarshal](config: Config2) extends LocalIndexed[Point2, A](config)
+  class LocalIndexed3[A: FixedSizeMarshal](config: Config3) extends LocalIndexed[Point3, A](config)
 
-  class BlockIndexed[Pt <: Point[Pt], A: FixedSizeMarshal](config: Config[Pt]) extends Indexed[Pt,A](config.blockIdSpace)
-  class BlockIndexed1[A: FixedSizeMarshal](config: Config1) extends BlockIndexed[Point1, A](config)
-  class BlockIndexed2[A: FixedSizeMarshal](config: Config2) extends BlockIndexed[Point2, A](config)
-  class BlockIndexed3[A: FixedSizeMarshal](config: Config3) extends BlockIndexed[Point3, A](config)
+  class GroupIndexed[Pt <: Point[Pt], A: FixedSizeMarshal](config: Config[Pt]) extends Indexed[Pt,A](config.groupIdSpace)
+  class GroupIndexed1[A: FixedSizeMarshal](config: Config1) extends GroupIndexed[Point1, A](config)
+  class GroupIndexed2[A: FixedSizeMarshal](config: Config2) extends GroupIndexed[Point2, A](config)
+  class GroupIndexed3[A: FixedSizeMarshal](config: Config3) extends GroupIndexed[Point3, A](config)
 
   class ThreadIndexed[Pt <: Point[Pt], A: FixedSizeMarshal](config: Config[Pt]) extends Indexed[Pt,A](config.threadIdSpace)
   class ThreadIndexed1[A: FixedSizeMarshal](config: Config1) extends ThreadIndexed[Point1, A](config)

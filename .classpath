@@ -6,6 +6,7 @@
 	<classpathentry kind="con" path="ch.epfl.lamp.sdt.launching.SCALA_CONTAINER"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.6"/>
 	<classpathentry kind="lib" path="lib/javacl-1.0-SNAPSHOT-shaded.jar" sourcepath="/Users/nystrom/uta-svn/nystrom/uta/funicular/funicular/nativelibs4java/OpenCL/Core/src/main/java"/>
-	<classpathentry kind="lib" path="lib/soot-2.4.0.jar"/>
+	<classpathentry kind="lib" path="lib/soot-2.4.0.jar" sourcepath="/Users/nystrom/uta-svn/nystrom/uta/funicular/soot-src/soot-2.4.0/src"/>
+	<classpathentry kind="lib" path="lib/scalap.jar"/>
 	<classpathentry kind="output" path="target/scala_2.8.0.RC3/classes"/>
 </classpath>
