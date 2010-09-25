@@ -6,6 +6,7 @@ object Reduce3 {
   object localMem { def barrier = () }
 
   import firepile.Spaces._
+  import firepile.Arrays._
 
   /* Uses n/2 threads, performs the the first level of reduction when
      reading from global memory
@@ -30,14 +31,14 @@ object Reduce3 {
     if (i + id.config.localSize < n)
       sdata(tid) = f(sdata(tid), idata(i + id.config.localSize))
 
-    // localMem.barrier  ERROR
+    localMem.barrier 
 
     // do reduction in shared memory
     // byfun -> applying? byfunc?
     for (s <- id.config.localSize / 2 until 0 byfun (_/2)) {
       if (tid < s)
         sdata(tid) = f(sdata(tid), sdata(tid + s))
-      // localMem.barrer  ERROR
+      localMem.barrier
     }
 
     // write results back to global
