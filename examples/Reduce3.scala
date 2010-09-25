@@ -15,7 +15,7 @@ object Reduce3 {
   // @kernel(numGroups = odata.length, numItems = idata.length)
   // @where(n <= numItems)
   def reduce(idata: Array[Float], odata: Array[Float], n: Int, f: (Float,Float) => Float, z: Float) =
-      (id: Id1, sdata: /* @local */ Array[Float]) => {
+      (id: Id1, sdata: Array[Float] @local) => {
     // perform first level of reduction reading from global memory, writing to shared memory
     val tid = id.local.toInt
 
