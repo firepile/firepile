@@ -598,13 +598,7 @@ object TypeFlow {
     matching match { case Some(x: ScalaType) => x }
   }
 
-  private def distinct[A](list: List[A]): List[A] = list match {
-    case Nil => Nil
-    case x :: xs => if(distinct(xs).contains(x)) distinct(xs)
-                    else x :: distinct(xs)
-  }
-
-
+  private def distinct[A](list: List[A]): List[A] = list.reverse.distinct.reverse 
 
   private def stripToBaseTypeName(st: ScalaType): ScalaType = st match {
     case x: NamedTyp => x
