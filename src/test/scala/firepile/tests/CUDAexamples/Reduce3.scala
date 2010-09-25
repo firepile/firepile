@@ -3,6 +3,8 @@ object Reduce3 {
   class size(exp: Int) extends scala.StaticAnnotation { }
   class local extends scala.StaticAnnotation { }
 
+  object localMem { def barrier = () }
+
   import firepile.Spaces._
 
   /* Uses n/2 threads, performs the the first level of reduction when
