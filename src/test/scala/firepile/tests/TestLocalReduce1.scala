@@ -6,19 +6,20 @@ import firepile.Spaces._
 import firepile.util.BufferBackedArray._
 
 object TestLocalReduce1 {
-  def reduceSum(input: BBArray[Float])(output: BlockIndexed1[Float])(id: Id1, sdata: LocalThreadIndexed1[Float]): Unit = {
+  /*
+  def reduceSum(input: BBArray[Float])(output: GroupIndexed1[Float])(id: Id1, sdata: LocalThreadIndexed1[Float]): Unit = {
     val config = id.config
     val n = input.length
-    val i = id.block * (config.numThreadsPerBlock * 2) + id.localThread
+    val i = id.block * (config.numThreadsPerGroup * 2) + id.localThread
     val tid = id.localThread
 
     sdata(tid) = if (i < n) input(i) else 0
-    if (i + config.numThreadsPerBlock < n)
-        sdata(tid) += input(i+config.numThreadsPerBlock)
+    if (i + config.numThreadsPerGroup < n)
+        sdata(tid) += input(i+config.numThreadsPerGroup)
 
     sdata.barrier
 
-    var s = config.numThreadsPerBlock / 2
+    var s = config.numThreadsPerGroup / 2
     while (s > 32) {
         sdata(tid) += sdata(tid+s)
         sdata.barrier
@@ -28,7 +29,7 @@ object TestLocalReduce1 {
     sdata.barrier
 
     if (tid < 32) {
-      config.numThreadsPerBlock match {
+      config.numThreadsPerGroup match {
         case x if x >= 64 => sdata(tid) += sdata(tid+32)
         case x if x >= 32 => sdata(tid) += sdata(tid+16)
         case x if x >= 16 => sdata(tid) += sdata(tid+8)
@@ -61,4 +62,5 @@ object TestLocalReduce1 {
       assert(c.sum == correct)
     }
   }
+*/
 }

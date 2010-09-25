@@ -1,5 +1,5 @@
 abstract class CanFly 
-case class Bird extends CanFly 
+class Bird extends CanFly 
 case class Duck extends Bird
 case class Finch extends Bird
 

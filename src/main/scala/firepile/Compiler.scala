@@ -397,7 +397,7 @@ object Compose {
     def toCL = typ.toCL + " " + name + formals.map((t:Tree) => t.toCL).mkString("(", ", ", ");\n\n")
   }
 
-  private def compileToTree(src: AnyRef, arity: Int): (Tree,List[Tree]) = {
+  def compileToTree(src: AnyRef, arity: Int): (Tree,List[Tree]) = {
     val k = src.getClass
     val apply = Compiler.findApplyMethod(src, arity)
     val trees = compileRoot(k.getName, Compiler.signature(apply)).reverse
