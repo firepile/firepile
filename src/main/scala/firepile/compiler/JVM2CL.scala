@@ -123,8 +123,8 @@ object JVM2CL {
       + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
       + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
       + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
-      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/classes"
-      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0.RC3/test-classes"
+      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0-local/classes"
+      + ":/Users/dwhite/svn/firepile/target/scala_2.8.0-local/test-classes"
       + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
       + ":.:tests:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
    
@@ -264,7 +264,7 @@ object JVM2CL {
       val ts = task.run
       results ++= ts
     }
-    classtab.dumpClassTable ::: results.toList
+    classtab.dumpClassTable ::: arraystructs.dumpArrayStructs ::: results.toList
   }
 
   def isStatic(flags: Int) = (flags & 0x0008) != 0
@@ -440,9 +440,28 @@ object JVM2CL {
     }
   }
 
+  class ArrayStructs {
+    val structs = new HashMap[Tree /* type */, Tree /* struct rep */]()
+
+    def addStruct(typ: Tree): Tree = {
+      if (!structs.contains(typ)) 
+        structs += typ -> StructDef(typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(PtrType(typ), Id("data"))))
+      StructType(typ.asInstanceOf[ValueType].name + "Array")
+    }
+
+    def dumpArrayStructs = {
+      println("ARRAY STRUCTS CL:")
+      structs.values.foreach((cl: Tree) => println(cl.toCL))
+      structs.values.toList
+    }
+  }
+
+
   private var symtab: SymbolTable = null
 
-  private val classtab: ClassTable = new ClassTable()
+  private val classtab = new ClassTable()
+
+  private val arraystructs = new ArrayStructs()
 
   private def translateLabel(u: SootUnit): String = u match {
     case target : Stmt => {
@@ -478,7 +497,7 @@ object JVM2CL {
           case _ => PtrType(ValueType(mangleName(t.toString)))
         }
       }
-      case t : SootArrayType => PtrType(translateType(t.getArrayElementType))
+      case t : SootArrayType => PtrType(arraystructs.addStruct(translateType(t.getArrayElementType)))
       case t : SootNullType => PtrType(ValueType("void"))
       // TODO: array types
       case _ => ValueType(t.toString)
@@ -755,8 +774,7 @@ object JVM2CL {
 
     case GNeg(op) => Un("-", op)
 
-    // TODO - What do we do with this?  Does it need a representation in the C AST?
-    case GArrayLength(op) => Id("unimplemented:arraylength")
+    case GArrayLength(op: Local) => Select(Deref(op), "length")
 
     case GCast(op, castTyp) => Cast(translateType(castTyp), op)
 
@@ -764,7 +782,7 @@ object JVM2CL {
     case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
 
     // IGNORE
-    case GNew(newTyp) => Id("unimplemented:new")
+    case GNew(newTyp: Type) => { classtab.addClass(new SootClass(newTyp.toString)); Id("unimplemented:new") }
 
     // IGNORE
     case GNewArray(newTyp, size) => Id("unimplemented:newarray")
@@ -799,11 +817,13 @@ object JVM2CL {
     }
     case GStaticInvoke(method, args) => {
       worklist += CompileMethodTask(method)
+      classtab.addClass(method.declaringClass)
       Call(Id(method.name), args.map(a => translateExp(a)))
     }
-    case GSpecialInvoke(base, method, args) => {
+    case GSpecialInvoke(base: Local, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
       //Call(Select(base, method.name), Id("_this") :: args.map(a => translateExp(a)))
+      classtab.addClass(method.declaringClass)
       Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
     }
     case GVirtualInvoke(base, method, args) => {
@@ -957,19 +977,20 @@ object JVM2CL {
     
   
     }
-    case GInterfaceInvoke(base, method, args) => {
+    case GInterfaceInvoke(base: Local, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
+      classtab.addClass(new SootClass(base.getName))
       Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
 
     case GLocal(name, typ) => { symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name)) }
     case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
     case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
-    case GStaticFieldRef(fieldRef) => Id("unimplemented:staticfield")
+    case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
 
-    case GInstanceFieldRef(base, fieldRef) => Select(base, fieldRef.name)
-    case GArrayRef(base, index) => ArrayAccess(base, index)
+    case GInstanceFieldRef(base: Local, fieldRef) => { classtab.addClass(new SootClass(base.getName)); Select(base, fieldRef.name) }
+    case GArrayRef(base: Local, index) => ArrayAccess(Select(Deref(base), "data"), index)
 
     case v => Id("unsupported:" + v.getClass.getName)
   }
