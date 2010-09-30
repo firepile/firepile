@@ -126,7 +126,7 @@ object JVM2CL {
       + ":/Users/dwhite/svn/firepile/target/scala_2.8.0-local/classes"
       + ":/Users/dwhite/svn/firepile/target/scala_2.8.0-local/test-classes"
       + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
-      + ":.:tests:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
+      + ":.:tests:examples:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
    
     // Manually add basic classes to scene for testing VirtualInvoke
     Scene.v.addBasicClass("VirtualInvokeA")
@@ -293,7 +293,7 @@ object JVM2CL {
     if (m.isNative)
         return null
     
-    ScalaTypeGen.getScalaSignature(m.getDeclaringClass.getName.replaceAll("\\$",""))
+    ScalaTypeGen.getScalaSignature(m.getDeclaringClass.getName) //.replaceAll("\\$",""))
  
 
     symtab = new SymbolTable(self)
@@ -782,7 +782,7 @@ object JVM2CL {
     case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
 
     // IGNORE
-    case GNew(newTyp: Type) => { classtab.addClass(new SootClass(newTyp.toString)); Id("unimplemented:new") }
+    case GNew(newTyp) => { classtab.addClass(new SootClass(newTyp.asInstanceOf[SootType].toString));  Id("unimplemented:new") }
 
     // IGNORE
     case GNewArray(newTyp, size) => Id("unimplemented:newarray")
@@ -826,7 +826,8 @@ object JVM2CL {
       classtab.addClass(method.declaringClass)
       Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
     }
-    case GVirtualInvoke(base, method, args) => {
+    case GVirtualInvoke(base, method, args) if base.getType.toString == "Id1" => { println("found ID!"); Id("found ID") }
+    case GVirtualInvoke(base, method, args) => { 
       worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
 
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
@@ -929,6 +930,7 @@ object JVM2CL {
         // monomorphic call
         // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
         println("Monomorphic call to " + methodName(method))
+        classtab.addClass(method.declaringClass)
         Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
       }
       else {
