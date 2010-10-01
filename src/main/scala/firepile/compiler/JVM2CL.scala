@@ -409,7 +409,9 @@ object JVM2CL {
       if (!knownClasses.contains(cls)) {
         enumElements += Id(cls.getName + "_ID")
         
-        val scalaSig = getScalaSignature(cls.getName)
+        // val scalaSig = getScalaSignature(cls.getName)
+        // Work around for $ issue in getScalaSignature
+        val scalaSig = getScalaSignature(cls.getName.replaceAll("\\$", ""))
 
         if (scalaSig == null)
           throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
@@ -441,18 +443,22 @@ object JVM2CL {
   }
 
   class ArrayStructs {
-    val structs = new HashMap[Tree /* type */, Tree /* struct rep */]()
+    val structs = new HashMap[Tree /* type */, List[Tree] /* struct rep */]()
 
     def addStruct(typ: Tree): Tree = {
       if (!structs.contains(typ)) 
-        structs += typ -> StructDef(typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(PtrType(typ), Id("data"))))
+        structs += typ -> List(StructDef("g_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global",PtrType(typ)), Id("data")))),
+       StructDef("l_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local",PtrType(typ)), Id("data")))),
+       StructDef("c_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant",PtrType(typ)), Id("data")))),
+       StructDef("p_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private",PtrType(typ)), Id("data")))))
+
       StructType(typ.asInstanceOf[ValueType].name + "Array")
     }
 
     def dumpArrayStructs = {
       println("ARRAY STRUCTS CL:")
-      structs.values.foreach((cl: Tree) => println(cl.toCL))
-      structs.values.toList
+      structs.values.flatten.foreach((cl: Tree) => println(cl.toCL))
+      structs.values.toList.flatten
     }
   }
 
