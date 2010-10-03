@@ -24,6 +24,7 @@ import soot.SootClass
 import soot.SootMethod
 import soot.SootMethodRef
 import soot.Modifier
+import soot.RefType
 import soot.toolkits.graph.ExceptionalUnitGraph
 import soot.toolkits.graph.UnitGraph
 import soot.Hierarchy
@@ -97,6 +98,7 @@ object JVM2CL {
     } catch {
       case e: ClassNotFoundException => {
         println("Class not found: " + e.getMessage)
+        e.printStackTrace
         Nil
       }
     }
@@ -212,6 +214,37 @@ object JVM2CL {
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.BODIES)
         
       compileMethod(m.resolve, self, takesThis) match {
+        case null => Nil
+        case t => t::Nil
+      }
+    }
+  }
+
+  case class CompileSpecializedMethodTask(method: SootMethodRef, self: AnyRef, arg: Value) extends Task {
+    def run = {
+      val m = method
+
+      // Force the class's method bodies to be loaded.
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.HIERARCHY)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.SIGNATURES)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.BODIES)
+       
+      println("FUNCTION TYPE: " + arg.getType.toString)
+
+      // find apply code in Compiler.scala, may not be named apply exactly
+      val functionType = arg.getType.asInstanceOf[RefType].getSootClass
+      val applyMethod = functionType.getMethods.filter(mn => mn.getName.equals("apply") && !mn.getParameterType(0).toString.equals("java.lang.Object")).head
+
+      println("Found apply method: " + applyMethod.getSignature)
+
+      val inlinedApply = compileMethod(applyMethod, functionType, false) match {
+        case FunDef(_, _, formals, body) => (formals, body)
+        case null => (Nil, null)
+      }
+            
+      println("Body of apply: " + inlinedApply._2)
+      
+      compileMethod(m.resolve, self, true) match {
         case null => Nil
         case t => t::Nil
       }
@@ -446,13 +479,19 @@ object JVM2CL {
     val structs = new HashMap[Tree /* type */, List[Tree] /* struct rep */]()
 
     def addStruct(typ: Tree): Tree = {
-      if (!structs.contains(typ)) 
-        structs += typ -> List(StructDef("g_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global",PtrType(typ)), Id("data")))),
-       StructDef("l_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local",PtrType(typ)), Id("data")))),
-       StructDef("c_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant",PtrType(typ)), Id("data")))),
-       StructDef("p_" + typ.asInstanceOf[ValueType].name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private",PtrType(typ)), Id("data")))))
+      val arrayTyp = typ match {
+        case v: ValueType => v
+        case PtrType(v: ValueType) => v
+        case _ => throw new RuntimeException("Unknown array type")
+      }
+      if (!structs.contains(typ)) {
+        structs += typ -> List(StructDef("g_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global",PtrType(arrayTyp)), Id("data")))),
+       StructDef("l_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local",PtrType(arrayTyp)), Id("data")))),
+       StructDef("c_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant",PtrType(arrayTyp)), Id("data")))),
+       StructDef("p_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private",PtrType(arrayTyp)), Id("data")))))
+      }
 
-      StructType(typ.asInstanceOf[ValueType].name + "Array")
+      StructType(arrayTyp.name + "Array")
     }
 
     def dumpArrayStructs = {
@@ -611,7 +650,7 @@ object JVM2CL {
         case _ => None
     }
   }
-
+/*
   object UnboxCall {
     def unapply(v: Value) = v match {
         // scala.runtime.BoxesRunTime.unboxToFloat(Object) : float
@@ -622,7 +661,7 @@ object JVM2CL {
         case _ => None
     }
   }
-
+*/
   // Split library calls into separate objects.
   // This avoids an OutOfMemory error in scalac.
   object LibraryCall {
@@ -823,17 +862,19 @@ object JVM2CL {
     }
     case GStaticInvoke(method, args) => {
       worklist += CompileMethodTask(method)
-      classtab.addClass(method.declaringClass)
+      // classtab.addClass(method.declaringClass)
       Call(Id(method.name), args.map(a => translateExp(a)))
     }
     case GSpecialInvoke(base: Local, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
       //Call(Select(base, method.name), Id("_this") :: args.map(a => translateExp(a)))
-      classtab.addClass(method.declaringClass)
+      // classtab.addClass(method.declaringClass)
       Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
     }
     case GVirtualInvoke(base, method, args) if base.getType.toString == "Id1" => { println("found ID!"); Id("found ID") }
     case GVirtualInvoke(base, method, args) => { 
+      args.foreach(a => { if(isFunction(a.getType)) worklist += CompileSpecializedMethodTask(method, findSelf(base, symtab.self), a) })
+
       worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
 
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
@@ -988,7 +1029,7 @@ object JVM2CL {
     case GInterfaceInvoke(base: Local, method, args) => {
       worklist += CompileMethodTask(method, findSelf(base, symtab.self))
       // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
-      classtab.addClass(new SootClass(base.getName))
+      // classtab.addClass(new SootClass(base.getName))
       Call(Select(base, method.name), args.map(a => translateExp(a)))
     }
 
