@@ -3,6 +3,8 @@ package firepile.compiler.util
 import java.util.StringTokenizer
 import java.io._
 
+import soot.SootClass
+
 import scala.tools.scalap._
 import scala.tools.scalap.{ Main => Scalap }
 import scala.tools.scalap.scalax.rules.scalasig._
@@ -29,10 +31,10 @@ object ScalaTypeGen {
       println("Class Def List is null")
       exit(1)
     }
-    
+
     printClassDef(cdlist)
-    
-   }
+
+  }
   //CF file
   implicit def cf2cf(cf: Classfile) = new Cf(cf)
 
@@ -121,29 +123,29 @@ object ScalaTypeGen {
     }
 
   }
-  
+
   object TYPEVARIANT extends Enumeration {
-          type TYPEVARIANT = Value
-          val COVARIANT, CONTRAVARIANT, INVARIANT = Value
-        }
+    type TYPEVARIANT = Value
+    val COVARIANT, CONTRAVARIANT, INVARIANT = Value
+  }
   import TYPEVARIANT._
-  
-  def getVar(s:String, t: Symbol) = if (t.isCovariant) ParamTyp(s,COVARIANT) else if (t.isContravariant) ParamTyp(s,CONTRAVARIANT) else NamedTyp(s)
+
+  def getVar(s: String, t: Symbol) = if (t.isCovariant) ParamTyp(s, COVARIANT) else if (t.isContravariant) ParamTyp(s, CONTRAVARIANT) else NamedTyp(s)
 
   def scalaType(typ: Type): ScalaType = {
     typ match {
       case NoType => NamedTyp("NoType")
       case NoPrefixType => NamedTyp("java.lang.object")
-      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol)
-      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) getVar(singleTypeSymbol.name,singleTypeSymbol) else getVar(singleTypeSymbol.path,singleTypeSymbol)
+      case ThisType(symbol: Symbol) => if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol)
+      case SingleType(typeRef: Type, singleTypeSymbol: Symbol) => if (singleTypeSymbol.path.indexOf("<empty>") >= 0) getVar(singleTypeSymbol.name, singleTypeSymbol) else getVar(singleTypeSymbol.path, singleTypeSymbol)
       case ConstantType(constant: Any) => NamedTyp("scala.Any")
-      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol) } else InstTyp((if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol)), typeArgs.map(i => scalaType(i)).toList)
+      case TypeRefType(prefix: Type, symbol: Symbol, typeArgs: Seq[Type]) => if (typeArgs.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol) } else InstTyp((if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol)), typeArgs.map(i => scalaType(i)).toList)
       case TypeBoundsType(lower: Type, upper: Type) => NamedTyp("TyeBoundsType")
       case RefinedType(classSym: Symbol, typeRefs: List[Type]) => NamedTyp("RefinedType")
-      case ClassInfoType(symbol: Symbol, typeArgs: Seq[Type]) => if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol) 
+      case ClassInfoType(symbol: Symbol, typeArgs: Seq[Type]) => if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol)
       case ClassInfoTypeWithCons(symbol: Symbol, typeRefs: Seq[Type], cons: String) => NamedTyp("ClassInfoType")
       case MethodType(resultType: Type, paramSymbols: Seq[Symbol]) => NamedTyp("MethodType")
-      case PolyType(ClassInfoType(symbol : Symbol, typeRefs : Seq[Type]), symbols) => if (symbols.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol) } else InstTyp((if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name,symbol) else getVar(symbol.path,symbol)), symbols.map(i => getVar(i.name,i)).toList)
+      case PolyType(ClassInfoType(symbol: Symbol, typeRefs: Seq[Type]), symbols) => if (symbols.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol) } else InstTyp((if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol)), symbols.map(i => getVar(i.name, i)).toList)
       case PolyType(typeRef: Type, symbols: Seq[TypeSymbol]) => scalaType(typeRef)
       case PolyTypeWithCons(typeRef: Type, symbols: Seq[TypeSymbol], cons: String) => NamedTyp("PolyType")
       case ImplicitMethodType(resultType: Type, paramSymbols: Seq[Symbol]) => NamedTyp("ImplicitType")
@@ -151,6 +153,43 @@ object ScalaTypeGen {
       case AnnotatedWithSelfType(typeRef: Type, symbol: Symbol, attribTreeRefs: List[Int]) => NamedTyp("AnnotatedType")
       case DeBruijnIndexType(typeLevel: Int, typeIndex: Int) => NamedTyp(" DebruijnIndex")
       case ExistentialType(typeRef: Type, symbols: Seq[Symbol]) => NamedTyp(" ExistentialType")
+    }
+  }
+
+  def getJavaSignature(cname: String, s: SootClass): List[ClassDef] = {
+
+    val sig = parseJavaSig(cname)
+    sig match {
+      case JavaMethodDef(name: String, num: Int, scalaParent: String, apply: Boolean, applyInt: Int) => {
+        println(" Name:"+name+"Num:"+num+"Scala Parent:"+scalaParent+"apply:"+apply+"applyNum:"+applyInt)
+        val s = getScalaSignature(scalaParent)
+        var r: List[ClassDef] = null
+        s match {
+          case List(a: ClassDef) => {
+            for (i <- a.methods)
+              if (i.name.equals(name)){
+               // for(j <- i.params)
+               // i.params+="$1"
+                r = List(new ClassDef(a.name, a.classtype, a.fields, List(i), null, 0L, null, null))
+                }
+            r
+          }
+          case _ => null
+        }
+      }
+
+      case JavaClassDef(name: String, num: Int, scalaParent: String, classtype: String) => {
+        println(" Name:"+name+"Num:"+num+"Scala Parent:"+scalaParent+"classtype:"+classtype)
+        val s = getScalaSignature(scalaParent)
+        if (classtype.equals("sameclass")) s
+        else {
+          s match {
+            case List(a: ClassDef) => { var cl: ClassDef = null; for (i <- a.innerClasses) if (i.name.equals(name)) cl = i; List(cl) }
+            case _ => null
+          }
+        }
+      }
+      case _ => println(" W T !!! "); null
     }
   }
 
@@ -178,8 +217,7 @@ object ScalaTypeGen {
       case Some(scalaSig) => parseScalaSignature(scalaSig, isPackageObject)
       case None => None
     }
-    
- 
+
     sig match {
 
       case List(myclassdef: MyClassDef) => List(getClassDef(myclassdef))
@@ -191,7 +229,7 @@ object ScalaTypeGen {
   }
 
   def getListClassDef(myClassDefList: List[MyClassDef]): List[ClassDef] = {
-  
+
     var fieldList = ListBuffer[ClassDef]()
 
     for (i <- myClassDefList)
@@ -202,36 +240,35 @@ object ScalaTypeGen {
   }
 
   def getClassDef(myClassDef: MyClassDef): ClassDef = {
-  
-  var innerClasses = ListBuffer[ClassDef]()
-  
-     myClassDef match {
+
+    var innerClasses = ListBuffer[ClassDef]()
+
+    myClassDef match {
       case MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, selfScalaType: ScalaType, fields: List[VarDef], children: List[MySymbol]) => {
         new ClassDef(
           name,
           classtype,
-          fields, 
-          (children.map { child => child match { 
-            case MyMethodDef(name, returnType, stringReturnType, params) => {
+          fields, (children.map { child =>
+            child match {
+              case MyMethodDef(name, returnType, stringReturnType, params) => {
                 new MethodDef((if (name == "<init>" || name == "$init$") "this" else name),
-                returnType,
-                scalaType(returnType),
-                stringReturnType, (params.map {
-                  case MyVarDef(name, varType, stringVarType) => {
-                    new VarDef(name, varType, null, stringVarType, scalaType(varType))
-                  }
-                  case _ => null
-                }.toList).filter(_.isInstanceOf[VarDef]))
-             }
-               case MyClassDef(innerModifiers: List[Modifier], innerName: String, innerClasstype: String, innerSelfType: Type, selfScalaType: ScalaType, innerFields: List[VarDef], innerChildren: List[MySymbol]) => innerClasses+=getClassDef(child.asInstanceOf[MyClassDef]); null
-          }}.toList).filter(_.isInstanceOf[MethodDef]), 
-          (selfType match {
+                  returnType,
+                  scalaType(returnType),
+                  stringReturnType, (params.map {
+                    case MyVarDef(name, varType, stringVarType) => {
+                      new VarDef(name, varType, null, stringVarType, scalaType(varType))
+                    }
+                    case _ => null
+                  }.toList).filter(_.isInstanceOf[VarDef]))
+              }
+              case MyClassDef(innerModifiers: List[Modifier], innerName: String, innerClasstype: String, innerSelfType: Type, selfScalaType: ScalaType, innerFields: List[VarDef], innerChildren: List[MySymbol]) => innerClasses += getClassDef(child.asInstanceOf[MyClassDef]); null
+            }
+          }.toList).filter(_.isInstanceOf[MethodDef]), (selfType match {
             case TypeRefType(prefix: Type, symbol: Symbol, typeRefs: Seq[Type]) => typeRefs.map { i => scalaType(i) }.toList
             case ClassInfoType(symbol, typeRefs) => typeRefs.map { i => scalaType(i) }.toList
             case PolyType(ClassInfoType(symbol, typeRefs), symbols: Seq[TypeSymbol]) => typeRefs.map { i => scalaType(i) }.toList
-          }),
-          (selfType match {
-            case TypeRefType(_,TypeSymbol(SymbolInfo(_, _, flags: Int, _, _, _)),_) => flags
+          }), (selfType match {
+            case TypeRefType(_, TypeSymbol(SymbolInfo(_, _, flags: Int, _, _, _)), _) => flags
             case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _) => flags
             case PolyType(ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _), symbols: Seq[TypeSymbol]) => flags
           }),
@@ -242,65 +279,65 @@ object ScalaTypeGen {
     }
   }
 
- def printClassDef(cdList: List[ClassDef]) : Unit = { 
- 
- println("---------------------------------------------------------------------------------------")
-    for (cd <- cdList) {
- 
-       println("Class Name::" + cd.name)
-       println("Class Type::" + cd.classtype)
-       println("Class Scala Type::"+cd.scalatype)
- 
-       if (cd.fields != null)
-         for (i <- cd.fields)
-           println("Class Field Name:" + i.name + "Class Field As String::" + i.fieldTypeAsString + "Class Field As Scala Type::" + i.fieldScalaType)
-       
-       println("------Super Classes----------")
-       for (i <- cd.superclass)
-         println("Class Name::" + i)
-         
-          println("---------------Methods-------------------")
-	  
-	        for (i <- 0 until cd.methods.length) {
-	          var m = cd.methods(i)
-	          println("Method Name:::" + m.name)
-	          if (m.returnType != null)
-	            println("Return Type::" + m.returnType)
-	          if (m.returnTypeAsString != null)
-	            println("Return Type As String::" + m.returnTypeAsString)
-	          if (m.returnScalaType != null)
-	            println("Return Type as Scala Type::" + m.returnScalaType)
-	            
-	          var p = m.params
-	          if (p != null) {
-	            var cc = p.length
-	            for (j <- 0 until cc) {
-	              if (p(j) != null) {
-	                if (p(j).name != null)
-	                  println("Parameter name::" + p(j).name)
-	                if (p(j).fieldTyp != null)
-	                  println("Parameter Type::" + p(j).fieldTyp)
-	                if (p(j).fieldTypeAsString != null)
-	                  println("Parameter Type As String::" + p(j).fieldTypeAsString)
-	                if (p(j).fieldScalaType != null)
-	                  println("Parameter Type As ScalaType::" + p(j).fieldScalaType)
-	              }
-	            }
-	          }
- 
-       if(!cd.innerClasses.isEmpty){
-       println("------------------------Inner Classes -----------------------------------")
-       printClassDef(cd.innerClasses)
-       }
- 
-      
-       }
- 
-     }
+  def printClassDef(cdList: List[ClassDef]): Unit = {
 
- 
- }
- 
+    for (cd <- cdList) {
+      println("-----------------Start of Class:::" + cd.name + "------------------------------------------------------")
+      // println("Class Name::" + cd.name)
+      println("Class Type::" + cd.classtype)
+      println("Class Scala Type::" + cd.scalatype)
+
+      if (cd.fields != null)
+        for (i <- cd.fields)
+          println("Class Field Name:" + i.name + "Class Field As String::" + i.fieldTypeAsString + "Class Field As Scala Type::" + i.fieldScalaType)
+
+      println("------Super Classes----------")
+      for (i <- cd.superclass)
+        println("Class Name::" + i)
+
+      println("---------------Methods-------------------")
+
+      for (i <- 0 until cd.methods.length) {
+        var m = cd.methods(i)
+        println("Method Name:::" + m.name)
+        if (m.returnType != null)
+          println("Return Type::" + m.returnType)
+        if (m.returnTypeAsString != null)
+          println("Return Type As String::" + m.returnTypeAsString)
+        if (m.returnScalaType != null)
+          println("Return Type as Scala Type::" + m.returnScalaType)
+
+        var p = m.params
+        if (p != null) {
+          var cc = p.length
+          for (j <- 0 until cc) {
+            if (p(j) != null) {
+              if (p(j).name != null)
+                println("Parameter name::" + p(j).name)
+              if (p(j).fieldTyp != null)
+                println("Parameter Type::" + p(j).fieldTyp)
+              if (p(j).fieldTypeAsString != null)
+                println("Parameter Type As String::" + p(j).fieldTypeAsString)
+              if (p(j).fieldScalaType != null)
+                println("Parameter Type As ScalaType::" + p(j).fieldScalaType)
+            }
+          }
+        }
+
+      }
+
+      if (!cd.innerClasses.isEmpty) {
+        println("------------------------Inner Classes -----------------------------------")
+        for (i <- cd.innerClasses) println("--InnerClassName:::" + i.name + "----")
+      }
+      printClassDef(cd.innerClasses)
+
+      println("--------------End of Class:::" + cd.name + "--------------------")
+
+    }
+
+  }
+
   def unpickleFromAnnotation(classFile: ClassFile, isPackageObject: Boolean): List[MyClassDef] = {
     val SCALA_SIG_ANNOTATION = "Lscala/reflect/ScalaSignature;"
     val BYTES_VALUE = "bytes"
@@ -322,41 +359,45 @@ object ScalaTypeGen {
   object Sig {
     def apply(name: String, typeFormals: List[Param], formals: List[ScalaType], returnType: ScalaType): Sig = Sig(name, MTyp(typeFormals, formals, returnType))
   }
-    
+
   sealed class ScalaType
   case class MTyp(typeFormals: List[Param], formals: List[ScalaType], returnType: ScalaType) extends ScalaType {
-  override def equals(other: Any ) = other match {
-  case MTyp(tF: List[Param], f: List[ScalaType], rT: ScalaType) => if ( tF ==typeFormals && formals == f && returnType.equals(rT)) true else false
-  case _ => false
-   }
+    override def equals(other: Any) = other match {
+      case MTyp(tF: List[Param], f: List[ScalaType], rT: ScalaType) => if (tF == typeFormals && formals == f && returnType.equals(rT)) true else false
+      case _ => false
+    }
   }
   case class Param(name: String) {
-  override def equals(other: Any) = other match {
-  case Param(n: String) => if(n.equals(name)) true else false
-  case _ => false
-   }
+    override def equals(other: Any) = other match {
+      case Param(n: String) => if (n.equals(name)) true else false
+      case _ => false
+    }
   }
   case class NamedTyp(name: String) extends ScalaType {
-  override def equals(other: Any) = other match {
-  case NamedTyp(n: String) => if(n.equals(name)) true else false
-  case _ => false
-   }
+    override def equals(other: Any) = other match {
+      case NamedTyp(n: String) => if (n.equals(name)) true else false
+      case _ => false
+    }
   }
   case class ParamTyp(name: String, typ: TYPEVARIANT) extends ScalaType {
-  override def equals(other: Any) = other match {
-  case ParamTyp(n: String, t: TYPEVARIANT) => if(n.equals(name) && t == typ ) true else false
-  case _ => false
-     }
+    override def equals(other: Any) = other match {
+      case ParamTyp(n: String, t: TYPEVARIANT) => if (n.equals(name) && t == typ) true else false
+      case _ => false
+    }
   }
   case class InstTyp(base: ScalaType, args: List[ScalaType]) extends ScalaType {
-  override def equals(other: Any) = other match {
-  case InstTyp(b: ScalaType, a: List[ScalaType]) => { if ( (b match { case NamedTyp(name: String) => if(b.asInstanceOf[NamedTyp].equals(base)) true else false 
-                                                                      case ParamTyp(name: String, typ: TYPEVARIANT) => if(b.asInstanceOf[ParamTyp].equals(base)) true else false
-                                                                      case _ => false }) && a == args ) true else false }
-  case _ => false
-     }
+    override def equals(other: Any) = other match {
+      case InstTyp(b: ScalaType, a: List[ScalaType]) => {
+        if ((b match {
+          case NamedTyp(name: String) => if (b.asInstanceOf[NamedTyp].equals(base)) true else false
+          case ParamTyp(name: String, typ: TYPEVARIANT) => if (b.asInstanceOf[ParamTyp].equals(base)) true else false
+          case _ => false
+        }) && a == args) true else false
+      }
+      case _ => false
+    }
   }
-  case object UnimplementedTyp extends ScalaType 
+  case object UnimplementedTyp extends ScalaType
 
   abstract sealed class Modifier
   case object Private extends Modifier
@@ -467,16 +508,17 @@ object ScalaTypeGen {
     private def refinementClass(c: ClassSymbol) = c.name == "<refinement>"
 
     def makeClass(level: Int, c: ClassSymbol): Option[MyClassDef] = {
-  
+
       var t: Type = NoType
       if (c.name == "<local child>" /*scala.tools.nsc.symtab.StdNames.LOCALCHILD.toString()*/ ) {
         None
       } else {
         val mods = makeModifiers(c) ::: (if (c.isTrait) List(Trait) else Nil)
         val defaultConstructor = if (c.isCase) getPrinterByConstructor(c) else ""
-        val name = c match { 
-                   case ClassSymbol(SymbolInfo(_, owner : Symbol,_, _, _, _),_) => if(!owner.path.equals("<empty>")) owner.path.replace("<empty>.","") +"."+ processName(c.name) else processName(c.name)
-                   case _ => processName(c.name) } 
+        val name = c match {
+          case ClassSymbol(SymbolInfo(_, owner: Symbol, _, _, _, _), _) => if (!owner.path.equals("<empty>")) owner.path.replace("<empty>.", "") + "." + processName(c.name) else processName(c.name)
+          case _ => processName(c.name)
+        }
         t = c.infoType
         val classType = t match {
           case PolyType(typeRef, symbols) => PolyTypeWithCons(typeRef, symbols, defaultConstructor)
@@ -535,7 +577,7 @@ object ScalaTypeGen {
     }
 
     def makePackageObject(level: Int, o: ObjectSymbol): MySymbol = {
-      
+
       val mod = makeModifiers(o)
       val name = o.symbolInfo.owner.name
       val TypeRefType(prefix, classSymbol: ClassSymbol, typeArgs) = o.infoType
@@ -548,10 +590,11 @@ object ScalaTypeGen {
     def makeObject(level: Int, o: ObjectSymbol): MySymbol = {
 
       val mod = makeModifiers(o)
-      val name = o match { 
-                   case ObjectSymbol(SymbolInfo(_, owner : Symbol,_, _, _, _)) =>if(!owner.path.equals("<empty>")) owner.path.replace("<empty>.","") +"."+ o.name else o.name
-                   case _ => o.name } 
-                   
+      val name = o match {
+        case ObjectSymbol(SymbolInfo(_, owner: Symbol, _, _, _, _)) => if (!owner.path.equals("<empty>")) owner.path.replace("<empty>.", "") + "." + o.name else o.name
+        case _ => o.name
+      }
+
       val TypeRefType(prefix, classSymbol: ClassSymbol, typeArgs) = o.infoType
       val t = makeType(classSymbol)
       var fieldList = ListBuffer[VarDef]()
@@ -564,7 +607,7 @@ object ScalaTypeGen {
           case _ => i
         }
       }.toList
-      MyClassDef(mod, name, "object", t, scalaType(o.infoType),  fieldList.toList, newchildren.filter(_.isInstanceOf[MySymbol]))
+      MyClassDef(mod, name, "object", t, scalaType(o.infoType), fieldList.toList, newchildren.filter(_.isInstanceOf[MySymbol]))
     }
 
     def makeMethodType(t: Type, printResult: Boolean): (Type, String, List[MyVarDef]) = {
@@ -768,8 +811,8 @@ object ScalaTypeGen {
       }
     }
 
-   def getVariance(t: TypeSymbol) = if (t.isCovariant) "+" else if (t.isContravariant) "-" else ""
-   
+    def getVariance(t: TypeSymbol) = if (t.isCovariant) "+" else if (t.isContravariant) "-" else ""
+
     def toString(symbol: Symbol): String = symbol match {
       case symbol: TypeSymbol => {
         val attrs = (for (a <- symbol.attributes) yield toString(a)).mkString(" ")
@@ -816,6 +859,47 @@ object ScalaTypeGen {
     }
 
   }
+
+  // Scala Signature for Java Classes
+
+  def parseJavaSig(classname: String): JavaDef = {
+
+    var arr = classname.split("\\$")
+    var afun, apply, flag = false
+    var name, typ = ""
+    var num, appInt = -1
+
+    for (i <- 1 until arr.length) arr(i) match {
+      case "" => flag = true
+      case "anonfun" => afun = true
+      case "apply" => apply = true
+      case _ => try {
+        if (apply)
+          appInt = arr(i).toInt
+        else
+          num = arr(i).toInt
+      } catch {
+        case _: java.lang.NumberFormatException => {
+          name = arr(i)
+          if (afun) typ = "method"
+          else if (classname(classname.length - 1).equals('$')) typ = "object"
+          else typ = "class"
+        }
+      }
+    }
+
+    if (!flag) typ = "sameclass"
+
+    if (typ.equals("method"))
+      new JavaMethodDef(name, num, arr(0), apply, appInt)
+    else
+      new JavaClassDef(name, num, arr(0), typ)
+
+  }
+
+  sealed abstract class JavaDef
+  case class JavaMethodDef(name: String, num: Int, scalaParent: String, apply: Boolean, applyInt: Int) extends JavaDef
+  case class JavaClassDef(name: String, num: Int, scalaParent: String, classtype: String) extends JavaDef
 
 }
 
