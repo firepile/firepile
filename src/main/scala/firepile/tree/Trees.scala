@@ -16,6 +16,7 @@ object Trees {
         case s @ Un(_,_) => Eval(s).toCL
         case s @ Bin(_,_,_) => Eval(s).toCL
         case s @ Call(_,_) => Eval(s).toCL
+        case s @ ClosureCall(_,_) => Eval(s).toCL
         case s @ Cast(_,_) => Eval(s).toCL
         case s @ Assign(_,_) => Eval(s).toCL
         case s @ StructLit(_) => Eval(s).toCL
@@ -35,6 +36,7 @@ object Trees {
             case Select(_,_) => 2
             case StructLit(_) => 2
             case Call(_,_) => 3
+            case ClosureCall(_,_) => 3
             case Un(_,_) => 4
             case Cast(_,_) => 19
             case Bin(_,"*",_) => 6
@@ -155,6 +157,15 @@ object Trees {
     case class Call(fun: Tree, args: List[Tree]) extends Tree {
         def toCL = paren(this, fun) + args.map((t:Tree) => t.toCL).mkString("(", ", ", ")")
     }
+
+    object ClosureCall {
+        def apply(fun: Tree, args: Tree*): ClosureCall = ClosureCall(fun, args.toList)
+    }
+    case class ClosureCall(fun: Tree, args: List[Tree]) extends Tree {
+        def toCL = paren(this, fun) + args.map((t:Tree) => t.toCL).mkString("(", ", ", ")")
+    }
+
+    
     case class If(cond: Tree, e1: Tree, e2: Tree) extends Tree {
         def toCL = (e1,e2) match {
           case (GoTo(_),Nop) => "if (" + cond.toCL + ") " + stmt(e1)
@@ -326,6 +337,7 @@ object Trees {
 
   def fold(f: Tree => Tree)(t: Tree): Tree = f(t match {
     case Call(fun, args) => Call(fold(f)(fun), args.map(a => fold(f)(a)))
+    case ClosureCall(fun, args) => ClosureCall(fold(f)(fun), args.map(a => fold(f)(a)))
     case Switch(e, cases) => Switch(fold(f)(e), cases.map(a => fold(f)(a)))
     case Case(e, s) => Case(fold(f)(e), fold(f)(s))
     case Bin(op1, op, op2) => Bin(fold(f)(op1), op, fold(f)(op2))
