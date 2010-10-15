@@ -162,7 +162,7 @@ object JVM2CL {
   def methodName(m: SootMethodRef): String = mangleName(m.declaringClass.getName + m.name)
   def mangleName(name: String) = name.replace('$', '_').replace('.', '_')
 
-  private implicit def v2tree(v: Value): Tree = translateExp(v)
+  private implicit def v2tree(v: Value)(implicit af: HashMap[String,Value] = null): Tree = translateExp(v, af)
 
   var next = 0
   def freshName(base: String = "tmp") = {
@@ -229,7 +229,7 @@ object JVM2CL {
   case class CompileMethodTask(method: SootMethodRef, self: AnyRef, takesThis: Boolean, anonFuns: List[(Int,Value)]) extends Task {
     def run = {
       val m = method
-      anonFunsLookup = new HashMap[String,Id]()
+      val anonFunsLookup = new HashMap[String,Value]()
       
       // Force the class's method bodies to be loaded.
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.HIERARCHY)
@@ -245,14 +245,14 @@ object JVM2CL {
           val mdef = cdef.methods.filter(m => m.name.equals(method.name)).head
           val paramName =  mdef.params(index).name
           println("FUNCTION PARAM IS NAMED: " + paramName)
-
+          
           // find apply code in Compiler.scala, may not be named apply exactly
           val functionType = value.getType.asInstanceOf[RefType].getSootClass
           val applyMethods = functionType.getMethods.filter(mn => mn.getName.equals("apply") && !mn.getParameterType(0).toString.equals("java.lang.Object"))
 
+          anonFunsLookup += paramName -> value
           for (applyMethod <- applyMethods) {
             println("Found apply method: " + applyMethod.getSignature)
-            anonFunsLookup += paramName -> Id(methodName(applyMethod))
             worklist += CompileMethodTask(applyMethod.makeRef, functionType)
           }
 
@@ -333,7 +333,7 @@ object JVM2CL {
     buffer.toString()
   }
 
-  private def compileMethod(m: SootMethod, self: AnyRef, takesThis: Boolean = false, anonFuns: HashMap[String,Id]): Tree = {
+  private def compileMethod(m: SootMethod, self: AnyRef, takesThis: Boolean = false, anonFuns: HashMap[String,Value]): Tree = {
     println("-------------------------------------------------------")
     println(m)
 
@@ -357,12 +357,9 @@ object JVM2CL {
     println("Grimp method body:")
     println(units.mkString("\n"))
 
-    val body = translateUnits(units, Nil)
+    val body = translateUnits(units, Nil, anonFuns)
 
-    // pass over body to replace ClosureCalls
-    val bodyReplacedClosures = replaceClosures(anonFuns, body)
-
-    val labeled = insertLabels(units, bodyReplacedClosures, Nil)
+    val labeled = insertLabels(units, body, Nil)
 
     val fun = makeFunction(m, removeThis(labeled), takesThis)
 
@@ -469,9 +466,9 @@ object JVM2CL {
     val enumElements = new ListBuffer[Id]()
     
        def addClass(cls: SootClass) = {
-          if (!knownClasses.contains(cls)) {
+          // HACK to ignore Java classes for now
+          if (!knownClasses.contains(cls)  && !cls.getName.startsWith("java.")) {
             enumElements += Id(cls.getName + "_ID")
-            
             
             val scalaSig = if (cls.getName.contains("$")) getJavaSignature(cls.getName, cls)
             else getScalaSignature(cls.getName)
@@ -575,8 +572,6 @@ object JVM2CL {
   private val classtab = new ClassTable()
 
   private val arraystructs = new ArrayStructs()
-
-  private var anonFunsLookup = new HashMap[String,Id]()
 
   private def translateLabel(u: SootUnit): String = u match {
     case target : Stmt => {
@@ -751,7 +746,7 @@ object JVM2CL {
         case TupleSelect(t) => t
 
         // firepile.util.Math.sin(x)
-        case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a)))
+        case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, null)))
 
         // Predef$.MODULE$.floatWrapper(x).abs()
         case GVirtualInvoke(
@@ -770,7 +765,7 @@ object JVM2CL {
         case DoubleMath(t) => t
 
         // scala.math.sin(x)
-        case ScalaMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a)))
+        case ScalaMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, null)))
 
         case _ => null
       }
@@ -828,339 +823,363 @@ object JVM2CL {
     case _ => false
   }
 
-  private def translateExp(v: Value): Tree = v match {
-    // Must be first
-    case LibraryCall(t) => t
+  private def translateExp(v: Value, anonFuns: HashMap[String,Value]): Tree = {
+    implicit val anons = anonFuns
+    v match {
+      // Must be first
+      case LibraryCall(t) => t
 
-    case GNullConstant() => Id("NULL")
+      case GNullConstant() => Id("NULL")
 
-    case GIntConstant(value) => IntLit(value)
-    case GLongConstant(value) => LongLit(value)
-    case GFloatConstant(value) => FloatLit(value)
-    case GDoubleConstant(value) => DoubleLit(value)
+      case GIntConstant(value) => IntLit(value)
+      case GLongConstant(value) => LongLit(value)
+      case GFloatConstant(value) => FloatLit(value)
+      case GDoubleConstant(value) => DoubleLit(value)
 
-    case GXor(op1, op2) => Bin(op1, "^", op2)
-    case GOr(op1, op2) => Bin(op1, "|", op2)
-    case GAnd(op1, op2) => Bin(op1, "&", op2)
+      case GXor(op1, op2) => Bin(op1, "^", op2)
+      case GOr(op1, op2) => Bin(op1, "|", op2)
+      case GAnd(op1, op2) => Bin(op1, "&", op2)
 
-    case GUshr(op1, op2) => Bin(Cast(ValueType("unsigned"), op1), ">>", op2)
-    case GShr(op1, op2) => Bin(op1, ">>", op2)
-    case GShl(op1, op2) => Bin(op1, "<<", op2)
+      case GUshr(op1, op2) => Bin(Cast(ValueType("unsigned"), op1), ">>", op2)
+      case GShr(op1, op2) => Bin(op1, ">>", op2)
+      case GShl(op1, op2) => Bin(op1, "<<", op2)
 
-    case GAdd(op1, op2) => Bin(op1, "+", op2)
-    case GSub(op1, op2) => Bin(op1, "-", op2)
-    case GMul(op1, op2) => Bin(op1, "*", op2)
-    case GDiv(op1, op2) => Bin(op1, "/", op2)
-    case GRem(op1, op2) => Bin(op1, "%", op2)
+      case GAdd(op1, op2) => Bin(op1, "+", op2)
+      case GSub(op1, op2) => Bin(op1, "-", op2)
+      case GMul(op1, op2) => Bin(op1, "*", op2)
+      case GDiv(op1, op2) => Bin(op1, "/", op2)
+      case GRem(op1, op2) => Bin(op1, "%", op2)
 
-    case GEq(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "==", op2)
-    case GEq(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "==", op2)
-    case GEq(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "==", op2)
-    case GEq(op1, op2) => Bin(op1, "==", op2)
+      case GEq(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "==", op2)
+      case GEq(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "==", op2)
+      case GEq(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "==", op2)
+      case GEq(op1, op2) => Bin(op1, "==", op2)
 
-    case GNe(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "!=", op2)
-    case GNe(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "!=", op2)
-    case GNe(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "!=", op2)
-    case GNe(op1, op2) => Bin(op1, "!=", op2)
+      case GNe(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "!=", op2)
+      case GNe(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "!=", op2)
+      case GNe(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "!=", op2)
+      case GNe(op1, op2) => Bin(op1, "!=", op2)
 
-    case GGt(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, ">", op2)
-    case GGt(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, ">", op2)
-    case GGt(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, ">", op2)
-    case GGt(op1, op2) => Bin(op1, ">", op2)
+      case GGt(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, ">", op2)
+      case GGt(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, ">", op2)
+      case GGt(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, ">", op2)
+      case GGt(op1, op2) => Bin(op1, ">", op2)
 
-    case GLt(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "<", op2)
-    case GLt(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "<", op2)
-    case GLt(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "<", op2)
-    case GLt(op1, op2) => Bin(op1, "<", op2)
+      case GLt(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "<", op2)
+      case GLt(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "<", op2)
+      case GLt(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "<", op2)
+      case GLt(op1, op2) => Bin(op1, "<", op2)
 
-    case GLe(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "<=", op2)
-    case GLe(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "<=", op2)
-    case GLe(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "<=", op2)
-    case GLe(op1, op2) => Bin(op1, "<=", op2)
+      case GLe(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, "<=", op2)
+      case GLe(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, "<=", op2)
+      case GLe(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, "<=", op2)
+      case GLe(op1, op2) => Bin(op1, "<=", op2)
 
-    case GGe(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, ">=", op2)
-    case GGe(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, ">=", op2)
-    case GGe(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, ">=", op2)
-    case GGe(op1, op2) => Bin(op1, ">=", op2)
+      case GGe(GCmpg(op1, op2), GIntConstant(0)) => Bin(op1, ">=", op2)
+      case GGe(GCmpl(op1, op2), GIntConstant(0)) => Bin(op1, ">=", op2)
+      case GGe(GCmp(op1, op2), GIntConstant(0)) => Bin(op1, ">=", op2)
+      case GGe(op1, op2) => Bin(op1, ">=", op2)
 
-    case GCmpg(op1, op2) => Id("unimplemented:cmpg")
-    case GCmpl(op1, op2) => Id("unimplemented:cmpl")
-    case GCmp(op1, op2) => Id("unimplemented:cmp")
+      case GCmpg(op1, op2) => Id("unimplemented:cmpg")
+      case GCmpl(op1, op2) => Id("unimplemented:cmpl")
+      case GCmp(op1, op2) => Id("unimplemented:cmp")
 
-    case GNeg(op) => Un("-", op)
+      case GNeg(op) => Un("-", op)
 
-    case GArrayLength(op: Local) => Select(Deref(op), "length")
+      case GArrayLength(op: Local) => Select(Deref(op), "length")
 
-    case GCast(op, castTyp) => Cast(translateType(castTyp), op)
+      case GCast(op, castTyp) => Cast(translateType(castTyp), op)
 
-    // IGNORE
-    case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
+      // IGNORE
+      case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
 
-    // IGNORE
-    case GNew(newTyp) => { classtab.addClass(new SootClass(newTyp.asInstanceOf[SootType].toString));  Id("unimplemented:new") }
+      // IGNORE
+      case GNew(newTyp) => { classtab.addClass(new SootClass(newTyp.asInstanceOf[SootType].toString));  Id("unimplemented:new") }
 
-    // IGNORE
-    case GNewArray(newTyp, size) => Id("unimplemented:newarray")
-    // IGNORE
-    case GNewMultiArray(newTyp, sizes) => Id("unimplemented:newmultiarray")
+      // IGNORE
+      case GNewArray(newTyp, size) => Id("unimplemented:newarray")
+      // IGNORE
+      case GNewMultiArray(newTyp, sizes) => Id("unimplemented:newmultiarray")
 
-    case GNewInvoke(baseTyp, method @ SMethodRef(_, "<init>", _, _, _), args) => {
-      if (baseTyp.getSootClass.getName.equals("scala.Tuple2")) {
-        Cast(StructType("Tuple2"), StructLit(args.map {
-          // scala.runtime.BoxesRunTime.boxToFloat(float) : Object
-          case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToInt", _, _, _), List(value)) => {
+      case GNewInvoke(baseTyp, method @ SMethodRef(_, "<init>", _, _, _), args) => {
+        if (baseTyp.getSootClass.getName.equals("scala.Tuple2")) {
+          Cast(StructType("Tuple2"), StructLit(args.map {
+            // scala.runtime.BoxesRunTime.boxToFloat(float) : Object
+            case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToInt", _, _, _), List(value)) => {
+              val name = freshName("union")
+              symtab.addLocalVar(ANY_TYPE, Id(name))
+              Comma(Assign(Select(Id(name), "i"), translateExp(value, anonFuns)), Id(name))
+            }
+            case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToFloat", _, _, _), List(value)) => {
             val name = freshName("union")
             symtab.addLocalVar(ANY_TYPE, Id(name))
-            Comma(Assign(Select(Id(name), "i"), translateExp(value)), Id(name))
-          }
-          case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToFloat", _, _, _), List(value)) => {
-            val name = freshName("union")
-            symtab.addLocalVar(ANY_TYPE, Id(name))
-            Comma(Assign(Select(Id(name), "f"), translateExp(value)), Id(name))
-          }
-          case v => translateExp(v)
-        }))
-      }
-      else if (isFunction(baseTyp)) {
-        // worklist += CompileMethodTask(method)
-        Call(Id("makeClosure"), args.map(a => translateExp(a)))
-      }
-      else {
-        // worklist += CompileMethodTask(method)
-        Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a))))
-      }
-    }
-    case GStaticInvoke(method, args) => {
-      worklist += CompileMethodTask(method)
-      // classtab.addClass(method.declaringClass)
-      Call(Id(method.name), args.map(a => translateExp(a)))
-    }
-    case GSpecialInvoke(base: Local, method, args) => {
-      worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
-      //Call(Select(base, method.name), Id("_this") :: args.map(a => translateExp(a)))
-      // classtab.addClass(method.declaringClass)
-      Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
-    }
-    case GVirtualInvoke(base, method, args) if base.getType.toString == "Id1" => { println("found ID!"); Id("found ID") }
-    case GVirtualInvoke(base, method, args) => { 
-      val anonFuns = new ListBuffer[(Int,Value)]()
-      var argCount = 0
-      args.foreach(a => { if(isFunction(a.getType)) { anonFuns += ((argCount,a)) } ; argCount += 1 })
-      if (args.length > 0)
-        worklist += CompileMethodTask(method, findSelf(base, symtab.self), true, anonFuns.toList) 
-      else worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
-
-      // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
-      // Then generate a call to a dispatch method:
-      // e.g.,
-      // class A { def m = ... }
-      // class B extends A { def m = ... }
-      // class C extends A { def m = ... }
-      // val x: A = new C
-      // x.m   // invokevirtual(x, A.m, Nil)
-      // -->
-      // dispatch_m(x)
-      // where:
-      // void dispatch_m(A* x) {
-      //    switch (x.type) {
-      //       case TYPE_A: A_m((A*) x);
-      //       case TYPE_B: B_m((B*) x);
-      //       case TYPE_C: C_m((C*) x);
-      //    }
-      // }
-      //
-      // Also need to define structs for each class with a type field as the first word.
-      //
-      // For now: just handle calls x.m() where we know either the static type
-      // of x (e.g., A) is final, or m is final in A, or we know that no
-      // subclasses of A override m
-      
-      // rewrite to:
-
-      def getPossibleReceivers(base: Value, method: SootMethodRef) = {
-        if (Modifier.isFinal(method.declaringClass.getModifiers)) {
-          method.declaringClass :: Nil
+            Comma(Assign(Select(Id(name), "f"), translateExp(value, anonFuns)), Id(name))
+            }
+            case v => translateExp(v, anonFuns)
+          }))
         }
-        else if (Modifier.isFinal(method.resolve.getModifiers)) {
-          method.declaringClass :: Nil
+        else if (isFunction(baseTyp)) {
+          // worklist += CompileMethodTask(method)
+          Call(Id("makeClosure"), args.map(a => translateExp(a, anonFuns)))
         }
         else {
-          base.getType match {
-            case t : SootRefType if Modifier.isFinal(t.getSootClass.getModifiers) =>
-              // assert method not overridden between method.declaringClass and t
-              method.declaringClass :: Nil
+          // worklist += CompileMethodTask(method)
+          Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a, anonFuns))))
+        }
+      }
+      case GStaticInvoke(method, args) => {
+        worklist += CompileMethodTask(method)
+        // classtab.addClass(method.declaringClass)
+        Call(Id(method.name), args.map(a => translateExp(a, anonFuns)))
+      }
+      case GSpecialInvoke(base: Local, method, args) => {
+        worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
+        //Call(Select(base, method.name), Id("_this") :: args.map(a => translateExp(a)))
+        // classtab.addClass(method.declaringClass)
+        Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, anonFuns)))
+      }
+      case GVirtualInvoke(base, method, args) if base.getType.toString == "Id1" => { println("found ID!"); Id("found ID") }
+      case GVirtualInvoke(base, method, args) => { 
+        val anonFunParams = new ListBuffer[(Int,Value)]()
+        var argCount = 0
+        args.foreach(a => { if(isFunction(a.getType)) { anonFunParams += ((argCount,a)) } ; argCount += 1 })
+        if (args.length > 0)
+          worklist += CompileMethodTask(method, findSelf(base, symtab.self), true, anonFunParams.toList) 
+        else worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
 
-            case t : SootRefType => {
-              // iterate through all loaded subclasses of t, filtering out those that implement method
-              val result = ListBuffer[SootClass]()
+        // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
+        // Then generate a call to a dispatch method:
+        // e.g.,
+        // class A { def m = ... }
+        // class B extends A { def m = ... }
+        // class C extends A { def m = ... }
+        // val x: A = new C
+        // x.m   // invokevirtual(x, A.m, Nil)
+        // -->
+        // dispatch_m(x)
+        // where:
+        // void dispatch_m(A* x) {
+        //    switch (x.type) {
+        //       case TYPE_A: A_m((A*) x);
+        //       case TYPE_B: B_m((B*) x);
+        //       case TYPE_C: C_m((C*) x);
+        //    }
+        // }
+        //
+        // Also need to define structs for each class with a type field as the first word.
+        //
+        // For now: just handle calls x.m() where we know either the static type
+        // of x (e.g., A) is final, or m is final in A, or we know that no
+        // subclasses of A override m
+        
+        // rewrite to:
 
-              val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
-              val H = Scene.v.getActiveHierarchy
+        def getPossibleReceivers(base: Value, method: SootMethodRef) = {
+          if (Modifier.isFinal(method.declaringClass.getModifiers)) {
+            method.declaringClass :: Nil
+          }
+          else if (Modifier.isFinal(method.resolve.getModifiers)) {
+            method.declaringClass :: Nil
+          }
+          else {
+            base.getType match {
+              case t : SootRefType if Modifier.isFinal(t.getSootClass.getModifiers) =>
+                // assert method not overridden between method.declaringClass and t
+                method.declaringClass :: Nil
 
-              val queue = new Queue[SootClass]()
-              queue += t.getSootClass
+              case t : SootRefType => {
+                // iterate through all loaded subclasses of t, filtering out those that implement method
+                val result = ListBuffer[SootClass]()
 
-              while (! queue.isEmpty) {
-                val c = queue.dequeue
+                val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+                val H = Scene.v.getActiveHierarchy
 
-                def hasMethod(c: SootClass, methodSig: String): Boolean = {
-                  val i = c.methodIterator
-                  while (i.hasNext) {
-                    val m = i.next
+                val queue = new Queue[SootClass]()
+                queue += t.getSootClass
 
-                    if (! m.isAbstract) {
-                      val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-                      if (sig.equals(methodSig)) {
-                        return true
+                while (! queue.isEmpty) {
+                  val c = queue.dequeue
+
+                  def hasMethod(c: SootClass, methodSig: String): Boolean = {
+                    val i = c.methodIterator
+                    while (i.hasNext) {
+                      val m = i.next
+
+                      if (! m.isAbstract) {
+                        val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+                        if (sig.equals(methodSig)) {
+                          return true
+                        }
                       }
                     }
+                    return false
                   }
-                  return false
+
+                  if (hasMethod(c, methodSig)) {
+                    result += c
+                  }
+
+                  queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
                 }
 
-                if (hasMethod(c, methodSig)) {
-                  result += c
-                }
-
-                queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
+                if (result.isEmpty)
+                  method.declaringClass :: Nil
+                else 
+                  result.toList
               }
 
-              if (result.isEmpty)
-                method.declaringClass :: Nil
-              else 
-                result.toList
+              case _ => Nil
             }
+          }
+        }
 
+        val possibleReceivers = getPossibleReceivers(base, method)
+
+        println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
+
+        assert(possibleReceivers.length > 0)
+
+        val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+
+        if (possibleReceivers.length == 1) {
+          // monomorphic call
+          // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
+          println("Monomorphic call to " + methodName(method))
+          classtab.addClass(method.declaringClass)
+          Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, anonFuns)))
+        }
+        else {
+          // polymorphic call--generate a switch
+          val methodReceiversRef = ListBuffer[SootMethod]()
+          val argsToPass = args.map(a => translateExp(a, anonFuns))    // Will need to cast "self" to appropriate type
+
+          for (pr <- possibleReceivers) {
+            val i = pr.methodIterator
+            while (i.hasNext) {
+              val m = i.next
+              if (! m.isAbstract) {
+                val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+                println("Checking method: " + sig + " against " + methodSig)
+                if (sig.equals(methodSig)) {
+                  println("Adding CompileMethodTask(" + method + ", " + pr + ")")
+                  worklist += CompileMethodTask(m, pr, true)
+                  methodReceiversRef += m
+                  classtab.addClass(pr)
+                }
+              }
+            }
+          }
+
+          val methodFormals: List[Tree] = compileMethod(method.resolve, null, false, null) match {
+            case FunDef(_, _, formals, _) => formals
             case _ => Nil
           }
+
+          val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
+              case Formal(_, name) => Id(name)
+              case _ => Id("Wtf: No Name?")
+          })
+
+          val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
+
+          val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName+"_intr")),Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
+          
+          // add appropriate formal parameters for call
+          worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
+          
+      // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
+          // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
+          Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
         }
-      
-    
       }
+      case GInterfaceInvoke(base: Local, method, args) => {
+        worklist += CompileMethodTask(method, findSelf(base, symtab.self))
+        // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
+        // classtab.addClass(new SootClass(base.getName))
+        println("INTERFACE INVOKE: " + methodName(method) + " NAME " + base.getName.toString + " TYPE " + base.getType.toString)
+       
+        // also call translateExp(base)
 
-      val possibleReceivers = getPossibleReceivers(base, method)
+        anonFuns.get(base.getName) match {
+          case Some(GNewInvoke(closureTyp, closureMethod, closureArgs)) => 
+              // new AnonFun1$blah(closureArgs).method(args)
+              /*ClosureCall("blah_apply", new AnonFun1$blah(closureArgs) :: args)
+              or:
+              ClosureCall("blah_apply", closureArgs ::: args)
+              or:
+              */
+              ClosureCall(Id(mangleName(closureTyp.toString) + "apply"), closureArgs.map(ca => translateExp(ca, anonFuns)) ::: args.map(a => translateExp(a, anonFuns)))
 
-      println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
-
-      assert(possibleReceivers.length > 0)
-
-      val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
-
-      if (possibleReceivers.length == 1) {
-        // monomorphic call
-        // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
-        println("Monomorphic call to " + methodName(method))
-        classtab.addClass(method.declaringClass)
-        Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a)))
-      }
-      else {
-        // polymorphic call--generate a switch
-        val methodReceiversRef = ListBuffer[SootMethod]()
-        val argsToPass = args.map(a => translateExp(a))    // Will need to cast "self" to appropriate type
-
-        for (pr <- possibleReceivers) {
-          val i = pr.methodIterator
-          while (i.hasNext) {
-            val m = i.next
-            if (! m.isAbstract) {
-              val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-              println("Checking method: " + sig + " against " + methodSig)
-              if (sig.equals(methodSig)) {
-                println("Adding CompileMethodTask(" + method + ", " + pr + ")")
-                worklist += CompileMethodTask(m, pr, true)
-                methodReceiversRef += m
-                classtab.addClass(pr)
-              }
-            }
-          }
+          case _ => Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
         }
 
-        val methodFormals: List[Tree] = compileMethod(method.resolve, null, false, null) match {
-          case FunDef(_, _, formals, _) => formals
-          case _ => Nil
-        }
-
-        val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
-            case Formal(_, name) => Id(name)
-            case _ => Id("Wtf: No Name?")
-        })
-
-        val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
-
-        val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName+"_intr")),Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
-        
-        // add appropriate formal parameters for call
-        worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
-        
-    // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
-        // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
-        Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
+        /*
+        if(base.getType.toString.startsWith("scala.Function"))
+          ClosureCall(Id(base.getName), args.map(a => translateExp(a, anonFuns)))
+        else
+          Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
+        */
       }
-    
-  
+
+      case GLocal(name, typ) => { 
+        if (anonFuns.contains(name))
+          translateExp(anonFuns(name), anonFuns)
+        else
+          symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name)) 
+      }
+      case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
+      case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
+      case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
+
+      case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ Select(base, fieldRef.name) }
+      case GArrayRef(base: Local, index) => ArrayAccess(Select(Deref(base), "data"), index)
+
+      case v => Id("unsupported:" + v.getClass.getName)
     }
-    case GInterfaceInvoke(base: Local, method, args) => {
-      worklist += CompileMethodTask(method, findSelf(base, symtab.self))
-      // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
-      // classtab.addClass(new SootClass(base.getName))
-      println("INTERFACE INVOKE: " + methodName(method) + " NAME " + base.getName.toString + " TYPE " + base.getType.toString)
-      
-      if(base.getType.toString.startsWith("scala.Function"))
-        ClosureCall(Id(base.getName), args.map(a => translateExp(a)))
-      else
-        Call(Select(base, method.name), args.map(a => translateExp(a)))
-    }
-
-    case GLocal(name, typ) => { symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name)) }
-    case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
-    case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
-    case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
-
-    case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ Select(base, fieldRef.name) }
-    case GArrayRef(base: Local, index) => ArrayAccess(Select(Deref(base), "data"), index)
-
-    case v => Id("unsupported:" + v.getClass.getName)
   }
 
-  private def translateUnits(units: List[SootUnit], result: List[Tree]): List[Tree] = units match {
-    case u::us => {
-      val tree: Tree = u match {
-        case GIdentity(left, right) => Eval(Assign(left, right))
-        case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => { symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size)); TreeSeq() }
-        case GAssignStmt(left, right) => Eval(Assign(left, right))
-        case GGoto(target) => GoTo(translateLabel(target))
-        case GNop() => Nop
-        case GReturnVoid() => Return
-        case GReturn(op) => Return(translateExp(op)) match {
-          case Return(Cast(typ, StructLit(fields))) => {
-            val tmp = freshName("ret")
-            symtab.addLocalVar(typ, Id(tmp))
-            TreeSeq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), Return(Id(tmp)))
+  private def translateUnits(units: List[SootUnit], result: List[Tree], anonFuns: HashMap[String,Value]): List[Tree] = {
+    implicit val anons = anonFuns
+      units match {
+      case u::us => {
+        val tree: Tree = u match {
+          case GIdentity(left, right) => Eval(Assign(left, right))
+          case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => { symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, anonFuns)); TreeSeq() }
+          case GAssignStmt(left, right) => Eval(Assign(left, right))
+          case GGoto(target) => GoTo(translateLabel(target))
+          case GNop() => Nop
+          case GReturnVoid() => Return
+          case GReturn(op) => Return(translateExp(op, anonFuns)) match {
+            case Return(Cast(typ, StructLit(fields))) => {
+              val tmp = freshName("ret")
+              symtab.addLocalVar(typ, Id(tmp))
+              TreeSeq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), Return(Id(tmp)))
+            }
+            case t => t
           }
-          case t => t
-        }
-        case GIf(cond, target) => If(translateExp(cond), GoTo(translateLabel(target)), Nop)
-        case GInvokeStmt(invokeExpr) => Eval(translateExp(invokeExpr))
+          case GIf(cond, target) => If(translateExp(cond, anonFuns), GoTo(translateLabel(target)), Nop)
+          case GInvokeStmt(invokeExpr) => Eval(translateExp(invokeExpr, anonFuns))
 
-        // TODO
-        case GTableSwitchStmt(key, lowIndex, highIndex, targets, defaultTarget) => Id("switch unsupported")
-        case GLookupSwitchStmt(key: Local, lookupVals: List[Value], targets: List[Stmt], defaultTarget) => {
-          val valsWithTargets: List[(Value, Stmt)] = lookupVals.zip(targets)
-          Switch(translateExp(key), valsWithTargets.map(vt => Case(translateExp(vt._1), GoTo(translateLabel(vt._2)))) :::         List(Default(GoTo(translateLabel(defaultTarget)))))
-          // Switch(Id(key.getName), valsWithTargets.map(vt => Case(translateExp(vt._1), TreeSeq(translateUnits(List(vt._2), Nil)))) ::: List(Default(TreeSeq(translateUnits(List(defaultTarget), Nil)))))
-          //Id("switch unsupported")
-        }
-        // IGNORE
-        case GThrow(op) => Id("throw unsupported")
-        case GExitMonitor(op) => Id("monitors unsupported")
-        case GEnterMonitor(op) => Id("monitors unsupported")
+          // TODO
+          case GTableSwitchStmt(key, lowIndex, highIndex, targets, defaultTarget) => Id("switch unsupported")
+          case GLookupSwitchStmt(key: Local, lookupVals: List[Value], targets: List[Stmt], defaultTarget) => {
+            val valsWithTargets: List[(Value, Stmt)] = lookupVals.zip(targets)
+            Switch(translateExp(key, anonFuns), valsWithTargets.map(vt => Case(translateExp(vt._1, anonFuns), GoTo(translateLabel(vt._2)))) :::         List(Default(GoTo(translateLabel(defaultTarget)))))
+            // Switch(Id(key.getName), valsWithTargets.map(vt => Case(translateExp(vt._1, anonFuns), TreeSeq(translateUnits(List(vt._2), Nil)))) ::: List(Default(TreeSeq(translateUnits(List(defaultTarget), Nil)))))
+            //Id("switch unsupported")
+          }
+          // IGNORE
+          case GThrow(op) => Id("throw unsupported")
+          case GExitMonitor(op) => Id("monitors unsupported")
+          case GEnterMonitor(op) => Id("monitors unsupported")
 
-        case _ => { println("huh " + u); Id("unsupported") }
+          case _ => { println("huh " + u); Id("unsupported") }
+        }
+
+        translateUnits(us, result ::: List[Tree](tree), anonFuns)
       }
-
-      translateUnits(us, result ::: List[Tree](tree))
+      case Nil => result
     }
-    case Nil => result
   }
 
   private def insertLabels(units: List[SootUnit], result: List[Tree], resultWithLabels: List[Tree]) : List[Tree] = units match {
