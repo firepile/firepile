@@ -29,10 +29,11 @@ import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import firepile.compiler.GrimpUnapply._
 import firepile.compiler.util.ScalaTypeGen._
-import firepile.compiler.util.ScalaTypeGen.TYPEVARIANT._
+import firepile.compiler.util.ClassDefs._
+import firepile.compiler.util.ClassDefs.TYPEVARIANT._
 
 object TypeFlow {
-  val superTypeCache = new HashMap[List[ClassDef],List[ScalaType]]()
+  val superTypeCache = new HashMap[List[ScalaClassDef],List[ScalaType]]()
 
   def main(args: Array[String]) = {
     if (args.length != 2) {
@@ -103,10 +104,10 @@ object TypeFlow {
     val gb = Grimp.v().newBody(b, "gb")
     println("GRIMP\n" + gb)
     val g = new ExceptionalUnitGraph(gb)
-    var classDefs: List[ClassDef] = null
+    var classDefs: List[ScalaClassDef] = null
 
     val inners = className.split("\\$").toList
-    var innerClass: ClassDef = null
+    var innerClass: ScalaClassDef = null
     if (inners.length > 1) {
       val (outerName :: innerNames) = inners
       val outer = getScalaSignature(outerName)
@@ -133,11 +134,11 @@ object TypeFlow {
     }
   }
 
-  def getInnerClassDef(topClass: ClassDef, nameChain: List[String]): ClassDef = {
+  def getInnerClassDef(topClass: ScalaClassDef, nameChain: List[String]): ScalaClassDef = {
     nameChain match {
       case n :: ns => {
         topClass.innerClasses.find( ic => ic.name.endsWith(n)) match {
-          case Some(icc: ClassDef) => getInnerClassDef(icc, ns)
+          case Some(icc: ScalaClassDef) => getInnerClassDef(icc, ns)
           case None => { println("found none" ); null }
         }
       }
@@ -145,7 +146,7 @@ object TypeFlow {
     }
   }
 
-  class TypeFlowAnalysis(graph: UnitGraph, cls: ClassDef) extends ForwardFlowAnalysis[SootUnit,Map[String,ScalaType]](graph) {
+  class TypeFlowAnalysis(graph: UnitGraph, cls: ScalaClassDef) extends ForwardFlowAnalysis[SootUnit,Map[String,ScalaType]](graph) {
     val emptySet: Map[String,ScalaType] = new HashMap[String,ScalaType]()
 
     doAnalysis
@@ -295,8 +296,8 @@ object TypeFlow {
       dest ++= source
     }
 
-    private def getMethodDefBySig(searchClass: ClassDef, sig: String): MethodDef = {
-      var mdef: MethodDef = null
+    private def getMethodDefBySig(searchClass: ScalaClassDef, sig: String): ScalaMethodDef = {
+      var mdef: ScalaMethodDef = null
 
       mdef = searchThisMethodDefs(searchClass, sig)
       if ( mdef == null )
@@ -305,8 +306,8 @@ object TypeFlow {
       mdef
     }
 
-    private def searchThisMethodDefs(searchClass: ClassDef, sig: String): MethodDef = {
-      var mdef: MethodDef = null
+    private def searchThisMethodDefs(searchClass: ScalaClassDef, sig: String): ScalaMethodDef = {
+      var mdef: ScalaMethodDef = null
 
       println("searchThisMethodDefs: Searching class " + searchClass.name)
 
@@ -322,8 +323,8 @@ object TypeFlow {
 
     def getMethodSig(method: SootMethod): String = method.getName + soot.AbstractJasminClass.jasminDescriptorOf(method.makeRef)
 
-    private def getThisMethod(searchClass: ClassDef): MethodDef = {
-      var mdef: MethodDef = null
+    private def getThisMethod(searchClass: ScalaClassDef): ScalaMethodDef = {
+      var mdef: ScalaMethodDef = null
 
       if (searchClass.methods != null)
         for (m <- searchClass.methods) {
@@ -334,8 +335,8 @@ object TypeFlow {
       mdef
     }
 
-    private def searchSuperMethodDefs(searchClass: ClassDef, sig: String): MethodDef = {
-      var mdef: MethodDef = null
+    private def searchSuperMethodDefs(searchClass: ScalaClassDef, sig: String): ScalaMethodDef = {
+      var mdef: ScalaMethodDef = null
       if (searchClass.superclass == null)
         println("superclasses are NULL!!!!")
       for ( sc <- searchClass.superclass ) {
@@ -367,9 +368,9 @@ object TypeFlow {
     }
 
 
-    private def getMethodDefBySig(sig: String): MethodDef = getMethodDefBySig(cls, sig)
+    private def getMethodDefBySig(sig: String): ScalaMethodDef = getMethodDefBySig(cls, sig)
 
-    private def jasminSigFromMethodDef(method: MethodDef): String = {
+    private def jasminSigFromMethodDef(method: ScalaMethodDef): String = {
       method.name + "(" + method.params.map(p => p.fieldScalaType match {
         case NamedTyp(n: String) => matchBasicType(n)
         case InstTyp(base: NamedTyp, args: List[NamedTyp]) if base.name == "scala.Array" => "[" + matchBasicType(args.head.name)
@@ -448,7 +449,7 @@ object TypeFlow {
       case ParamTyp(name, vr) => List(new ParamTyp(name, vr), new ParamTyp("scala.Any", vr))
     }
 
-    def getSupertypes(bottom: List[ClassDef]): List[ScalaType] = {
+    def getSupertypes(bottom: List[ScalaClassDef]): List[ScalaType] = {
       if (superTypeCache.contains(bottom)) superTypeCache(bottom)
       else {
         val actualsLB = new ListBuffer[ScalaType]()
@@ -461,8 +462,8 @@ object TypeFlow {
 
         val lb = new ListBuffer[ScalaType]()
 
-        def collectSuperDefs(cl: ClassDef): List[ClassDef] = {
-          val ab = new ListBuffer[ClassDef]()
+        def collectSuperDefs(cl: ScalaClassDef): List[ScalaClassDef] = {
+          val ab = new ListBuffer[ScalaClassDef]()
           if(cl.superclass != null) {
             for (sc <- cl.superclass) {
               val classDefs = sc match {
@@ -476,7 +477,7 @@ object TypeFlow {
               }
 
               // for generic names (A, B, etc) that do not have classes use scala.Any
-              if (classDefs == null) ab.appendAll(List(new ClassDef("scala.Any", "class", null, null, null, 0L, null, new NamedTyp("scala.Any"))))
+              if (classDefs == null) ab.appendAll(List(new ScalaClassDef("scala.Any", "class", null, null, null, 0L, null, new NamedTyp("scala.Any"))))
               else {
                 ab.appendAll(classDefs)
                 ab.appendAll(classDefs.flatMap(s => collectSuperDefs(s)))

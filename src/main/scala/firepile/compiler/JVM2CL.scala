@@ -50,12 +50,14 @@ import soot.{NullType => SootNullType}
 import firepile.compiler.util.ScalaTypeGen
 import firepile.compiler.util.ScalaTypeGen.{
   getScalaSignature,
-  ClassDef,
-  VarDef,
-  NamedTyp,
-  InstTyp,
   getJavaSignature,
   printClassDef
+}
+import firepile.compiler.util.ClassDefs.{
+  ScalaClassDef,
+  ScalaVarDef,
+  NamedTyp,
+  InstTyp
 }
 import firepile.compiler.util.TypeFlow.getSupertypes
 import firepile.tree.Trees._
@@ -613,7 +615,7 @@ object JVM2CL {
       case _ => ValueType(t.toString)
   }
 
-  private def translateType(t: VarDef): Tree = t.fieldScalaType match {
+  private def translateType(t: ScalaVarDef): Tree = t.fieldScalaType match {
     case NamedTyp(s: String) => s match {
       case "scala.Unit" => PtrType(ValueType("void"))
       case "scala.Boolean" => ValueType("BOOL")

@@ -15,6 +15,8 @@ import scala.collection.mutable.HashSet
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 
+import firepile.compiler.util.ClassDefs._
+
 import scala.AnyRef
 import scala.Seq
 import scala.collection.mutable.HashMap
@@ -124,12 +126,8 @@ object ScalaTypeGen {
 
   }
 
-  object TYPEVARIANT extends Enumeration {
-    type TYPEVARIANT = Value
-    val COVARIANT, CONTRAVARIANT, INVARIANT = Value
-  }
-  import TYPEVARIANT._
-
+  import ClassDefs.TYPEVARIANT._
+  
   def getVar(s: String, t: Symbol) = if (t.isCovariant) ParamTyp(s, COVARIANT) else if (t.isContravariant) ParamTyp(s, CONTRAVARIANT) else NamedTyp(s)
 
   def scalaType(typ: Type): ScalaType = {
@@ -156,21 +154,21 @@ object ScalaTypeGen {
     }
   }
 
-  def getJavaSignature(cname: String, s: SootClass): List[ClassDef] = {
+  def getJavaSignature(cname: String, s: SootClass): List[ScalaClassDef] = {
 
     val sig = parseJavaSig(cname)
     sig match {
-      case JavaMethodDef(name: String, num: Int, scalaParent: String, apply: Boolean, applyInt: Int) => {
+      case ScalaJavaMethodDef(name: String, num: Int, scalaParent: String, apply: Boolean, applyInt: Int) => {
         println(" Name:"+name+"Num:"+num+"Scala Parent:"+scalaParent+"apply:"+apply+"applyNum:"+applyInt)
         val s = getScalaSignature(scalaParent)
-        var r: List[ClassDef] = null
+        var r: List[ScalaClassDef] = null
         s match {
-          case List(a: ClassDef) => {
+          case List(a: ScalaClassDef) => {
             for (i <- a.methods)
               if (i.name.equals(name)){
                // for(j <- i.params)
                // i.params+="$1"
-                r = List(new ClassDef(a.name, a.classtype, a.fields, List(i), null, 0L, null, null))
+                r = List(new ScalaClassDef(a.name, a.classtype, a.fields, List(i), null, 0L, null, null))
                 }
             r
           }
@@ -178,13 +176,13 @@ object ScalaTypeGen {
         }
       }
 
-      case JavaClassDef(name: String, num: Int, scalaParent: String, classtype: String) => {
+      case ScalaJavaClassDef(name: String, num: Int, scalaParent: String, classtype: String) => {
         println(" Name:"+name+"Num:"+num+"Scala Parent:"+scalaParent+"classtype:"+classtype)
         val s = getScalaSignature(scalaParent)
         if (classtype.equals("sameclass")) s
         else {
           s match {
-            case List(a: ClassDef) => { var cl: ClassDef = null; for (i <- a.innerClasses) if (i.name.equals(name)) cl = i; List(cl) }
+            case List(a: ScalaClassDef) => { var cl: ScalaClassDef = null; for (i <- a.innerClasses) if (i.name.equals(name)) cl = i; List(cl) }
             case _ => null
           }
         }
@@ -193,7 +191,7 @@ object ScalaTypeGen {
     }
   }
 
-  def getScalaSignature(cname: String): List[ClassDef] = {
+  def getScalaSignature(cname: String): List[ScalaClassDef] = {
 
     val cl = java.lang.Class.forName(cname).getClassLoader
     val is = (if (cl == null) java.lang.ClassLoader.getSystemClassLoader else cl).getResourceAsStream(cname.replace('.', '/') + ".class")
@@ -228,9 +226,9 @@ object ScalaTypeGen {
 
   }
 
-  def getListClassDef(myClassDefList: List[MyClassDef]): List[ClassDef] = {
+  def getListClassDef(myClassDefList: List[MyClassDef]): List[ScalaClassDef] = {
 
-    var fieldList = ListBuffer[ClassDef]()
+    var fieldList = ListBuffer[ScalaClassDef]()
 
     for (i <- myClassDefList)
       fieldList += getClassDef(i)
@@ -239,31 +237,31 @@ object ScalaTypeGen {
 
   }
 
-  def getClassDef(myClassDef: MyClassDef): ClassDef = {
+  def getClassDef(myClassDef: MyClassDef): ScalaClassDef = {
 
-    var innerClasses = ListBuffer[ClassDef]()
+    var innerClasses = ListBuffer[ScalaClassDef]()
 
     myClassDef match {
-      case MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, selfScalaType: ScalaType, fields: List[VarDef], children: List[MySymbol]) => {
-        new ClassDef(
+      case MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, selfScalaType: ScalaType, fields: List[ScalaVarDef], children: List[MySymbol]) => {
+        new ScalaClassDef(
           name,
           classtype,
           fields, (children.map { child =>
             child match {
               case MyMethodDef(name, returnType, stringReturnType, params) => {
-                new MethodDef((if (name == "<init>" || name == "$init$") "this" else name),
+                new ScalaMethodDef((if (name == "<init>" || name == "$init$") "this" else name),
                   returnType,
                   scalaType(returnType),
                   stringReturnType, (params.map {
                     case MyVarDef(name, varType, stringVarType) => {
-                      new VarDef(name, varType, null, stringVarType, scalaType(varType))
+                      new ScalaVarDef(name, varType, null, stringVarType, scalaType(varType))
                     }
                     case _ => null
-                  }.toList).filter(_.isInstanceOf[VarDef]))
+                  }.toList).filter(_.isInstanceOf[ScalaVarDef]))
               }
-              case MyClassDef(innerModifiers: List[Modifier], innerName: String, innerClasstype: String, innerSelfType: Type, selfScalaType: ScalaType, innerFields: List[VarDef], innerChildren: List[MySymbol]) => innerClasses += getClassDef(child.asInstanceOf[MyClassDef]); null
+              case MyClassDef(innerModifiers: List[Modifier], innerName: String, innerClasstype: String, innerSelfType: Type, selfScalaType: ScalaType, innerFields: List[ScalaVarDef], innerChildren: List[MySymbol]) => innerClasses += getClassDef(child.asInstanceOf[MyClassDef]); null
             }
-          }.toList).filter(_.isInstanceOf[MethodDef]), (selfType match {
+          }.toList).filter(_.isInstanceOf[ScalaMethodDef]), (selfType match {
             case TypeRefType(prefix: Type, symbol: Symbol, typeRefs: Seq[Type]) => typeRefs.map { i => scalaType(i) }.toList
             case ClassInfoType(symbol, typeRefs) => typeRefs.map { i => scalaType(i) }.toList
             case PolyType(ClassInfoType(symbol, typeRefs), symbols: Seq[TypeSymbol]) => typeRefs.map { i => scalaType(i) }.toList
@@ -272,14 +270,14 @@ object ScalaTypeGen {
             case ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _) => flags
             case PolyType(ClassInfoType(ClassSymbol(SymbolInfo(_, _, flags: Int, _, _, _), _), _), symbols: Seq[TypeSymbol]) => flags
           }),
-          innerClasses.toList.filter(_.isInstanceOf[ClassDef]),
+          innerClasses.toList.filter(_.isInstanceOf[ScalaClassDef]),
           selfScalaType
           )
       }
     }
   }
 
-  def printClassDef(cdList: List[ClassDef]): Unit = {
+  def printClassDef(cdList: List[ScalaClassDef]): Unit = {
 
     for (cd <- cdList) {
       println("-----------------Start of Class:::" + cd.name + "------------------------------------------------------")
@@ -359,86 +357,6 @@ object ScalaTypeGen {
   object Sig {
     def apply(name: String, typeFormals: List[Param], formals: List[ScalaType], returnType: ScalaType): Sig = Sig(name, MTyp(typeFormals, formals, returnType))
   }
-
-  sealed class ScalaType
-  case class MTyp(typeFormals: List[Param], formals: List[ScalaType], returnType: ScalaType) extends ScalaType {
-    override def equals(other: Any) = other match {
-      case MTyp(tF: List[Param], f: List[ScalaType], rT: ScalaType) => if (tF == typeFormals && formals == f && returnType.equals(rT)) true else false
-      case _ => false
-    }
-  }
-  case class Param(name: String) {
-    override def equals(other: Any) = other match {
-      case Param(n: String) => if (n.equals(name)) true else false
-      case _ => false
-    }
-  }
-  case class NamedTyp(name: String) extends ScalaType {
-    override def equals(other: Any) = other match {
-      case NamedTyp(n: String) => if (n.equals(name)) true else false
-      case _ => false
-    }
-  }
-  case class ParamTyp(name: String, typ: TYPEVARIANT) extends ScalaType {
-    override def equals(other: Any) = other match {
-      case ParamTyp(n: String, t: TYPEVARIANT) => if (n.equals(name) && t == typ) true else false
-      case _ => false
-    }
-  }
-  case class InstTyp(base: ScalaType, args: List[ScalaType]) extends ScalaType {
-    override def equals(other: Any) = other match {
-      case InstTyp(b: ScalaType, a: List[ScalaType]) => {
-        if ((b match {
-          case NamedTyp(name: String) => if (b.asInstanceOf[NamedTyp].equals(base)) true else false
-          case ParamTyp(name: String, typ: TYPEVARIANT) => if (b.asInstanceOf[ParamTyp].equals(base)) true else false
-          case _ => false
-        }) && a == args) true else false
-      }
-      case _ => false
-    }
-  }
-  case object UnimplementedTyp extends ScalaType
-
-  abstract sealed class Modifier
-  case object Private extends Modifier
-  case object Protected extends Modifier
-  case class ScopedPrivate(name: String) extends Modifier
-  case object Sealed extends Modifier
-  case object Implicit extends Modifier
-  case object Override extends Modifier
-  case object Final extends Modifier
-  case object Abstract extends Modifier
-  case object Case extends Modifier
-  case object Trait extends Modifier
-
-  class ClassDef(
-    val name: String,
-    val classtype: String,
-    val fields: List[VarDef],
-    val methods: List[MethodDef],
-    val superclass: List[ScalaType],
-    val flags: Long,
-    val innerClasses: List[ClassDef],
-    val scalatype: ScalaType)
-
-  class MethodDef(
-    val name: String,
-    val returnType: Type,
-    val returnScalaType: ScalaType,
-    val returnTypeAsString: String,
-    val params: List[VarDef])
-
-  class VarDef(
-    val name: String,
-    val fieldTyp: Type,
-    val fieldType: Class[_],
-    val fieldTypeAsString: String,
-    val fieldScalaType: ScalaType)
-
-  sealed abstract class MySymbol
-  case class MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, selfScalaType: ScalaType, fields: List[VarDef], children: List[MySymbol]) extends MySymbol
-  case class MyMethodDef(name: String, selfType: Type, stringSelfType: String, children: List[MySymbol]) extends MySymbol
-  case class MyVarDef(name: String, selfType: Type, stringType: String) extends MySymbol
 
   def parseScalaSignature(scalaSig: ScalaSig, isPackageObject: Boolean): List[MyClassDef] = {
     val syms = scalaSig.topLevelClasses ::: scalaSig.topLevelObjects
@@ -530,14 +448,14 @@ object ScalaTypeGen {
           case None => null
         }
 
-        var fieldList = ListBuffer[VarDef]()
+        var fieldList = ListBuffer[ScalaVarDef]()
         val newchildren: List[MySymbol] = makeChildren(level, c).map { i =>
           i match {
             case MyMethodDef(name, rType, rString, children) => if (rString.equals("field_$eq")) {
-              fieldList += new VarDef(name, rType, null, toString(rType)(TypeFlags(true)), scalaType(rType))
+              fieldList += new ScalaVarDef(name, rType, null, toString(rType)(TypeFlags(true)), scalaType(rType))
               MyMethodDef(name, rType, toString(rType)(TypeFlags(true)), children)
             } else i
-            case MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, selfScalaType: ScalaType, fields: List[VarDef], children: List[MySymbol]) => i
+            case MyClassDef(modifiers: List[Modifier], name: String, classtype: String, selfType: Type, selfScalaType: ScalaType, fields: List[ScalaVarDef], children: List[MySymbol]) => i
             case _ => null
           }
         }.toList
@@ -597,11 +515,11 @@ object ScalaTypeGen {
 
       val TypeRefType(prefix, classSymbol: ClassSymbol, typeArgs) = o.infoType
       val t = makeType(classSymbol)
-      var fieldList = ListBuffer[VarDef]()
+      var fieldList = ListBuffer[ScalaVarDef]()
       val newchildren: List[MySymbol] = makeChildren(level, classSymbol).map { i =>
         i match {
           case MyMethodDef(name, rType, rString, children) => if (rString.equals("field_$eq")) {
-            fieldList += new VarDef(name, rType, null, toString(rType)(TypeFlags(true)), scalaType(rType))
+            fieldList += new ScalaVarDef(name, rType, null, toString(rType)(TypeFlags(true)), scalaType(rType))
             MyMethodDef(name, rType, toString(rType)(TypeFlags(true)), children)
           } else i
           case _ => i
@@ -862,7 +780,7 @@ object ScalaTypeGen {
 
   // Scala Signature for Java Classes
 
-  def parseJavaSig(classname: String): JavaDef = {
+  def parseJavaSig(classname: String): ScalaJavaDef = {
 
     var arr = classname.split("\\$")
     var afun, apply, flag = false
@@ -891,15 +809,13 @@ object ScalaTypeGen {
     if (!flag) typ = "sameclass"
 
     if (typ.equals("method"))
-      new JavaMethodDef(name, num, arr(0), apply, appInt)
+      new ScalaJavaMethodDef(name, num, arr(0), apply, appInt)
     else
-      new JavaClassDef(name, num, arr(0), typ)
+      new ScalaJavaClassDef(name, num, arr(0), typ)
 
   }
 
-  sealed abstract class JavaDef
-  case class JavaMethodDef(name: String, num: Int, scalaParent: String, apply: Boolean, applyInt: Int) extends JavaDef
-  case class JavaClassDef(name: String, num: Int, scalaParent: String, classtype: String) extends JavaDef
+ 
 
 }
 
