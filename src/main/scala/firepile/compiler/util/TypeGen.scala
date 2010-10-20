@@ -21,23 +21,34 @@ import scala.AnyRef
 import scala.Seq
 import scala.collection.mutable.HashMap
 
+import ScalaTypeGen._
+import JavaTypeGen._
+
 object TypeGen {
   def main(args: Array[String]) = {
     if (args.length != 1) {
-      println("usage: ScalaTypeGen classname")
+      println("usage: TypeGen classname")
       exit(1)
     }
-    val cdlist = getType(args(0))
+/*    val cdlist = getSignature(args(0))
 
-    if (cdlist == null) {
-      println("Class Def List is null")
-      exit(1)
+    cdlist match {
+    
+    case ClassDef => println("Class Def")
+    case None => println(" None ")
+    case _ => println(" !!!")
     }
-
+    
+  */
   }
   
- def getType( classname:  String) : Option[ScalaClassDef] = {
- None
+ def getSignature( classname:  String, sootclass: SootClass) : List[ClassDef] = {
+ 
+ var sig: List[ClassDef] = if (classname.contains("$")) getScalaJavaSignature(classname, sootclass)
+ else getScalaSignature(classname)
+ if(sig==null)
+ sig= getJavaSignature(classname, sootclass)
+ sig
  }
 
 }

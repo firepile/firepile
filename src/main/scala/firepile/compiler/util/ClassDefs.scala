@@ -6,6 +6,10 @@ import scala.collection.mutable.HashSet
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 
+import soot.SootClass
+import soot.{Type=>SootType}
+import soot.util.Chain
+
 import scala.tools.scalap._
 import scala.tools.scalap.{ Main => Scalap }
 import scala.tools.scalap.scalax.rules.scalasig._
@@ -18,24 +22,21 @@ sealed abstract class ClassDef
 
 class JavaClassDef(
     val name: String,
-    val classtype: String,
     val fields: List[JavaVarDef],
     val methods: List[JavaMethodDef],
     val flags: Long,
-    val innerClasses: List[JavaClassDef],
-    val scalatype: ScalaType) extends ClassDef
+    val interfaces: Chain[SootClass],
+    val superclass: SootClass) extends ClassDef
 
   class JavaMethodDef(
     val name: String,
-    val returnType: Type,
-    val returnTypeAsString: String,
+    val returnType: SootType,
     val params: List[JavaVarDef])
 
   class JavaVarDef(
     val name: String,
-    val fieldTyp: Type,
-    val fieldType: Class[_],
-    val fieldTypeAsString: String)
+    val fieldTyp: SootType
+ )
     
     class ScalaClassDef(
         val name: String,

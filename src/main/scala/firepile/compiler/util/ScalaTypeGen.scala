@@ -154,7 +154,7 @@ object ScalaTypeGen {
     }
   }
 
-  def getJavaSignature(cname: String, s: SootClass): List[ScalaClassDef] = {
+  def getScalaJavaSignature(cname: String, s: SootClass): List[ScalaClassDef] = {
 
     val sig = parseJavaSig(cname)
     sig match {
@@ -165,11 +165,8 @@ object ScalaTypeGen {
         s match {
           case List(a: ScalaClassDef) => {
             for (i <- a.methods)
-              if (i.name.equals(name)){
-               // for(j <- i.params)
-               // i.params+="$1"
-                r = List(new ScalaClassDef(a.name, a.classtype, a.fields, List(i), null, 0L, null, null))
-                }
+              if (i.name.equals(name))
+               r = List(new ScalaClassDef(a.name, a.classtype, a.fields, List(i), null, 0L, null, null))
             r
           }
           case _ => null
