@@ -248,15 +248,18 @@ object JVM2CL {
           val paramName =  mdef.params(index).name
           println("FUNCTION PARAM IS NAMED: " + paramName)
           
+          anonFunsLookup += paramName -> value
           // find apply code in Compiler.scala, may not be named apply exactly
+          /* moving addition of CompileMethodTask for "apply" methods to InterfaceInvoke
           val functionType = value.getType.asInstanceOf[RefType].getSootClass
           val applyMethods = functionType.getMethods.filter(mn => mn.getName.equals("apply") && !mn.getParameterType(0).toString.equals("java.lang.Object"))
-
-          anonFunsLookup += paramName -> value
+          
           for (applyMethod <- applyMethods) {
             println("Found apply method: " + applyMethod.getSignature)
             worklist += CompileMethodTask(applyMethod.makeRef, functionType)
           }
+
+          */
 
         }
       }
@@ -926,6 +929,9 @@ object JVM2CL {
         }
         else {
           // worklist += CompileMethodTask(method)
+          // throw new RuntimeException("Cannot create new instances of classes")
+
+          // TODO: Some things call new such as java.lang.Float.valueOf, need a way to handle this
           Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a, anonFuns))))
         }
       }
@@ -1103,14 +1109,22 @@ object JVM2CL {
         // also call translateExp(base)
 
         anonFuns.get(base.getName) match {
-          case Some(GNewInvoke(closureTyp, closureMethod, closureArgs)) => 
+          case Some(GNewInvoke(closureTyp, closureMethod, closureArgs)) if base.getType.toString.startsWith("scala.Function") => 
               // new AnonFun1$blah(closureArgs).method(args)
               /*ClosureCall("blah_apply", new AnonFun1$blah(closureArgs) :: args)
               or:
               ClosureCall("blah_apply", closureArgs ::: args)
               or:
               */
-              ClosureCall(Id(mangleName(closureTyp.toString) + "apply"), closureArgs.map(ca => translateExp(ca, anonFuns)) ::: args.map(a => translateExp(a, anonFuns)))
+              println("CLOSURE METHOD: " + method.name)
+              // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
+              val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
+          
+              for (applyMethod <- applyMethods) {
+                println("Found apply method: " + applyMethod.getSignature)
+                worklist += CompileMethodTask(applyMethod, closureTyp)
+              }
+              ClosureCall(Id(mangleName(closureTyp.toString) + method.name), closureArgs.map(ca => translateExp(ca, anonFuns)) ::: args.map(a => translateExp(a, anonFuns)))
 
           case _ => Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
         }
