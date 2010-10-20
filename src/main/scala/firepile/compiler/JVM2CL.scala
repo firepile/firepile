@@ -272,6 +272,39 @@ object JVM2CL {
     }
   }
 
+  case class CompileRootMethodTask(method: SootMethodRef, self: AnyRef, takesThis: Boolean, anonFuns: List[(Int,Value)]) extends Task {
+    def run = {
+      val m = method
+      val anonFunsLookup = new HashMap[String,Value]()
+      
+      // Force the class's method bodies to be loaded.
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.HIERARCHY)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.SIGNATURES)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.BODIES)
+ 
+
+      if (anonFuns != null) {
+        for (af <- anonFuns) {
+          val (index, value) = af
+          println("FUNCTION TYPE: " + value.getType.toString + " IS ARG OF " + method.resolve.getDeclaringClass)
+          val cdef = getScalaSignature(method.resolve.getDeclaringClass.toString.replaceAll("\\$","")).head
+          val mdef = cdef.methods.filter(m => m.name.equals(method.name)).head
+          val paramName =  mdef.params(index).name
+          println("FUNCTION PARAM IS NAMED: " + paramName)
+          
+          anonFunsLookup += paramName -> value
+
+        }
+      }
+
+      
+      compileMethod(m.resolve, self, takesThis, anonFunsLookup) match {
+        case null => Nil
+        case t => t::Nil
+      }
+    }
+  }
+
   private val worklist = new Worklist[Task]
 
   private def addRootMethodToWorklist(className: String, methodSig: String, self: AnyRef): Unit = {
@@ -290,7 +323,7 @@ object JVM2CL {
       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
       println("trying " + sig)
       if (sig.equals(methodSig)) {
-        worklist += CompileMethodTask(m, self)
+        worklist += CompileRootMethodTask(m.makeRef, self, false, null)
       }
     }
   }
@@ -946,6 +979,77 @@ object JVM2CL {
         // classtab.addClass(method.declaringClass)
         Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, anonFuns)))
       }
+/*
+      case GVirtualOrInterfaceInvoke(base, method, args) => {
+        val anonFunParams = new ListBuffer[(Int,Value)]()
+        var argCount = 0
+        args.foreach(a => { if(isFunction(a.getType)) { anonFunParams += ((argCount,a)) } ; argCount += 1 })
+        if (args.length > 0)
+          worklist += CompileMethodTask(method, findSelf(base, symtab.self), true, anonFunParams.toList) 
+        else worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
+
+        val possibleReceivers: List[SootClass] = if (!method.declaringClass.isInterface) getPossibleReceivers(base, method) else List(method.declaringClass)    // Does not work when called on an interface!
+
+        println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
+
+        assert(possibleReceivers.length > 0)
+
+        val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+
+        if (possibleReceivers.length == 1) {
+          // monomorphic call
+          // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
+          println("Monomorphic call to " + methodName(method))
+          classtab.addClass(method.declaringClass)
+          Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, anonFuns)))
+        }
+        else {
+          // polymorphic call--generate a switch
+          val methodReceiversRef = ListBuffer[SootMethod]()
+          val argsToPass = args.map(a => translateExp(a, anonFuns))    // Will need to cast "self" to appropriate type
+
+          for (pr <- possibleReceivers) {
+            val i = pr.methodIterator
+            while (i.hasNext) {
+              val m = i.next
+              if (! m.isAbstract) {
+                val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+                println("Checking method: " + sig + " against " + methodSig)
+                if (sig.equals(methodSig)) {
+                  println("Adding CompileMethodTask(" + method + ", " + pr + ")")
+                  worklist += CompileMethodTask(m, pr, true)
+                  methodReceiversRef += m
+                  classtab.addClass(pr)
+                }
+              }
+            }
+          }
+
+          val methodFormals: List[Tree] = compileMethod(method.resolve, null, false, null) match {
+            case FunDef(_, _, formals, _) => formals
+            case _ => Nil
+          }
+
+          val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
+              case Formal(_, name) => Id(name)
+              case _ => Id("Wtf: No Name?")
+          })
+
+          val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
+
+          val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName+"_intr")),Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
+          
+          // add appropriate formal parameters for call
+          worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
+          
+      // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
+          // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
+          Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
+        }
+
+ 
+      }
+*/
       case GVirtualInvoke(base, method, args) if base.getType.toString == "Id1" => { println("found ID!"); Id("found ID") }
       case GVirtualInvoke(base, method, args) => { 
         val anonFunParams = new ListBuffer[(Int,Value)]()
@@ -982,64 +1086,6 @@ object JVM2CL {
         
         // rewrite to:
 
-        def getPossibleReceivers(base: Value, method: SootMethodRef) = {
-          if (Modifier.isFinal(method.declaringClass.getModifiers)) {
-            method.declaringClass :: Nil
-          }
-          else if (Modifier.isFinal(method.resolve.getModifiers)) {
-            method.declaringClass :: Nil
-          }
-          else {
-            base.getType match {
-              case t : SootRefType if Modifier.isFinal(t.getSootClass.getModifiers) =>
-                // assert method not overridden between method.declaringClass and t
-                method.declaringClass :: Nil
-
-              case t : SootRefType => {
-                // iterate through all loaded subclasses of t, filtering out those that implement method
-                val result = ListBuffer[SootClass]()
-
-                val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
-                val H = Scene.v.getActiveHierarchy
-
-                val queue = new Queue[SootClass]()
-                queue += t.getSootClass
-
-                while (! queue.isEmpty) {
-                  val c = queue.dequeue
-
-                  def hasMethod(c: SootClass, methodSig: String): Boolean = {
-                    val i = c.methodIterator
-                    while (i.hasNext) {
-                      val m = i.next
-
-                      if (! m.isAbstract) {
-                        val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-                        if (sig.equals(methodSig)) {
-                          return true
-                        }
-                      }
-                    }
-                    return false
-                  }
-
-                  if (hasMethod(c, methodSig)) {
-                    result += c
-                  }
-
-                  queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
-                }
-
-                if (result.isEmpty)
-                  method.declaringClass :: Nil
-                else 
-                  result.toList
-              }
-
-              case _ => Nil
-            }
-          }
-        }
 
         val possibleReceivers = getPossibleReceivers(base, method)
 
@@ -1136,7 +1182,7 @@ object JVM2CL {
           Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
         */
       }
-
+      
       case GLocal(name, typ) => { 
         if (anonFuns.contains(name))
           translateExp(anonFuns(name), anonFuns)
@@ -1207,6 +1253,66 @@ object JVM2CL {
     }
    case Nil => resultWithLabels
   }
+
+  private def getPossibleReceivers(base: Value, method: SootMethodRef) = {
+          if (Modifier.isFinal(method.declaringClass.getModifiers)) {
+            method.declaringClass :: Nil
+          }
+          else if (Modifier.isFinal(method.resolve.getModifiers)) {
+            method.declaringClass :: Nil
+          }
+          else {
+            base.getType match {
+              case t : SootRefType if Modifier.isFinal(t.getSootClass.getModifiers) =>
+                // assert method not overridden between method.declaringClass and t
+                method.declaringClass :: Nil
+
+              case t : SootRefType => {
+                // iterate through all loaded subclasses of t, filtering out those that implement method
+                val result = ListBuffer[SootClass]()
+
+                val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+                val H = Scene.v.getActiveHierarchy
+
+                val queue = new Queue[SootClass]()
+                queue += t.getSootClass
+
+                while (! queue.isEmpty) {
+                  val c = queue.dequeue
+
+                  def hasMethod(c: SootClass, methodSig: String): Boolean = {
+                    val i = c.methodIterator
+                    while (i.hasNext) {
+                      val m = i.next
+
+                      if (! m.isAbstract) {
+                        val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+                        if (sig.equals(methodSig)) {
+                          return true
+                        }
+                      }
+                    }
+                    return false
+                  }
+
+                  if (hasMethod(c, methodSig)) {
+                    result += c
+                  }
+
+                  queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
+                }
+
+                if (result.isEmpty)
+                  method.declaringClass :: Nil
+                else 
+                  result.toList
+              }
+
+              case _ => Nil
+            }
+          }
+  }
+
 
   private def makeFunction(m: SootMethod, result: List[Tree], takesThis: Boolean) : Tree = {
     val paramTree = new ListBuffer[Tree]()
