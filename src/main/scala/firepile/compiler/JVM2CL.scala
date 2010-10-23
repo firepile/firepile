@@ -50,9 +50,9 @@ import soot.{NullType => SootNullType}
 import firepile.compiler.util.ScalaTypeGen
 import firepile.compiler.util.ScalaTypeGen.{
   getScalaSignature,
-  getJavaSignature,
   printClassDef
 }
+import firepile.compiler.util.JavaTypeGen.getJavaSignature
 import firepile.compiler.util.ClassDefs.{
   ScalaClassDef,
   ScalaVarDef,
@@ -150,7 +150,7 @@ object JVM2CL {
     Options.v.setPhaseOption("cg", "safe-forname:false")
     // you can set context-sensitivity of call graph with this (more time consuming)
     // Options.v.setPhaseOption("cg", "context:1cfa") 
-    Options.v.setPhaseOption("cg", "verbose:true")
+    // Options.v.setPhaseOption("cg", "verbose:true")
 
     Options.v.set_allow_phantom_refs(true)
     if (makeCallGraph)
@@ -491,6 +491,8 @@ object JVM2CL {
       arrays += id -> (translateType(typ), size)
     }
 
+    def lastParamIndex = params.size - 1
+
     var next = -1
 
     def nextLabel = {
@@ -507,13 +509,21 @@ object JVM2CL {
           // HACK to ignore Java classes for now
           if (!knownClasses.contains(cls)  && !cls.getName.startsWith("java.")) {
             enumElements += Id(cls.getName + "_ID")
-            
+           
+            // Broken in 184
+            /*
             val scalaSig = if (cls.getName.contains("$")) getJavaSignature(cls.getName, cls)
             else getScalaSignature(cls.getName)
-            
+            */
+
+            // TEMPORARY FIX
+            val scalaSig = getScalaSignature(cls.getName)
+           
+            /*
             println(" Scala Sig Class Name:"+cls.getName)
             println(" Scala Sig ")
             printClassDef(scalaSig)
+            */
             
             if (scalaSig == null)
               throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
@@ -1211,13 +1221,56 @@ object JVM2CL {
           case GGoto(target) => GoTo(translateLabel(target))
           case GNop() => Nop
           case GReturnVoid() => Return
-          case GReturn(op) => Return(translateExp(op, anonFuns)) match {
-            case Return(Cast(typ, StructLit(fields))) => {
-              val tmp = freshName("ret")
-              symtab.addLocalVar(typ, Id(tmp))
-              TreeSeq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), Return(Id(tmp)))
+          case GReturn(returned) => returned match {
+            case GNewInvoke(closureTyp, closureMethod, closureArgs) => {
+              val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals("apply"))
+              closureArgs.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
+
+              println("GReturn::NewInvoke Translating method inline: " + closureMethod.getSignature + " of " + closureTyp.getClassName)
+              if (applyMethods.length > 0) {
+                val (params, body) = compileMethod(applyMethods.head, closureTyp, false, anonFuns) match {
+                  case FunDef(_, _, p, b) => (p, b)
+                  case _ => null
+                }
+                body
+              }
+              else {
+                val (params, body) = compileMethod(closureMethod.resolve, closureTyp, false, anonFuns) match {
+                  case FunDef(_, _, p, b) => (p, b)
+                  case _ => null
+                }
+                body
+              }
             }
-            case t => t
+            case GVirtualInvoke(base, method, args) => {
+              println("GReturn::VirtualInvoke Translating method inline: " + method.getSignature + " of " + base.getType.toString)
+              args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
+              val (params, body) = compileMethod(method.resolve, base, false, anonFuns) match {
+                case FunDef(_, _, p, b) => (p, b)
+                case _ => null
+              }
+              body
+            }
+            case GInterfaceInvoke(base, method, args) if base.getType.toString.startsWith("scala.Function") => {
+              // println("GReturn::NewInvoke Found apply method: " + applyMethod.getSignature)
+              val applyMethod = new SootClass(base.getType.toString).getMethods.filter(mn => mn.getName.equals("apply")).head
+              args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
+              println("GReturn::InterfaceInvoke Translating method inline: " + method.getSignature + " of " +  base.getType.toString)
+              val (params, body) = compileMethod(applyMethod, base, false, anonFuns) match {
+                case FunDef(_, _, p, b) => (p, b)
+                case _ => null
+              }
+              body
+            }
+
+            case _ => Return(translateExp(returned, anonFuns)) match {
+              case Return(Cast(typ, StructLit(fields))) => {
+                val tmp = freshName("ret")
+                symtab.addLocalVar(typ, Id(tmp))
+                TreeSeq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), Return(Id(tmp)))
+              }
+              case t => t
+            }
           }
           case GIf(cond, target) => If(translateExp(cond, anonFuns), GoTo(translateLabel(target)), Nop)
           case GInvokeStmt(invokeExpr) => Eval(translateExp(invokeExpr, anonFuns))
@@ -1321,10 +1374,10 @@ object JVM2CL {
     if (takesThis)
       paramTree += Formal(symtab.thisParam._2, symtab.thisParam._1)
 
-    for (i <- 0 until m.getParameterCount) {
+    for (i <- 0 until symtab.params.size /* m.getParameterCount */) {
       symtab.params.get(i) match {
         case Some((id, typ)) => paramTree += Formal(typ, id)
-        case None => throw new RuntimeException("crap")
+        case None => paramTree += Formal(VoidType, Id("UNKNOWN_PARAM")) // throw new RuntimeException("crap")
       }
     }
 
