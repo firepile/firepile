@@ -164,7 +164,7 @@ object JVM2CL {
   def methodName(m: SootMethodRef): String = mangleName(m.declaringClass.getName + m.name)
   def mangleName(name: String) = name.replace('$', '_').replace('.', '_')
 
-  private implicit def v2tree(v: Value)(implicit af: HashMap[String,Value] = null): Tree = translateExp(v, af)
+  private implicit def v2tree(v: Value)(implicit iv: (SymbolTable,HashMap[String,Value]) = null): Tree = translateExp(v, iv._1, iv._2)
 
   var next = 0
   def freshName(base: String = "tmp") = {
@@ -265,7 +265,7 @@ object JVM2CL {
       }
             
       
-      compileMethod(m.resolve, self, takesThis, anonFunsLookup) match {
+      compileMethod(m.resolve, self, 0, takesThis, anonFunsLookup) match {
         case null => Nil
         case t => t::Nil
       }
@@ -298,7 +298,7 @@ object JVM2CL {
       }
 
       
-      compileMethod(m.resolve, self, takesThis, anonFunsLookup) match {
+      compileMethod(m.resolve, self, 0, takesThis, anonFunsLookup) match {
         case null => Nil
         case t => t::Nil
       }
@@ -371,7 +371,7 @@ object JVM2CL {
     buffer.toString()
   }
 
-  private def compileMethod(m: SootMethod, self: AnyRef, takesThis: Boolean = false, anonFuns: HashMap[String,Value]): Tree = {
+  private def compileMethod(m: SootMethod, self: AnyRef, level: Int = 0, takesThis: Boolean = false, anonFuns: HashMap[String,Value]): Tree = {
     println("-------------------------------------------------------")
     println(m)
 
@@ -381,7 +381,8 @@ object JVM2CL {
         return null
     
 
-    symtab = new SymbolTable(self)
+    val symtab = new SymbolTable(self)
+    symtab.level = level
 
     val b = m.retrieveActiveBody
     val gb = Grimp.v.newBody(b, "gb")
@@ -395,11 +396,11 @@ object JVM2CL {
     println("Grimp method body:")
     println(units.mkString("\n"))
 
-    val body = translateUnits(units, Nil, anonFuns)
+    val body = translateUnits(units, Nil, symtab, anonFuns)
 
-    val labeled = insertLabels(units, body, Nil)
+    val labeled = insertLabels(units, symtab, body, Nil)
 
-    val fun = makeFunction(m, removeThis(labeled), takesThis)
+    val fun = makeFunction(m, removeThis(labeled, symtab), symtab, takesThis)
 
       // TODO: don't removeThis for normal methods; do removeThis for closures
       // TODO: verify that this is not used in the body of the method
@@ -441,13 +442,13 @@ object JVM2CL {
     m
   }
 
-  private def removeThis(body: List[Tree]): List[Tree] = {
+  private def removeThis(body: List[Tree], symtab: SymbolTable): List[Tree] = {
     body match {
       case Eval(Assign(v: Id, Id("_this")))::ts => {
         symtab.locals.remove(v)
-        removeThis(ts)
+        removeThis(ts, symtab)
       }
-      case t::ts => t::removeThis(ts)
+      case t::ts => t::removeThis(ts, symtab)
       case Nil => Nil
     }
   }
@@ -460,6 +461,7 @@ object JVM2CL {
     val locals = new HashMap[Id, Tree]()
     val arrays = new HashMap[Id, (Tree /*type*/, Tree /*size*/)]()
     var thisParam: (Id, Tree) = null
+    var level: Int = 0
 
     def addThisParam(typ: SootType, id: Id) = {
       val typUnion = translateType(typ) match {
@@ -507,7 +509,7 @@ object JVM2CL {
     
        def addClass(cls: SootClass) = {
           // HACK to ignore Java classes for now
-          if (!knownClasses.contains(cls)  && !cls.getName.startsWith("java.")) {
+          if (!knownClasses.contains(cls)  && !cls.getName.startsWith("java.") && !cls.getName.contains("$")) {
             enumElements += Id(cls.getName + "_ID")
            
             // Broken in 184
@@ -615,13 +617,13 @@ object JVM2CL {
   }
 
 
-  private var symtab: SymbolTable = null
+  // private var symtab: SymbolTable = null
 
   private val classtab = new ClassTable()
 
   private val arraystructs = new ArrayStructs()
 
-  private def translateLabel(u: SootUnit): String = u match {
+  private def translateLabel(u: SootUnit, symtab: SymbolTable): String = u match {
     case target : Stmt => {
       symtab.labels.get(target) match {
         case Some(label) => label
@@ -794,7 +796,7 @@ object JVM2CL {
         case TupleSelect(t) => t
 
         // firepile.util.Math.sin(x)
-        case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, null)))
+        case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, null, null)))
 
         // Predef$.MODULE$.floatWrapper(x).abs()
         case GVirtualInvoke(
@@ -813,7 +815,7 @@ object JVM2CL {
         case DoubleMath(t) => t
 
         // scala.math.sin(x)
-        case ScalaMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, null)))
+        case ScalaMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, null, null)))
 
         case _ => null
       }
@@ -871,8 +873,8 @@ object JVM2CL {
     case _ => false
   }
 
-  private def translateExp(v: Value, anonFuns: HashMap[String,Value]): Tree = {
-    implicit val anons = anonFuns
+  private def translateExp(v: Value, symtab: SymbolTable, anonFuns: HashMap[String,Value]): Tree = {
+    implicit val iv: (SymbolTable, HashMap[String,Value]) = (symtab, anonFuns)
     v match {
       // Must be first
       case LibraryCall(t) => t
@@ -956,38 +958,38 @@ object JVM2CL {
             case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToInt", _, _, _), List(value)) => {
               val name = freshName("union")
               symtab.addLocalVar(ANY_TYPE, Id(name))
-              Comma(Assign(Select(Id(name), "i"), translateExp(value, anonFuns)), Id(name))
+              Comma(Assign(Select(Id(name), "i"), translateExp(value, symtab, anonFuns)), Id(name))
             }
             case v @ GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "boxToFloat", _, _, _), List(value)) => {
             val name = freshName("union")
             symtab.addLocalVar(ANY_TYPE, Id(name))
-            Comma(Assign(Select(Id(name), "f"), translateExp(value, anonFuns)), Id(name))
+            Comma(Assign(Select(Id(name), "f"), translateExp(value, symtab, anonFuns)), Id(name))
             }
-            case v => translateExp(v, anonFuns)
+            case v => translateExp(v, symtab, anonFuns)
           }))
         }
         else if (isFunction(baseTyp)) {
           // worklist += CompileMethodTask(method)
-          Call(Id("makeClosure"), args.map(a => translateExp(a, anonFuns)))
+          Call(Id("makeClosure"), args.map(a => translateExp(a, symtab, anonFuns)))
         }
         else {
           // worklist += CompileMethodTask(method)
           // throw new RuntimeException("Cannot create new instances of classes")
 
           // TODO: Some things call new such as java.lang.Float.valueOf, need a way to handle this
-          Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a, anonFuns))))
+          Call(Id("_init_"), Call(Id("new_" + mangleName(baseTyp.toString)), args.map(a => translateExp(a, symtab, anonFuns))))
         }
       }
       case GStaticInvoke(method, args) => {
         worklist += CompileMethodTask(method)
         // classtab.addClass(method.declaringClass)
-        Call(Id(method.name), args.map(a => translateExp(a, anonFuns)))
+        Call(Id(method.name), args.map(a => translateExp(a, symtab, anonFuns)))
       }
       case GSpecialInvoke(base: Local, method, args) => {
         worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
         //Call(Select(base, method.name), Id("_this") :: args.map(a => translateExp(a)))
         // classtab.addClass(method.declaringClass)
-        Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, anonFuns)))
+        Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, symtab, anonFuns)))
       }
 /*
       case GVirtualOrInterfaceInvoke(base, method, args) => {
@@ -1109,12 +1111,12 @@ object JVM2CL {
           // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
           println("Monomorphic call to " + methodName(method))
           classtab.addClass(method.declaringClass)
-          Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, anonFuns)))
+          Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, symtab, anonFuns)))
         }
         else {
           // polymorphic call--generate a switch
           val methodReceiversRef = ListBuffer[SootMethod]()
-          val argsToPass = args.map(a => translateExp(a, anonFuns))    // Will need to cast "self" to appropriate type
+          val argsToPass = args.map(a => translateExp(a, symtab, anonFuns))    // Will need to cast "self" to appropriate type
 
           for (pr <- possibleReceivers) {
             val i = pr.methodIterator
@@ -1133,7 +1135,7 @@ object JVM2CL {
             }
           }
 
-          val methodFormals: List[Tree] = compileMethod(method.resolve, null, false, null) match {
+          val methodFormals: List[Tree] = compileMethod(method.resolve, null, 0, false, null) match {
             case FunDef(_, _, formals, _) => formals
             case _ => Nil
           }
@@ -1179,9 +1181,9 @@ object JVM2CL {
                 println("Found apply method: " + applyMethod.getSignature)
                 worklist += CompileMethodTask(applyMethod, closureTyp)
               }
-              ClosureCall(Id(mangleName(closureTyp.toString) + method.name), closureArgs.map(ca => translateExp(ca, anonFuns)) ::: args.map(a => translateExp(a, anonFuns)))
+              ClosureCall(Id(mangleName(closureTyp.toString) + method.name), closureArgs.map(ca => translateExp(ca, symtab, anonFuns)) ::: args.map(a => translateExp(a, symtab, anonFuns)))
 
-          case _ => Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
+          case _ => Call(Select(base, method.name), args.map(a => translateExp(a, symtab, anonFuns)))
         }
 
         /*
@@ -1191,10 +1193,11 @@ object JVM2CL {
           Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
         */
       }
+
       
       case GLocal(name, typ) => { 
         if (anonFuns.contains(name))
-          translateExp(anonFuns(name), anonFuns)
+          translateExp(anonFuns(name), symtab, anonFuns)
         else
           symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name)) 
       }
@@ -1209,15 +1212,15 @@ object JVM2CL {
     }
   }
 
-  private def translateUnits(units: List[SootUnit], result: List[Tree], anonFuns: HashMap[String,Value]): List[Tree] = {
-    implicit val anons = anonFuns
+  private def translateUnits(units: List[SootUnit], result: List[Tree], symtab: SymbolTable, anonFuns: HashMap[String,Value]): List[Tree] = {
+    implicit val iv: (SymbolTable,HashMap[String,Value]) = (symtab, anonFuns)
       units match {
       case u::us => {
         val tree: Tree = u match {
           case GIdentity(left, right) => Eval(Assign(left, right))
-          case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => { symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, anonFuns)); TreeSeq() }
+          case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => { symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, symtab, anonFuns)); TreeSeq() }
           case GAssignStmt(left, right) => Eval(Assign(left, right))
-          case GGoto(target) => GoTo(translateLabel(target))
+          case GGoto(target) => GoTo(translateLabel(target, symtab))
           case GNop() => Nop
           case GReturnVoid() => Return
           case GReturn(returned) => returned match {
@@ -1227,14 +1230,14 @@ object JVM2CL {
 
               println("GReturn::NewInvoke Translating method inline: " + closureMethod.getSignature + " of " + closureTyp.getClassName)
               if (applyMethods.length > 0) {
-                val (params, body) = compileMethod(applyMethods.head, closureTyp, false, anonFuns) match {
+                val (params, body) = compileMethod(applyMethods.head, closureTyp, symtab.level + 1, false, anonFuns) match {
                   case FunDef(_, _, p, b) => (p, b)
                   case _ => null
                 }
                 body
               }
               else {
-                val (params, body) = compileMethod(closureMethod.resolve, closureTyp, false, anonFuns) match {
+                val (params, body) = compileMethod(closureMethod.resolve, closureTyp, symtab.level + 1, false, anonFuns) match {
                   case FunDef(_, _, p, b) => (p, b)
                   case _ => null
                 }
@@ -1244,7 +1247,7 @@ object JVM2CL {
             case GVirtualInvoke(base, method, args) => {
               println("GReturn::VirtualInvoke Translating method inline: " + method.getSignature + " of " + base.getType.toString)
               args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
-              val (params, body) = compileMethod(method.resolve, base, false, anonFuns) match {
+              val (params, body) = compileMethod(method.resolve, base, symtab.level + 1, false, anonFuns) match {
                 case FunDef(_, _, p, b) => (p, b)
                 case _ => null
               }
@@ -1255,14 +1258,14 @@ object JVM2CL {
               val applyMethod = new SootClass(base.getType.toString).getMethods.filter(mn => mn.getName.equals("apply")).head
               args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
               println("GReturn::InterfaceInvoke Translating method inline: " + method.getSignature + " of " +  base.getType.toString)
-              val (params, body) = compileMethod(applyMethod, base, false, anonFuns) match {
+              val (params, body) = compileMethod(applyMethod, base, symtab.level + 1, false, anonFuns) match {
                 case FunDef(_, _, p, b) => (p, b)
                 case _ => null
               }
               body
             }
 
-            case _ => Return(translateExp(returned, anonFuns)) match {
+            case _ => Return(translateExp(returned, symtab, anonFuns)) match {
               case Return(Cast(typ, StructLit(fields))) => {
                 val tmp = freshName("ret")
                 symtab.addLocalVar(typ, Id(tmp))
@@ -1271,14 +1274,14 @@ object JVM2CL {
               case t => t
             }
           }
-          case GIf(cond, target) => If(translateExp(cond, anonFuns), GoTo(translateLabel(target)), Nop)
-          case GInvokeStmt(invokeExpr) => Eval(translateExp(invokeExpr, anonFuns))
+          case GIf(cond, target) => If(translateExp(cond, symtab, anonFuns), GoTo(translateLabel(target, symtab)), Nop)
+          case GInvokeStmt(invokeExpr) => Eval(translateExp(invokeExpr, symtab, anonFuns))
 
           // TODO
           case GTableSwitchStmt(key, lowIndex, highIndex, targets, defaultTarget) => Id("switch unsupported")
           case GLookupSwitchStmt(key: Local, lookupVals: List[Value], targets: List[Stmt], defaultTarget) => {
             val valsWithTargets: List[(Value, Stmt)] = lookupVals.zip(targets)
-            Switch(translateExp(key, anonFuns), valsWithTargets.map(vt => Case(translateExp(vt._1, anonFuns), GoTo(translateLabel(vt._2)))) :::         List(Default(GoTo(translateLabel(defaultTarget)))))
+            Switch(translateExp(key, symtab, anonFuns), valsWithTargets.map(vt => Case(translateExp(vt._1, symtab, anonFuns), GoTo(translateLabel(vt._2, symtab)))) :::         List(Default(GoTo(translateLabel(defaultTarget, symtab)))))
             // Switch(Id(key.getName), valsWithTargets.map(vt => Case(translateExp(vt._1, anonFuns), TreeSeq(translateUnits(List(vt._2), Nil)))) ::: List(Default(TreeSeq(translateUnits(List(defaultTarget), Nil)))))
             //Id("switch unsupported")
           }
@@ -1290,17 +1293,17 @@ object JVM2CL {
           case _ => { println("huh " + u); Id("unsupported") }
         }
 
-        translateUnits(us, result ::: List[Tree](tree), anonFuns)
+        translateUnits(us, result ::: List[Tree](tree), symtab, anonFuns)
       }
       case Nil => result
     }
   }
 
-  private def insertLabels(units: List[SootUnit], result: List[Tree], resultWithLabels: List[Tree]) : List[Tree] = units match {
+  private def insertLabels(units: List[SootUnit], symtab: SymbolTable, result: List[Tree], resultWithLabels: List[Tree]) : List[Tree] = units match {
     case u::us => {
       symtab.labels.get(u) match {
-        case Some(label) => insertLabels(us, result.tail, resultWithLabels ::: Label(label) :: result.head :: Nil)
-        case None        => insertLabels(us, result.tail, resultWithLabels ::: result.head :: Nil)
+        case Some(label) => insertLabels(us, symtab, result.tail, resultWithLabels ::: Label(label) :: result.head :: Nil)
+        case None        => insertLabels(us, symtab, result.tail, resultWithLabels ::: result.head :: Nil)
       }
     }
    case Nil => resultWithLabels
@@ -1366,7 +1369,7 @@ object JVM2CL {
   }
 
 
-  private def makeFunction(m: SootMethod, result: List[Tree], takesThis: Boolean) : Tree = {
+  private def makeFunction(m: SootMethod, result: List[Tree], symtab: SymbolTable, takesThis: Boolean) : Tree = {
     val paramTree = new ListBuffer[Tree]()
     val varTree = new ListBuffer[Tree]()
 
@@ -1376,7 +1379,7 @@ object JVM2CL {
     for (i <- 0 until symtab.params.size /* m.getParameterCount */) {
       symtab.params.get(i) match {
         case Some((id, typ)) => paramTree += Formal(typ, id)
-        case None => paramTree += Formal(VoidType, Id("UNKNOWN_PARAM")) // throw new RuntimeException("crap")
+        case None => throw new RuntimeException("crap")
       }
     }
 
