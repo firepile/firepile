@@ -361,6 +361,7 @@ object Trees {
     val LongType = ValueType("long")
     val DoubleType = ValueType("double")
     val CharType = ValueType("char")
+    val VoidType = ValueType("void")
     
 
     implicit def int2IntLit(n: Int) = IntLit(n)
