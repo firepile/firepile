@@ -50,6 +50,7 @@ import soot.{NullType => SootNullType}
 import firepile.compiler.util.ScalaTypeGen
 import firepile.compiler.util.ScalaTypeGen.{
   getScalaSignature,
+  getScalaJavaSignature,
   printClassDef
 }
 import firepile.compiler.util.JavaTypeGen.getJavaSignature
@@ -111,16 +112,21 @@ object JVM2CL {
   private def setup = {
     // java.class.path is broken in Scala, especially when running under sbt
     //Scene.v.setSootClassPath(Scene.v.defaultClassPath
-
+    //println("setting up"+System.getProperty("os.name"))
+    
     if(System.getProperty("os.name").toLowerCase().startsWith("win"))
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
-                  + ";."+";C:/ScalaWorld/Type-Specific-Compiler/lib/firepiletest.jar"
-                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/firepiletypespecific.jar"
-                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/soot-2.4.0.jar"
-                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/scalap.jar"
-                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/rt.jar"
-                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/jce.jar"
-                  + ";C:/ScalaWorld/Type-Specific-Compiler/lib/scala-library.jar")
+                  + ";."+";C:/ScalaWorld/CompleteFirepileCompiler/lib/firepilesoot.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/firepilesootest.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/soot-2.4.0.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/scalap.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/rt.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/jce.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/jasminsrc-2.4.0.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/scala-compiler.jar"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/target/classes"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/target/testclasses"
+                  + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/scala-library.jar")
     else
     Scene.v.setSootClassPath(Scene.v.defaultClassPath
       + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/classes"
@@ -150,7 +156,7 @@ object JVM2CL {
     Options.v.setPhaseOption("cg", "safe-forname:false")
     // you can set context-sensitivity of call graph with this (more time consuming)
     // Options.v.setPhaseOption("cg", "context:1cfa") 
-    // Options.v.setPhaseOption("cg", "verbose:true")
+    //Options.v.setPhaseOption("cg", "verbose:true")
 
     Options.v.set_allow_phantom_refs(true)
     if (makeCallGraph)
@@ -317,9 +323,10 @@ object JVM2CL {
 
     // Retrieve the method and its body
     val i = c.methodIterator
+    println(" Method Iterator ")
     while (i.hasNext) {
       val m = i.next
-
+      println("m.getName"+m.getName)
       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
       println("trying " + sig)
       if (sig.equals(methodSig)) {
@@ -509,17 +516,18 @@ object JVM2CL {
     
        def addClass(cls: SootClass) = {
           // HACK to ignore Java classes for now
-          if (!knownClasses.contains(cls)  && !cls.getName.startsWith("java.") && !cls.getName.contains("$")) {
+          if (!knownClasses.contains(cls)  && !cls.getName.startsWith("java.")) {
             enumElements += Id(cls.getName + "_ID")
            
             // Broken in 184
-            /*
-            val scalaSig = if (cls.getName.contains("$")) getJavaSignature(cls.getName, cls)
+            
+            val sSig = if (cls.getName.contains("$")) getScalaJavaSignature(cls.getName, cls)
             else getScalaSignature(cls.getName)
-            */
+            
+            val scalaSig=sSig.asInstanceOf[List[ScalaClassDef]]
 
             // TEMPORARY FIX
-            val scalaSig = getScalaSignature(cls.getName)
+            //val scalaSig = getScalaSignature(cls.getName)
            
             /*
             println(" Scala Sig Class Name:"+cls.getName)
@@ -529,7 +537,8 @@ object JVM2CL {
             
             if (scalaSig == null)
               throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
-    
+           
+           try { 
             val superTypeStructs = getSupertypes(scalaSig).filter(st => st match {
               case NamedTyp(name: String) if name.equals("scala.ScalaObject") => false
               case NamedTyp(name: String) if name.equals("java.lang.Object") => false
@@ -545,7 +554,13 @@ object JVM2CL {
             val union = UnionDef(Id(cls.getName + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => VarDef(StructType(sc.getName), Id("_" + sc.getName))).toList)
     
             knownClasses += cls -> (struct, union)
-          }
+            } catch {
+           case e: ClassNotFoundException => {
+           println("Class not found: " + e.getMessage)
+           knownClasses
+             }
+         }
+       }
     }
     
     /*
@@ -952,6 +967,10 @@ object JVM2CL {
       case GNewMultiArray(newTyp, sizes) => Id("unimplemented:newmultiarray")
 
       case GNewInvoke(baseTyp, method @ SMethodRef(_, "<init>", _, _, _), args) => {
+      
+        println("baseName:::"+baseTyp.getSootClass.getName)
+        for(i <- args) println(" args:"+i)
+        
         if (baseTyp.getSootClass.getName.equals("scala.Tuple2")) {
           Cast(StructType("Tuple2"), StructLit(args.map {
             // scala.runtime.BoxesRunTime.boxToFloat(float) : Object
@@ -981,6 +1000,12 @@ object JVM2CL {
         }
       }
       case GStaticInvoke(method, args) => {
+        println(" static method:"+method)
+        println(" static method NAME:"+method.name)
+        println("methodName(method):"+methodName(method))
+        for(i <- args) println("arg::"+i)
+       
+        
         worklist += CompileMethodTask(method)
         // classtab.addClass(method.declaringClass)
         Call(Id(method.name), args.map(a => translateExp(a, symtab, anonFuns)))
@@ -1062,7 +1087,39 @@ object JVM2CL {
  
       }
 */
+     // case GVirtualInvoke(base, method, args) if base.equals("id") => { if(method.equals("<firepile.Spaces$Id1: firepile.Spaces$Point local()>)")) Id("get_local_id(0)") else Id("UnknownID") }
       case GVirtualInvoke(base, method, args) => { 
+        println("virtual base:"+base)
+        for(i<-args)println("arg::"+i)
+        println("Method:"+method)
+        println("virtual base: gettype toString::"+base.getType.toString)
+        println("Method Name:"+method.name)
+        println("methodName(method)::"+methodName(method))
+        
+        val b:String=base.toString
+        if(b.equals("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()"))
+        return(Id("get_local_id(0)"))
+        
+        if(b.equals("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point group()>()"))
+        return(Id("get_global_id(0)"))
+        
+        if(b.equals("id.<firepile.Spaces$Id1: firepile.Spaces$Config config()>().<firepile.Spaces$Config: int localSize()>()"))
+        return(Id("get_local_size(0)"))
+        
+        if(base.getType.toString.contains("localMem$") && method.name.equals("barrier"))
+        return(Id("barrier(CLK_LOCAL_MEM_FENCE)"))
+        
+        if(base.getType.toString.contains("firepile.Spaces$Id1") && method.name.equals("local"))
+        return(Id("get_local_id(0)"))
+        
+        //((firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point group()>()).<firepile.Spaces$Point1: firepile.Spaces$Point1 $times(int)>(id.<firepile.Spaces$Id1: firepile.Spaces$Config config()>().<firepile.Spaces$Config: int localSize()>() * 2)
+        
+   
+        //if(methodName(method).contains("firepile_Spaces_Point1_plus")){
+         //if(b.contains("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()")
+       // return(Id("get_local_id(0)"))
+        //}
+                   
         val anonFunParams = new ListBuffer[(Int,Value)]()
         var argCount = 0
         args.foreach(a => { if(isFunction(a.getType)) { anonFunParams += ((argCount,a)) } ; argCount += 1 })
@@ -1193,7 +1250,6 @@ object JVM2CL {
           Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
         */
       }
-
       
       case GLocal(name, typ) => { 
         if (anonFuns.contains(name))
@@ -1269,6 +1325,7 @@ object JVM2CL {
               case Return(Cast(typ, StructLit(fields))) => {
                 val tmp = freshName("ret")
                 symtab.addLocalVar(typ, Id(tmp))
+                println(" typ ::"+typ+":: fields"+fields+" tmp::"+tmp)
                 TreeSeq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), Return(Id(tmp)))
               }
               case t => t
