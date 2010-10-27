@@ -1060,7 +1060,6 @@ object JVM2CL {
  
       }
 */
-      case GVirtualInvoke(base, method, args) if base.getType.toString == "Id1" => { println("found ID!"); Id("found ID") }
       case GVirtualInvoke(base, method, args) => { 
         val anonFunParams = new ListBuffer[(Int,Value)]()
         var argCount = 0
