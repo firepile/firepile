@@ -476,29 +476,31 @@ object JVM2CL {
         case ValueType(name: String) => ValueType(name + "_intr")
         case x => x
       }
-      thisParam = (id, typUnion)
+      thisParam = (Id(id.name + "_" + level), typUnion)
     }
 
     def addParamVar(typ: SootType, index: Int, id: Id) = {
-      params += index -> (id, translateType(typ))
+      params += index -> (Id(id.name + "_" + level), translateType(typ))
     }
 
     def addLocalVar(typ: SootType, id: Id) = {
-      assert(!params.contains(id))
+      assert(!params.contains(Id(id.name + "_" + level)))
       // assert(!locals.contains(id))
-      locals += id -> translateType(typ)
+      locals += Id(id.name + "_" + level) -> translateType(typ)
     }
 
     def addLocalVar(typ: Tree, id: Id) = {
-      assert(!params.contains(id))
+      assert(!params.contains(Id(id.name + "_" + level)))
       // assert(!locals.contains(id))
-      locals += id -> typ
+      locals += Id(id.name + "_" + level) -> typ
     }
 
     def addArrayDef(typ: SootType, id: Id, size: Tree) = {
-      assert(!locals.contains(id))
-      arrays += id -> (translateType(typ), size)
+      assert(!locals.contains(Id(id.name + "_" + level)))
+      arrays += Id(id.name + "_" + level) -> (translateType(typ), size)
     }
+
+    def addInlineParams(ip: List[Tree]) = for (p <- ip) { params(params.size) = (Id(p.asInstanceOf[Formal].name), p.asInstanceOf[Formal].typ) }
 
     def lastParamIndex = params.size - 1
 
@@ -1095,6 +1097,18 @@ object JVM2CL {
         println("virtual base: gettype toString::"+base.getType.toString)
         println("Method Name:"+method.name)
         println("methodName(method)::"+methodName(method))
+
+        /*
+        base match {
+          case GVirtualInvoke(GCast("firepile.Spaces$Point1", GLocal("id")), "<", ...)
+        }
+        */
+        /*
+        base.toString match {
+          case "(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()" => return Call(Id("get_local_id"), IntValue(0))
+          // ...
+        }
+        */
         
         val b:String=base.toString
         if(b.equals("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()"))
@@ -1255,16 +1269,16 @@ object JVM2CL {
         if (anonFuns.contains(name))
           translateExp(anonFuns(name), symtab, anonFuns)
         else
-          symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name)) 
+          symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name) + "_" + symtab.level) 
       }
       case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
-      case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
+      case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index + "_" + symtab.level) }
       case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
 
       case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ Select(base, fieldRef.name) }
       case GArrayRef(base: Local, index) => ArrayAccess(Select(Deref(base), "data"), index)
 
-      case v => Id("unsupported:" + v.getClass.getName)
+      case v => Id("unsupported:" + v)
     }
   }
 
@@ -1282,7 +1296,7 @@ object JVM2CL {
           case GReturn(returned) => returned match {
             case GNewInvoke(closureTyp, closureMethod, closureArgs) => {
               val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals("apply"))
-              closureArgs.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
+              // closureArgs.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
 
               println("GReturn::NewInvoke Translating method inline: " + closureMethod.getSignature + " of " + closureTyp.getClassName)
               if (applyMethods.length > 0) {
@@ -1290,6 +1304,7 @@ object JVM2CL {
                   case FunDef(_, _, p, b) => (p, b)
                   case _ => null
                 }
+                symtab.addInlineParams(params)
                 body
               }
               else {
@@ -1297,16 +1312,18 @@ object JVM2CL {
                   case FunDef(_, _, p, b) => (p, b)
                   case _ => null
                 }
+                symtab.addInlineParams(params)
                 body
               }
             }
             case GVirtualInvoke(base, method, args) => {
               println("GReturn::VirtualInvoke Translating method inline: " + method.getSignature + " of " + base.getType.toString)
-              args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
+              // args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
               val (params, body) = compileMethod(method.resolve, base, symtab.level + 1, false, anonFuns) match {
                 case FunDef(_, _, p, b) => (p, b)
                 case _ => null
               }
+              symtab.addInlineParams(params)
               body
             }
             case GInterfaceInvoke(base, method, args) if base.getType.toString.startsWith("scala.Function") => {
@@ -1318,6 +1335,7 @@ object JVM2CL {
                 case FunDef(_, _, p, b) => (p, b)
                 case _ => null
               }
+              symtab.addInlineParams(params)
               body
             }
 
