@@ -38,6 +38,10 @@ object Reduce3 {
   def compile = {
     firepile.Compose.compileToTree(
       (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f), 2)
+    /*
+    firepile.Compose.compileToTree(
+      (A: Array[Float], B: Array[Float], z: Float, f: (Float,Float)=>Float) => reduce(A, B, A.length, f, z), 2)
+    */
   }
 
 
@@ -49,6 +53,7 @@ object Reduce3 {
   */
   // @kernel(numGroups = odata.length, numItems = idata.length)
   // @where(n <= numItems)
+  /* @kernel("(__global float *idata, __global float *odata, int n, float z, __local float *sdata)") */
   def reduce(idata: Array[Float], odata: Array[Float], n: Int, f: (Float,Float) => Float, z: Float) =
       (id: Id1, sdata: Array[Float] @local) => {
     // perform first level of reduction reading from global memory, writing to shared memory
@@ -70,10 +75,12 @@ object Reduce3 {
 
     // do reduction in shared memory
     // byfun -> applying? byfunc?
-    for (s <- id.config.localSize / 2 until 0 byfun (_/2)) {
+    var s = id.config.localSize / 2
+    while (s > 0) {
       if (tid < s)
         sdata(tid) = f(sdata(tid), sdata(tid + s))
       localMem.barrier
+      s /= 2
     }
 
     // write results back to global
