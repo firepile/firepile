@@ -1109,7 +1109,7 @@ object JVM2CL {
           // ...
         }
         */
-        
+        /* 
         val b:String=base.toString
         if(b.equals("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()"))
         return(Id("get_local_id(0)"))
@@ -1125,7 +1125,7 @@ object JVM2CL {
         
         if(base.getType.toString.contains("firepile.Spaces$Id1") && method.name.equals("local"))
         return(Id("get_local_id(0)"))
-        
+        */
         //((firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point group()>()).<firepile.Spaces$Point1: firepile.Spaces$Point1 $times(int)>(id.<firepile.Spaces$Id1: firepile.Spaces$Config config()>().<firepile.Spaces$Config: int localSize()>() * 2)
         
    
@@ -1276,9 +1276,9 @@ object JVM2CL {
       case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
 
       case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ Select(base, fieldRef.name) }
-      case GArrayRef(base: Local, index) => ArrayAccess(Select(Deref(base), "data"), index)
+      case GArrayRef(base, index) => ArrayAccess(Select(Deref(base), "data"), index)
 
-      case v => Id("unsupported:" + v)
+      case v => Id("unsupported:" + v.getClass.getName)
     }
   }
 
