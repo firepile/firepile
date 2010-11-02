@@ -1240,12 +1240,11 @@ object JVM2CL {
       }
       
       case GInterfaceInvoke(base, method, args) => {
-            v match{
-            case GInterfaceInvoke(GInterfaceInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Config"),"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) => return Call(Id("get_local_size"), Id("0"))
-            case GInterfaceInvoke(GInterfaceInvoke(_,SMethodRef(SClassName("firepile.Spaces$Config"),"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) => return Call(Id("get_local_size"), Id("0"))
-            case  _ => println("GInterfaceInvoke::base"+base+"::method::"+method); Id("unsupported:" + v.getClass.getName)
-             }
-      }
+            v match { 
+            case GInterfaceInvoke(GVirtualInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Id1"),"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) => return Call(Id("get_local_size"), Id("0"))
+	    case _ => Id("unsupported:" + v.getClass.getName)
+               }
+          }
       
       case GLocal(name, typ) => v match { 
             case GLocal("id",SMethodRef(SClassName("firepile.Spaces$Id1"),"local",_,_,_)) => return(Call(Id("get_local_id"),Id("0")))
@@ -1266,7 +1265,7 @@ object JVM2CL {
       case v => Id("unsupported:" + v.getClass.getName)
     }
   }
-
+  
   private def translateUnits(units: List[SootUnit], result: List[Tree], symtab: SymbolTable, anonFuns: HashMap[String,Value]): List[Tree] = {
     implicit val iv: (SymbolTable,HashMap[String,Value]) = (symtab, anonFuns)
       units match {
