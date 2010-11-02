@@ -955,7 +955,11 @@ object JVM2CL {
 
       case GArrayLength(op: Local) => Select(Deref(op), "length")
 
-      case GCast(op, castTyp) => Cast(translateType(castTyp), op)
+      case GCast(op, castTyp) => v match {
+            case GCast(GVirtualInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Id1"),"local",_,_,_), _),_) => return(Call(Id("get_local_id"),Id("0")))
+            case GCast(GVirtualInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Id1"),"group",_,_,_), _),_) => return(Call(Id("get_global_id"),Id("0")))
+            case _=> Cast(translateType(castTyp), op)
+      }
 
       // IGNORE
       case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
@@ -1089,144 +1093,114 @@ object JVM2CL {
  
       }
 */
-     // case GVirtualInvoke(base, method, args) if base.equals("id") => { if(method.equals("<firepile.Spaces$Id1: firepile.Spaces$Point local()>)")) Id("get_local_id(0)") else Id("UnknownID") }
-      case GVirtualInvoke(base, method, args) => { 
-        println("virtual base:"+base)
-        for(i<-args)println("arg::"+i)
-        println("Method:"+method)
-        println("virtual base: gettype toString::"+base.getType.toString)
-        println("Method Name:"+method.name)
-        println("methodName(method)::"+methodName(method))
-
-        /*
-        base match {
-          case GVirtualInvoke(GCast("firepile.Spaces$Point1", GLocal("id")), "<", ...)
-        }
-        */
-        /*
-        base.toString match {
-          case "(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()" => return Call(Id("get_local_id"), IntValue(0))
-          // ...
-        }
-        */
-        /* 
-        val b:String=base.toString
-        if(b.equals("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()"))
-        return(Id("get_local_id(0)"))
+        case GVirtualInvoke(base, method, args) => { 
         
-        if(b.equals("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point group()>()"))
-        return(Id("get_global_id(0)"))
-        
-        if(b.equals("id.<firepile.Spaces$Id1: firepile.Spaces$Config config()>().<firepile.Spaces$Config: int localSize()>()"))
-        return(Id("get_local_size(0)"))
-        
-        if(base.getType.toString.contains("localMem$") && method.name.equals("barrier"))
-        return(Id("barrier(CLK_LOCAL_MEM_FENCE)"))
-        
-        if(base.getType.toString.contains("firepile.Spaces$Id1") && method.name.equals("local"))
-        return(Id("get_local_id(0)"))
-        */
-        //((firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point group()>()).<firepile.Spaces$Point1: firepile.Spaces$Point1 $times(int)>(id.<firepile.Spaces$Id1: firepile.Spaces$Config config()>().<firepile.Spaces$Config: int localSize()>() * 2)
-        
-   
-        //if(methodName(method).contains("firepile_Spaces_Point1_plus")){
-         //if(b.contains("(firepile.Spaces$Point1) id.<firepile.Spaces$Id1: firepile.Spaces$Point local()>()")
-       // return(Id("get_local_id(0)"))
-        //}
-                   
-        val anonFunParams = new ListBuffer[(Int,Value)]()
-        var argCount = 0
-        args.foreach(a => { if(isFunction(a.getType)) { anonFunParams += ((argCount,a)) } ; argCount += 1 })
-        if (args.length > 0)
-          worklist += CompileMethodTask(method, findSelf(base, symtab.self), true, anonFunParams.toList) 
-        else worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
-
-        // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
-        // Then generate a call to a dispatch method:
-        // e.g.,
-        // class A { def m = ... }
-        // class B extends A { def m = ... }
-        // class C extends A { def m = ... }
-        // val x: A = new C
-        // x.m   // invokevirtual(x, A.m, Nil)
-        // -->
-        // dispatch_m(x)
-        // where:
-        // void dispatch_m(A* x) {
-        //    switch (x.type) {
-        //       case TYPE_A: A_m((A*) x);
-        //       case TYPE_B: B_m((B*) x);
-        //       case TYPE_C: C_m((C*) x);
-        //    }
-        // }
-        //
-        // Also need to define structs for each class with a type field as the first word.
-        //
-        // For now: just handle calls x.m() where we know either the static type
-        // of x (e.g., A) is final, or m is final in A, or we know that no
-        // subclasses of A override m
-        
-        // rewrite to:
-
-
-        val possibleReceivers = getPossibleReceivers(base, method)
-
-        println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
-
-        assert(possibleReceivers.length > 0)
-
-        val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
-
-        if (possibleReceivers.length == 1) {
-          // monomorphic call
-          // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
-          println("Monomorphic call to " + methodName(method))
-          classtab.addClass(method.declaringClass)
-          Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, symtab, anonFuns)))
-        }
-        else {
-          // polymorphic call--generate a switch
-          val methodReceiversRef = ListBuffer[SootMethod]()
-          val argsToPass = args.map(a => translateExp(a, symtab, anonFuns))    // Will need to cast "self" to appropriate type
-
-          for (pr <- possibleReceivers) {
-            val i = pr.methodIterator
-            while (i.hasNext) {
-              val m = i.next
-              if (! m.isAbstract) {
-                val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-                println("Checking method: " + sig + " against " + methodSig)
-                if (sig.equals(methodSig)) {
-                  println("Adding CompileMethodTask(" + method + ", " + pr + ")")
-                  worklist += CompileMethodTask(m, pr, true)
-                  methodReceiversRef += m
-                  classtab.addClass(pr)
-                }
-              }
-            }
-          }
-
-          val methodFormals: List[Tree] = compileMethod(method.resolve, null, 0, false, null) match {
-            case FunDef(_, _, formals, _) => formals
-            case _ => Nil
-          }
-
-          val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
-              case Formal(_, name) => Id(name)
-              case _ => Id("Wtf: No Name?")
-          })
-
-          val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
-
-          val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName+"_intr")),Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
+          v match{
+	         case GVirtualInvoke(GCast(GVirtualInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Id1"),"local",_,_,_), _),SType("firepile.Spaces$Point1")),SMethodRef(SClassName("firepile.Spaces$Point1"),"toInt",_,_,_),_) => return Call(Id("get_local_id"), Id("0"))
+	         case GVirtualInvoke(GCast(GVirtualInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Id1"),"group",_,_,_), _),SType("firepile.Spaces$Point1")),SMethodRef(SClassName("firepile.Spaces$Point1"),"toInt",_,_,_),_) => return Call(Id("get_global_id"), Id("0"))
+	         case GVirtualInvoke(_,SMethodRef(SClassName("firepile.tests.Reduce3$localMem$"),"barrier",_,_,_),_) => return Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))
+	         case _ => v match{
+	                   case GVirtualInvoke(GVirtualInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Config"),"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) => return Call(Id("get_local_size"), Id("0"))
+	                   case _ => { 
+	                   
+	                     val anonFunParams = new ListBuffer[(Int,Value)]()
+			           var argCount = 0
+			           args.foreach(a => { if(isFunction(a.getType)) { anonFunParams += ((argCount,a)) } ; argCount += 1 })
+			           if (args.length > 0)
+			             worklist += CompileMethodTask(method, findSelf(base, symtab.self), true, anonFunParams.toList) 
+			           else worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
+			   
+			           // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
+			           // Then generate a call to a dispatch method:
+			           // e.g.,
+			           // class A { def m = ... }
+			           // class B extends A { def m = ... }
+			           // class C extends A { def m = ... }
+			           // val x: A = new C
+			           // x.m   // invokevirtual(x, A.m, Nil)
+			           // -->
+			           // dispatch_m(x)
+			           // where:
+			           // void dispatch_m(A* x) {
+			           //    switch (x.type) {
+			           //       case TYPE_A: A_m((A*) x);
+			           //       case TYPE_B: B_m((B*) x);
+			           //       case TYPE_C: C_m((C*) x);
+			           //    }
+			           // }
+			           //
+			           // Also need to define structs for each class with a type field as the first word.
+			           //
+			           // For now: just handle calls x.m() where we know either the static type
+			           // of x (e.g., A) is final, or m is final in A, or we know that no
+			           // subclasses of A override m
+			           
+			           // rewrite to:
+			   
+			   
+			           val possibleReceivers = getPossibleReceivers(base, method)
+			   
+			           println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
+			   
+			           assert(possibleReceivers.length > 0)
+			   
+			           val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+			   
+			           if (possibleReceivers.length == 1) {
+			             // monomorphic call
+			             // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
+			             println("Monomorphic call to " + methodName(method))
+			             classtab.addClass(method.declaringClass)
+			             Call(Id(methodName(method)), Id("_this") :: args.map(a => translateExp(a, symtab, anonFuns)))
+			           }
+			           else {
+			             // polymorphic call--generate a switch
+			             val methodReceiversRef = ListBuffer[SootMethod]()
+			             val argsToPass = args.map(a => translateExp(a, symtab, anonFuns))    // Will need to cast "self" to appropriate type
+			   
+			             for (pr <- possibleReceivers) {
+			               val i = pr.methodIterator
+			               while (i.hasNext) {
+			                 val m = i.next
+			                 if (! m.isAbstract) {
+			                   val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+			                   println("Checking method: " + sig + " against " + methodSig)
+			                   if (sig.equals(methodSig)) {
+			                     println("Adding CompileMethodTask(" + method + ", " + pr + ")")
+			                     worklist += CompileMethodTask(m, pr, true)
+			                     methodReceiversRef += m
+			                     classtab.addClass(pr)
+			                   }
+			                 }
+			               }
+			             }
+			   
+			             val methodFormals: List[Tree] = compileMethod(method.resolve, null, 0, false, null) match {
+			               case FunDef(_, _, formals, _) => formals
+			               case _ => Nil
+			             }
+			   
+			             val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
+			                 case Formal(_, name) => Id(name)
+			                 case _ => Id("Wtf: No Name?")
+			             })
+			   
+			             val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
+			   
+			             val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName+"_intr")),Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
+			             
+			             // add appropriate formal parameters for call
+			             worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
+			             
+			         // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
+			             // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
+			             Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
+                                     }
+	                                  
+                                     }
+                                  }
+                   }
           
-          // add appropriate formal parameters for call
-          worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString),Id("dispatch_" + method.declaringClass.getName),Formal(PtrType(Id(method.declaringClass.getName + "_intr")),"cls") :: methodFormals, List(switchStmt).toArray:_*))
-          
-      // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
-          // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
-          Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
-        }
       }
       case GInterfaceInvoke(base: Local, method, args) => {
         worklist += CompileMethodTask(method, findSelf(base, symtab.self))
@@ -1265,11 +1239,22 @@ object JVM2CL {
         */
       }
       
-      case GLocal(name, typ) => { 
-        if (anonFuns.contains(name))
-          translateExp(anonFuns(name), symtab, anonFuns)
-        else
-          symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name) + "_" + symtab.level) 
+      case GInterfaceInvoke(base, method, args) => {
+            v match{
+            case GInterfaceInvoke(GInterfaceInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Config"),"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) => return Call(Id("get_local_size"), Id("0"))
+            case GInterfaceInvoke(GInterfaceInvoke(_,SMethodRef(SClassName("firepile.Spaces$Config"),"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) => return Call(Id("get_local_size"), Id("0"))
+            case  _ => println("GInterfaceInvoke::base"+base+"::method::"+method); Id("unsupported:" + v.getClass.getName)
+             }
+      }
+      
+      case GLocal(name, typ) => v match { 
+            case GLocal("id",SMethodRef(SClassName("firepile.Spaces$Id1"),"local",_,_,_)) => return(Call(Id("get_local_id"),Id("0")))
+            case GLocal("id",SMethodRef(SClassName("firepile.Spaces$Id1"),"group",_,_,_)) => return(Call(Id("get_global_id"),Id("0")))
+            case _ => {if (anonFuns.contains(name))
+              translateExp(anonFuns(name), symtab, anonFuns)
+            else
+              symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name) + "_" + symtab.level) 
+            }
       }
       case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
       case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index + "_" + symtab.level) }

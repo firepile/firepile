@@ -49,7 +49,14 @@ object GrimpUnapply {
       case _ => None
     }
   }
-
+  
+ object SType {
+  def unapply(v:AnyRef) = v match {
+     case x: Type => Some(x.toString)
+     case _ => None
+     }
+   }  
+   
   object GNullConstant {
     def unapply(v: Value) = v match {
       case x: NullConstant => true
