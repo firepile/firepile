@@ -358,7 +358,16 @@ object JVM2CL {
       val ts = task.run
       results ++= ts
     }
-    classtab.dumpClassTable ::: arraystructs.dumpArrayStructs ::: results.toList
+    val tree = classtab.dumpClassTable ::: arraystructs.dumpArrayStructs ::: results.toList
+
+    println()
+    println("Result tree:")
+    println(tree)
+
+    println()
+    println("Result CL:")
+    for (t <- tree) println(t.toCL)
+    tree
   }
 
   def isStatic(flags: Int) = (flags & 0x0008) != 0
@@ -378,7 +387,7 @@ object JVM2CL {
     buffer.toString()
   }
 
-  private def compileMethod(m: SootMethod, self: AnyRef, level: Int = 0, takesThis: Boolean = false, anonFuns: HashMap[String,Value]): Tree = {
+  private def compileMethod(m: SootMethod, self: AnyRef, level: Int = 0, takesThis: Boolean = false, anonFuns: HashMap[String,Value]): FunDef = {
     println("-------------------------------------------------------")
     println(m)
 
@@ -412,6 +421,8 @@ object JVM2CL {
       // TODO: don't removeThis for normal methods; do removeThis for closures
       // TODO: verify that this is not used in the body of the method
 
+    // Commented out to only print when processing worklist
+    /*
     println()
     println("Result tree:")
     println(fun)
@@ -419,6 +430,7 @@ object JVM2CL {
     println()
     println("Result CL:")
     println(fun.toCL)
+    */
 
     fun
   }
@@ -436,6 +448,7 @@ object JVM2CL {
   }
 
   private def compileMethod(m: Tree): Tree = {
+    /*
     println("-------------------------------------------------------")
 
     println()
@@ -445,7 +458,7 @@ object JVM2CL {
     println()
     println("Result CL:")
     println(m.toCL)
-
+    */
     m
   }
 
@@ -500,7 +513,7 @@ object JVM2CL {
       arrays += id -> (translateType(typ), size)
     }
 
-    def addInlineParams(ip: List[Tree]) = for (p <- ip) { params(params.size) = (Id(p.asInstanceOf[Formal].name), p.asInstanceOf[Formal].typ) }
+    def addInlineParams(ip: List[Tree]) = for (p <- ip) { params(params.size) = (Id(p.asInstanceOf[Formal].name + "_c"), p.asInstanceOf[Formal].typ) }
 
     def lastParamIndex = params.size - 1
 
@@ -995,6 +1008,7 @@ object JVM2CL {
         }
         else if (isFunction(baseTyp)) {
           // worklist += CompileMethodTask(method, baseTyp)
+/*
           println("CLOSURE METHOD: " + method.name)
           // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
           val applyMethods = baseTyp.getSootClass.getMethods.filter(mn => mn.getName.equals("apply") && !mn.getParameterType(0).toString.equals("java.lang.Object"))
@@ -1006,10 +1020,10 @@ object JVM2CL {
 
           arraystructs.structs += ValueType("EnvX") -> List(StructDef(Id("EnvX"), args.map(ca => VarDef(translateType(ca.getType), Id(mangleName(ca.asInstanceOf[Local].getName))))))
 
-          TreeSeq(VarDef(StructType("EnvX"), Id("env")) :: args.map(ca => Assign(Select(Id("env"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
+          TreeSeq(VarDef(StructType("EnvX"), Id("this")) :: args.map(ca => Assign(Select(Id("env"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
           List(ClosureCall(Id(mangleName(baseTyp.toString) + method.name), args.map(ca => translateExp(ca, symtab, anonFuns)))))
-
-          // Call(Id("makeClosure"), args.map(a => translateExp(a, symtab, anonFuns)))
+*/
+          Call(Id("makeClosure"), args.map(a => translateExp(a, symtab, anonFuns)))
         }
         else {
           // worklist += CompileMethodTask(method)
@@ -1123,6 +1137,7 @@ object JVM2CL {
                   worklist += CompileMethodTask(method, findSelf(base, symtab.self), true, anonFunParams.toList) 
                 else worklist += CompileMethodTask(method, findSelf(base, symtab.self), true)
 
+
                         // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
                         // Then generate a call to a dispatch method:
                         // e.g.,
@@ -1234,11 +1249,17 @@ object JVM2CL {
                 println("CLOSURE METHOD: " + method.name)
                 // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
                 val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
-            
+                
+                var fd: FunDef = null
                 for (applyMethod <- applyMethods) {
                   println("Found apply method: " + applyMethod.getSignature)
-                  worklist += CompileMethodTask(applyMethod, closureTyp)
                 }
+                
+                fd = compileMethod(applyMethods.head, closureTyp, symtab.level + 1, false, anonFuns)
+
+                symtab.addInlineParams(fd.formals)
+
+                worklist += CompileMethodTask(applyMethods.head, closureTyp)
                 ClosureCall(Id(mangleName(closureTyp.toString) + method.name), closureArgs.map(ca => translateExp(ca, symtab, anonFuns)) ::: args.map(a => translateExp(a, symtab, anonFuns)))
 
             case _ => Call(Select(b, method.name), args.map(a => translateExp(a, symtab, anonFuns)))
@@ -1286,7 +1307,7 @@ object JVM2CL {
       case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
       case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
 
-      case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ Select(base, fieldRef.name) }
+      case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ Select(base, mangleName(fieldRef.name)) }
       case GArrayRef(base, index) => ArrayAccess(Select(base, "data"), index)
 
       case v => Id("unsupported:" + v.getClass.getName)
@@ -1305,54 +1326,61 @@ object JVM2CL {
           case GNop() => Nop
           case GReturnVoid() => Return
           case GReturn(returned) => returned match {
-            /*
             case GNewInvoke(closureTyp, closureMethod, closureArgs) => {
               val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals("apply"))
-              // closureArgs.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
+            
+              for (applyMethod <- applyMethods) {
+                println("Found apply method: " + applyMethod.getSignature)
+              }
 
-              println("GReturn::NewInvoke Translating method inline: " + closureMethod.getSignature + " of " + closureTyp.getClassName)
-              if (applyMethods.length > 0) {
-                val (params, body) = compileMethod(applyMethods.head, closureTyp, symtab.level + 1, false, anonFuns) match {
-                  case FunDef(_, _, p, b) => (p, b)
-                  case _ => null
-                }
-                symtab.addInlineParams(params)
-                body
-              }
-              else {
-                val (params, body) = compileMethod(closureMethod.resolve, closureTyp, symtab.level + 1, false, anonFuns) match {
-                  case FunDef(_, _, p, b) => (p, b)
-                  case _ => null
-                }
-                symtab.addInlineParams(params)
-                body
-              }
+              var fd: FunDef = null
+              if (applyMethods.length > 0) 
+                fd = compileMethod(applyMethods.head, closureTyp, symtab.level + 1, false, anonFuns)
+              else
+                fd = compileMethod(closureMethod.resolve, closureTyp, symtab.level + 1, false, anonFuns)
+
+              // Add closure formals to calling function params
+              symtab.addInlineParams(fd.formals) 
+
+              // Add closure function to worklist that takes ENV struct
+              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(StructType("EnvX"), Id("this")) :: fd.formals, fd.body))
+
+              arraystructs.structs += ValueType("EnvX") -> List(StructDef(Id("EnvX"), closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => VarDef(translateType(ca.getType), Id(mangleName(ca.asInstanceOf[Local].getName))))))
+
+              TreeSeq(VarDef(StructType("EnvX"), Id("this")) :: closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
+              List(ClosureCall(Id(mangleName(closureTyp.toString) + "apply"), Id("this") :: fd.formals.map(fp => Id(fp.asInstanceOf[Formal].name + "_c")))))
             }
+            /*
             case GVirtualInvoke(base, method, args) => {
-              println("GReturn::VirtualInvoke Translating method inline: " + method.getSignature + " of " + base.getType.toString)
+              println("GReturn::VirtualInvoke Translating method: " + method.getSignature + " of " + base.getType.toString)
               // args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
-              val (params, body) = compileMethod(method.resolve, base, symtab.level + 1, false, anonFuns) match {
-                case FunDef(_, _, p, b) => (p, b)
-                case _ => null
-              }
-              symtab.addInlineParams(params)
-              body
-            }
-            case GInterfaceInvoke(base, method, args) if base.getType.toString.startsWith("scala.Function") => {
-              // println("GReturn::NewInvoke Found apply method: " + applyMethod.getSignature)
-              val applyMethod = new SootClass(base.getType.toString).getMethods.filter(mn => mn.getName.equals("apply")).head
-              args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
-              println("GReturn::InterfaceInvoke Translating method inline: " + method.getSignature + " of " +  base.getType.toString)
-              val (params, body) = compileMethod(applyMethod, base, symtab.level + 1, false, anonFuns) match {
-                case FunDef(_, _, p, b) => (p, b)
-                case _ => null
-              }
-              symtab.addInlineParams(params)
-              body
+            
+              compileMethod(method.resolve, base, symtab.level + 1, false, anonFuns)
+
+
+              ClosureCall(Id(mangleName(base.toString) + method.name), args.map(ca => translateExp(ca, symtab, anonFuns)))
+
             }
             */
+            case GInterfaceInvoke(base, method, args) if base.getType.toString.startsWith("scala.Function") => {
+              // println("GReturn::NewInvoke Found apply method: " + applyMethod.getSignature)
+              val applyMethods = new SootClass(base.getType.toString).getMethods.filter(mn => mn.getName.equals("apply"))
+            
+              for (applyMethod <- applyMethods) {
+                println("Found apply method: " + method.getSignature)
+              }
 
-            case GNewInvoke(_, _, _) => translateExp(returned, symtab, anonFuns)
+              if (applyMethods.length > 0) 
+                compileMethod(applyMethods.head, base, symtab.level + 1, false, anonFuns)
+              else
+                compileMethod(method.resolve, base, symtab.level + 1, false, anonFuns)
+
+              arraystructs.structs += ValueType("EnvX") -> List(StructDef(Id("EnvX"), args.map(ca => VarDef(translateType(ca.getType), Id(mangleName(ca.asInstanceOf[Local].getName))))))
+
+              TreeSeq(VarDef(StructType("EnvX"), Id("this")) :: args.map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
+              List(ClosureCall(Id(mangleName(base.toString) + method.name), args.map(ca => translateExp(ca, symtab, anonFuns)))))
+            }
+
             case _ => Return(translateExp(returned, symtab, anonFuns)) match {
               case Return(Cast(typ, StructLit(fields))) => {
                 val tmp = freshName("ret")
@@ -1458,7 +1486,7 @@ object JVM2CL {
   }
 
 
-  private def makeFunction(m: SootMethod, result: List[Tree], symtab: SymbolTable, takesThis: Boolean) : Tree = {
+  private def makeFunction(m: SootMethod, result: List[Tree], symtab: SymbolTable, takesThis: Boolean) : FunDef = {
     val paramTree = new ListBuffer[Tree]()
     val varTree = new ListBuffer[Tree]()
 
