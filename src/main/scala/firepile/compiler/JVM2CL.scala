@@ -1152,7 +1152,7 @@ object JVM2CL {
                         // void dispatch_m(A* x) {
                           //    switch (x.type) {
                             //       case TYPE_A: A_m((A*) x);
-                            //       case TYPE_B: B_m((B*) x);
+                            //       case TYPE_B: B_m((B*) x)R
                             //       case TYPE_C: C_m((C*) x);
                             //    }
                             // }
@@ -1272,10 +1272,27 @@ object JVM2CL {
             Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
           */
         }
-        case GNew(typ) => Id("NEW inside INTERFACE INVOKE")
-        case GNewInvoke(base, method, args) => Id("NEW INVOKE inside INTERFACE INVOKE")
-        case GThisRef(typ) => Id("THISREF inside INTERFACE INVOKE")
-        case GInstanceFieldRef(instBase, field) => { printf("GInstanceFieldRef:: instBase name = " + instBase.asInstanceOf[Local].getName); translateExp(base, symtab, anonFuns) }
+        case GInstanceFieldRef(instBase, fieldRef) => { 
+          printf("GInstanceFieldRef:: instBase name = " + instBase.asInstanceOf[Local].getName + " with method name " + method.name)
+          if (fieldRef.`type`.toString.startsWith("scala.Function")) {
+             anonFuns(fieldRef.name.substring(0, fieldRef.name.indexOf("$"))) match {
+               case GNewInvoke(closureTyp, closureMethod, closureArgs) => {
+                    println("CLOSURE METHOD: " + fieldRef.name)
+                    // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
+                    val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
+                  
+                    for (applyMethod <- applyMethods) {
+                      println("Found apply method: " + applyMethod.getSignature)
+                    }
+
+                    ClosureCall(Id(mangleName(closureTyp.toString) + method.name), args.map(a => translateExp(a, symtab, anonFuns)))
+                }
+                case _ => Select(base, mangleName(fieldRef.name))
+            }
+          }
+          else Select(base, mangleName(fieldRef.name))
+
+        }
         case GStaticInvoke(method, args)  => Id("STATICINVOKE inside INTERFACE INVOKE")
         case GVirtualInvoke(GLocal("id",SType("firepile.Spaces$Id1")),SMethodRef(SClassName("firepile.Spaces$Id1"),"config",_,_,_), _) => method match {
           case SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_) => Call(Id("get_local_size"), Id("0"))
@@ -1307,7 +1324,9 @@ object JVM2CL {
       case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
       case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
 
-      case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ Select(base, mangleName(fieldRef.name)) }
+      case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */ 
+            Select(base, mangleName(fieldRef.name)) 
+      }
       case GArrayRef(base, index) => ArrayAccess(Select(base, "data"), index)
 
       case v => Id("unsupported:" + v.getClass.getName)
