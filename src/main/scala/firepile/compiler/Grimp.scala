@@ -397,14 +397,16 @@ object GrimpUnapply {
   
   object GTableSwitchStmt {
     def unapply(v: SootUnit) = v match {
-      case x: TableSwitchStmt => Some((x.getKey, x.getLowIndex, x.getHighIndex, x.getTargets.toList, x.getDefaultTarget))
+      case x: TableSwitchStmt => Some((x.getKey, x.getLowIndex, x.getHighIndex,
+        x.getTargets.asInstanceOf[java.util.List[SootUnit]].toList, x.getDefaultTarget))
       case _ => None
     }
   }
 
   object GLookupSwitchStmt {
     def unapply(v: SootUnit) = v match {
-      case x: LookupSwitchStmt => Some((x.getKey, x.getLookupValues.toList, x.getTargets.toList, x.getDefaultTarget))
+      case x: LookupSwitchStmt => Some((x.getKey, x.getLookupValues.toList,
+        x.getTargets.asInstanceOf[java.util.List[SootUnit]].toList, x.getDefaultTarget))
       case _ => None
     }
   }
