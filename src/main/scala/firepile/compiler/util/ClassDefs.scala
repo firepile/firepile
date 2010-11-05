@@ -25,7 +25,7 @@ class JavaClassDef(
     val fields: List[JavaVarDef],
     val methods: List[JavaMethodDef],
     val flags: Long,
-    val interfaces: Chain[SootClass],
+    val interfaces: List[SootClass],
     val superclass: SootClass) extends ClassDef
 
   class JavaMethodDef(

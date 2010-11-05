@@ -12,6 +12,7 @@ import soot.ValueBox
 import soot.Local
 import soot.SootClass
 import soot.SootMethod
+import soot.SootField
 import soot.SootMethodRef
 import soot.Modifier
 import soot.RefType
@@ -46,61 +47,36 @@ object JavaTypeGen {
       println("usage: JavaTypeGen classname")
       exit(1)
     }
-//   setup
-//   val cdlist = getJavaSignature(args(0),new SootClass(args(0)))
   }
   
-  /*
-    
-  class JavaClassDef(
-      val name: String,
-      val fields: List[JavaVarDef],
-      val methods: List[JavaMethodDef],
-      val flags: Long,
-      val interfaces: List[SootClass],
-      val superclass: SootClass) extends ClassDef
-  
-    class JavaMethodDef(
-      val name: String,
-      val returnType: Type,
-      val params: List[JavaVarDef])
-  
-    class JavaVarDef(
-      val name: String,
-      val fieldTyp: Type,
-   )
-    
-    */
-
 def getJavaSignature( classname: String, sootclass: SootClass) : List[JavaClassDef] = { 
-
- var fieldList = ListBuffer[JavaVarDef]()
- var methodList= ListBuffer[JavaMethodDef]()
+            
  
- for(i <- sootclass.getFields)
-    fieldList+= new JavaVarDef(i.getName,i.getType)
- 
- for(i <- sootclass.getMethods){
-  var parList = ListBuffer[JavaVarDef]()
-  var a = ListBuffer[soot.Type]()
-  for(k <- 0 until i.getParameterTypes.length)
-  a+= i.getParameterType(k) 
-  //val a: List[soot.Type]= i.getParameterTypes
-  for(j <- a)
-  parList += (new JavaVarDef("",j))
-  methodList += (new JavaMethodDef(i.getName,i.getReturnType,parList.toList))
- }
- 
-val s= new JavaClassDef(
+List(new JavaClassDef(
 classname,
-fieldList.toList,
-methodList.toList,
+sootclass.getFields.map(i => i match {
+                             case j: SootField => new JavaVarDef(i.getName,i.getType)
+                             case _ => null
+                             }).toList.filter(_.isInstanceOf[JavaVarDef]),
+ sootclass.getMethods.map(i => i match {
+                               case s: SootMethod=>{ new JavaMethodDef(i.getName,i.getReturnType,
+                               i.getParameterTypes.map(j => j match {
+                                                           case st: SootType => new JavaVarDef("",st)
+                                                           case _ => null
+                                                           }).toList.filter(_.isInstanceOf[JavaVarDef])
+                                                           )
+                                                    }
+                               case _ => null
+                              }).toList.filter(_.isInstanceOf[JavaMethodDef]),
 0L,
-sootclass.getInterfaces,
+sootclass.getInterfaces.map( i => i match { 
+                                  case s: SootClass =>  s
+                                  case _ => null
+                                  }).toList.filter(_.isInstanceOf[SootClass]),
 sootclass.getSuperclass)
 
-List(s)
+)
   }
-
+ 
 }
 
