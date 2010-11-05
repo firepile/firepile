@@ -1285,6 +1285,7 @@ object JVM2CL {
                       println("Found apply method: " + applyMethod.getSignature)
                     }
 
+                    worklist += CompileMethodTask(applyMethods.head, closureTyp)
                     ClosureCall(Id(mangleName(closureTyp.toString) + method.name), args.map(a => translateExp(a, symtab, anonFuns)))
                 }
                 case _ => Select(base, mangleName(fieldRef.name))
