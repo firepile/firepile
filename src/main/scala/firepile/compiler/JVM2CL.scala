@@ -562,7 +562,7 @@ object JVM2CL {
       }
       if (!structs.contains(typ)) {
         structs += typ -> List(StructDef("g_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global",PtrType(arrayTyp)), Id("data")))),
-       StructDef("firepile_Spaces_Id1",List(VarDef(IntType, Id("id_local")), VarDef(IntType, Id("id_global")), VarDef(IntType, Id("id_localsize")))),
+       StructDef("kernel_id",List(VarDef(IntType, Id("id_local")), VarDef(IntType, Id("id_global")), VarDef(IntType, Id("id_localsize")))),
        StructDef("l_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local",PtrType(arrayTyp)), Id("data")))),
        StructDef("c_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant",PtrType(arrayTyp)), Id("data")))),
        StructDef("p_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private",PtrType(arrayTyp)), Id("data")))))
@@ -1467,7 +1467,7 @@ object JVM2CL {
           // TODO
           case GTableSwitchStmt(key, lowIndex, highIndex, targets, defaultTarget) => {
             val lookupVals = (lowIndex to highIndex).toList
-            val valsWithTargets: List[(Int, SootUnit)] = (lookupVals.zip(targets)).filter(_.isInstanceOf[List[(Int, SootUnit)]])
+            val valsWithTargets: List[(Int, SootUnit)] = (lookupVals.zip(targets))
             Switch(translateExp(key, symtab, anonFuns), valsWithTargets.map(vt => Case(IntLit(vt._1), GoTo(translateLabel(vt._2, symtab)))) :::         List(Default(GoTo(translateLabel(defaultTarget, symtab)))))
           }
           case GLookupSwitchStmt(key: Local, lookupVals: List[Value], targets: List[Stmt], defaultTarget) => {
