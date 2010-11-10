@@ -328,7 +328,7 @@ object JVM2CL {
         return null
 
 
-    val symtab = new SymbolTable
+    val symtab = new SymbolTable(methodName(m))
     symtab.level = level
 
     val b = m.retrieveActiveBody
@@ -406,7 +406,7 @@ object JVM2CL {
 
   val ANY_TYPE = ValueType("__any__")
 
-  private class SymbolTable {
+  class SymbolTable(val methodName: String) {
     val labels = new HashMap[SootUnit, String]()
     val params = new HashMap[Int, (Id, Tree)]()
     val locals = new HashMap[Id, Tree]()
@@ -445,6 +445,7 @@ object JVM2CL {
     }
 
     def addInlineParams(ip: List[Tree]) = for (p <- ip) { params(params.size) = (Id(p.asInstanceOf[Formal].name + "_c"), p.asInstanceOf[Formal].typ) }
+    def addInlineParamsNoRename(ip: List[Tree]) = for (p <- ip) { params(params.size) = (Id(p.asInstanceOf[Formal].name), p.asInstanceOf[Formal].typ) }
 
     def lastParamIndex = params.size - 1
 
@@ -836,7 +837,7 @@ object JVM2CL {
   }
 
   object Operator { 
-    def unapply(v: Value) = {
+    def unapply(v: Value)(implicit iv: (SymbolTable,HashMap[String,Value]) = null)  = {
       val result = v match {
         case GXor(op1, op2) => Bin(op1, "^", op2)
         case GOr(op1, op2) => Bin(op1, "|", op2)
@@ -1236,7 +1237,7 @@ object JVM2CL {
       case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)) ;Id("unimplemented:staticfield") }
 
       case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
-            Select(base, mangleName(fieldRef.name))
+            Select(Deref(base), mangleName(fieldRef.name))
       }
       case GArrayRef(base, index) => ArrayAccess(Select(base, "data"), index)
 
@@ -1308,7 +1309,22 @@ object JVM2CL {
                       }
                     }
                   }
-  
+
+                  val anonFunsLookup = new HashMap[String,Value]()
+
+                  for (af <- anonFunParams) {
+                    val (index, value) = af
+                    println("FUNCTION TYPE: " + value.getType.toString + " IS ARG OF " + method.resolve.getDeclaringClass)
+                    val cdef = getScalaSignature(method.resolve.getDeclaringClass.toString.replaceAll("\\$","")).head
+                    val mdef = cdef.methods.filter(m => m.name.equals(method.name)).head
+                    val paramName =  mdef.params(index).name
+                    println("FUNCTION PARAM IS NAMED: " + paramName)
+
+                    anonFunsLookup += paramName -> value
+                  }
+
+                  val FunDef(_, _, addParams, _) = compileMethod(method.resolve, symtab.level + 1, false, anonFunsLookup)
+
                   assert(possibleReceivers.length == methodReceiversRef.length)
   
                   val argsToPass = args.map(a => translateExp(a, symtab, anonFuns))    // Will need to cast "self" to appropriate type
@@ -1349,8 +1365,10 @@ object JVM2CL {
   		                    
                     }
                     
-                    Call(Id(methodName(methodReceiversRef.head)), Id("_this") :: argsToPass)
-                                          // TODO: pass in base, not this.  See 'should be' above :-)
+                    symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount))
+                    Call(Id(methodName(methodReceiversRef.head)), Id("_this") :: argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(a => Id(a.asInstanceOf[Formal].name)))
+
+                      // TODO: pass in base, not this.  See 'should be' above :-)
   
   
                     // If base is a 'new anonfun', should generate the call to apply right here (above).
@@ -1413,12 +1431,12 @@ object JVM2CL {
               symtab.addInlineParams(fd.formals)
 
               // Add closure function to worklist that takes ENV struct
-              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(StructType("EnvX"), Id("this")) :: fd.formals, fd.body))
+              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_EnvX")), Id("this")) :: fd.formals, fd.body))
 
-              arraystructs.structs += ValueType("EnvX") -> List(StructDef(Id("EnvX"), closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => VarDef(translateType(ca.getType), Id(mangleName(ca.asInstanceOf[Local].getName))))))
+              arraystructs.structs += ValueType(symtab.methodName + "_EnvX") -> List(StructDef(Id(symtab.methodName + "_EnvX"), closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => VarDef(translateType(ca.getType), Id(mangleName(ca.asInstanceOf[Local].getName))))))
 
-              TreeSeq(VarDef(StructType("EnvX"), Id("this")) :: closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
-              List(ClosureCall(Id(mangleName(closureTyp.toString) + "apply"), Id("this") :: fd.formals.map(fp => Id(fp.asInstanceOf[Formal].name + "_c")))))
+              TreeSeq(VarDef(StructType(symtab.methodName + "_EnvX"), Id("this")) :: closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
+              List(ClosureCall(Id(mangleName(closureTyp.toString) + "apply"), Ref(Id("this")) :: fd.formals.map(fp => Id(fp.asInstanceOf[Formal].name + "_c")))))
             }
             /*
             case GVirtualInvoke(base, method, args) => {
