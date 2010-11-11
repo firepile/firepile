@@ -88,6 +88,7 @@ object JVM2CL {
 
   private val makeCallGraph = true
   private var activeHierarchy: Hierarchy  = null
+  private var ids = Array(false,false,false)
 
   setup
 
@@ -342,7 +343,11 @@ object JVM2CL {
     val units = unitBuffer.toList
     println("Grimp method body:")
     println(units.mkString("\n"))
-
+    
+    for(i <- 0 until ids.length )
+    if(ids(i))
+    arraystructs.structs += ValueType("firepile_Spaces_Id"+(i+1)) -> List(StructDef("firepile_Spaces_Id"+(i+1),List(VarDef(IntType, Id("local")), VarDef(IntType, Id("global")), VarDef(IntType, Id("localsize")))))
+    
     val body = translateUnits(units, Nil, symtab, anonFuns)
 
     val labeled = insertLabels(units, symtab, body, Nil)
@@ -562,8 +567,7 @@ object JVM2CL {
         case _ => throw new RuntimeException("Unknown array type")
       }
       if (!structs.contains(typ)) {
-        structs += typ -> List(StructDef("g_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global",PtrType(arrayTyp)), Id("data")))),
-       StructDef("kernel_id",List(VarDef(IntType, Id("id_local")), VarDef(IntType, Id("id_global")), VarDef(IntType, Id("id_localsize")))),
+       structs += typ -> List(StructDef("g_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global",PtrType(arrayTyp)), Id("data")))),
        StructDef("l_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local",PtrType(arrayTyp)), Id("data")))),
        StructDef("c_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant",PtrType(arrayTyp)), Id("data")))),
        StructDef("p_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private",PtrType(arrayTyp)), Id("data")))))
@@ -918,15 +922,15 @@ object JVM2CL {
 
       case GCast(op, castTyp) => v match {
 		case GCast(GVirtualInvoke(GLocal(_,_),SMethodRef(classname,"local",_,_,_), _),_) => classname match {
-												    case SClassName("firepile.Spaces$Id1") => return Id("id.id_local")
-												    case SClassName("firepile.Spaces$Id2") => return Id("id.id_local")
-												    case SClassName("firepile.Spaces$Id3") => return Id("id.id_local")
+												    case SClassName("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.local")
+												    case SClassName("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.local")
+												    case SClassName("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.local")
 												    case _ => Cast(translateType(castTyp), op)
 												    }
 		case GCast(GVirtualInvoke(GLocal(_,_),SMethodRef(classname,"group",_,_,_), _),_) => classname match {
-												    case SClassName("firepile.Spaces$Id1") => return Id("id.id_global")
-												    case SClassName("firepile.Spaces$Id2") => return Id("id.id_global")
-												    case SClassName("firepile.Spaces$Id3") => return Id("id.id_global")
+												    case SClassName("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.global")
+												    case SClassName("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.global")
+												    case SClassName("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.global")
 												    case _ => Cast(translateType(castTyp), op)
 												    }
 		case _=> Cast(translateType(castTyp), op)
@@ -1087,22 +1091,22 @@ object JVM2CL {
             // don't assume the local is named "id"
             // handle Id2, Id3, ...
             case GVirtualInvoke(GCast(GVirtualInvoke(GLocal(_,stype),SMethodRef(_,"local",_,_,_), _),_),SMethodRef(_,"toInt",_,_,_),_) => stype match {
-																	case SType("firepile.Spaces$Id1") => return Id("id.id_local")
-																	case SType("firepile.Spaces$Id2") => return Id("id.id_local")
-																	case SType("firepile.Spaces$Id3") => return Id("id.id_local")
+																	case SType("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.local")
+																	case SType("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.local")
+																	case SType("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.local")
 																        case _ => defaultGVirtualInvoke(base,method,args,symtab,anonFuns)
 																     }
             case GVirtualInvoke(GCast(GVirtualInvoke(GLocal(_,stype),SMethodRef(_,"group",_,_,_), _),_),SMethodRef(_,"toInt",_,_,_),_) => stype match {
-																	case SType("firepile.Spaces$Id1") => return Id("id.id_global")
-																	case SType("firepile.Spaces$Id2") => return Id("id.id_global")
-																	case SType("firepile.Spaces$Id3") => return Id("id.id_global")
+																	case SType("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.global")
+																	case SType("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.global")
+																	case SType("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.global")
 																        case _ => defaultGVirtualInvoke(base,method,args,symtab,anonFuns)
 																	}case GVirtualInvoke(_,SMethodRef(SClassName("firepile.tests.Reduce3$localMem$"),"barrier",_,_,_),_) => return Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))
             case _ => v match{
               case GVirtualInvoke(GVirtualInvoke(GLocal(_,stype),SMethodRef(SClassName("firepile.Spaces$Config"),"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) => stype match {
-																										case SType("firepile.Spaces$Id1") => return Id("id.id_localsize")
-																										case SType("firepile.Spaces$Id2") => return Id("id.id_localsize")
-																										case SType("firepile.Spaces$Id3") => return Id("id.id_localsize")
+																										case SType("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.localsize")
+																										case SType("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.localsize")
+																										case SType("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.localsize")
 																										case _ => defaultGVirtualInvoke(base,method,args,symtab,anonFuns)
 																										}
               case _ =>defaultGVirtualInvoke(base,method,args,symtab, anonFuns)
@@ -1204,9 +1208,9 @@ object JVM2CL {
 
       case GLocal(name, typ) => v match { 
            case GLocal(_,SMethodRef(classname,"local",_,_,_)) => classname match {
-   								case SClassName("firepile.Spaces$Id1") => return Id("id.id_local")
-   								case SClassName("firepile.Spaces$Id2") => return Id("id.id_local")
-   								case SClassName("firepile.Spaces$Id3") => return Id("id.id_local")
+   								case SClassName("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.local")
+   								case SClassName("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.local")
+   								case SClassName("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.local")
    							        case _ => {
 									     if (anonFuns.contains(name))
 									       translateExp(anonFuns(name), symtab, anonFuns)
@@ -1215,9 +1219,9 @@ object JVM2CL {
 									   }
    								}
            case GLocal(_,SMethodRef(classname,"group",_,_,_)) => classname match {
-   								case SClassName("firepile.Spaces$Id1") => return Id("id.id_global")
-   								case SClassName("firepile.Spaces$Id2") => return Id("id.id_global")
-   								case SClassName("firepile.Spaces$Id3") => return Id("id.id_global")
+   								case SClassName("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.global")
+   								case SClassName("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.global")
+   								case SClassName("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.global")
    								case _ => {
 									     if (anonFuns.contains(name))
 									       translateExp(anonFuns(name), symtab, anonFuns)
@@ -1340,21 +1344,21 @@ object JVM2CL {
   		                    args(0) match {
   		                   
   		                    case GCast(GVirtualInvoke(GLocal(_,stype),SMethodRef(_,"local",_,_,_), _),SType("firepile.Spaces$Point1")) =>  stype match {
-  		  																	case SType("firepile.Spaces$Id1") => return Id("id.id_local")
-  		  																	case SType("firepile.Spaces$Id2") => return Id("id.id_local")
-  		  																	case SType("firepile.Spaces$Id3") => return Id("id.id_local")
+  		  																	case SType("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.local")
+  		  																	case SType("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.local")
+  		  																	case SType("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.local")
   		  																	case _ => ;
   		  																	}
   		  		  case GCast(GVirtualInvoke(GLocal(_,stype),SMethodRef(_,"group",_,_,_), _),SType("firepile.Spaces$Point1")) =>  stype match {
-  		  																	case SType("firepile.Spaces$Id1") => return Id("id.id_global")
-  		  																	case SType("firepile.Spaces$Id2") => return Id("id.id_global")
-  		  																	case SType("firepile.Spaces$Id3") => return Id("id.id_global")
+  		  																	case SType("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.global")
+  		  																	case SType("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.global")
+  		  																	case SType("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.global")
   		  																	case _ => ;
   		  																	}
   		                    case GInterfaceInvoke(GVirtualInvoke(GLocal(_,stype),SMethodRef(_,"config",_,_,_), _),SMethodRef(SClassName("firepile.Spaces$Config"),"localSize",_,_,_),_) =>  stype match {
-  		  																						case SType("firepile.Spaces$Id1") => return Id("id.id_localsize")
-  		  																						case SType("firepile.Spaces$Id2") => return Id("id.id_localsize")
-  		  																						case SType("firepile.Spaces$Id3") => return Id("id.id_localsize")
+  		  																						case SType("firepile.Spaces$Id1") => ids(0)=true; return Id("id1.localsize")
+  		  																						case SType("firepile.Spaces$Id2") => ids(1)=true; return Id("id2.localsize")
+  		  																						case SType("firepile.Spaces$Id3") => ids(2)=true; return Id("id3.localsize")
   		  																						case _ => ;
   		  																						}
   		                    case _ => ;
