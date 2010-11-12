@@ -1081,7 +1081,134 @@ object JVM2CL {
       case GVirtualInvoke(base, method, args) => {
         handleIdsVirtualInvoke(v) match {
           case Some(x) => x
-          case _ => defaultGVirtualInvoke(base, method, args, symtab, anonFuns)
+          // case _ => defaultGVirtualInvoke(base, method, args, symtab, anonFuns)
+          case _ => {
+            //implicit val iv: (SymbolTable, HashMap[String,Value]) = (symtab, anonFuns)
+            val anonFunParams = new ListBuffer[(Int, Value)]()
+            var argCount = 0
+            args.zipWithIndex.foreach {
+              case (a, argCount) => if (isFunction(a.getType)) { anonFunParams += ((argCount, a)) }
+            }
+
+            // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
+            // Then generate a call to a dispatch method:
+            // e.g.,
+            // class A { def m = ... }
+            // class B extends A { def m = ... }
+            // class C extends A { def m = ... }
+            // val x: A = new C
+            // x.m   // invokevirtual(x, A.m, Nil)
+            // -->
+            // dispatch_m(x)
+            // where:
+            // void dispatch_m(A* x) {
+            //    switch (x.type) {
+            //       case TYPE_A: A_m((A*) x);
+            //       case TYPE_B: B_m((B*) x)R
+            //       case TYPE_C: C_m((C*) x);
+            //    }
+            // }
+            //
+            // Also need to define structs for each class with a type field as the first word.
+            //
+            // For now: just handle calls x.m() where we know either the static type
+            // of x (e.g., A) is final, or m is final in A, or we know that no
+            // subclasses of A override m
+
+            // rewrite to:
+
+            val possibleReceivers = getPossibleReceivers(base, method)
+            println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
+
+            assert(possibleReceivers.length > 0)
+
+            val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
+
+            val methodReceiversRef = ListBuffer[SootMethod]()
+
+            for (pr <- possibleReceivers) {
+              for (m <- pr.methodIterator) {
+                if (!m.isAbstract) {
+                  val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+                  println("Checking method: " + sig + " against " + methodSig)
+                  if (sig.equals(methodSig)) {
+                    println("Adding CompileMethodTask(" + method + ", " + pr + ")")
+                    if (args.length > 0)
+                      worklist += CompileMethodTask(method, true, anonFunParams.toList)
+                    else
+                      worklist += CompileMethodTask(method, true)
+                    methodReceiversRef += m
+                    classtab.addClass(pr)
+                  }
+                }
+              }
+            }
+
+            val anonFunsLookup = new HashMap[String, Value]()
+
+            for (af <- anonFunParams) {
+              val (index, value) = af
+              println("FUNCTION TYPE: " + value.getType.toString + " IS ARG OF " + method.resolve.getDeclaringClass)
+              val cdef = getScalaSignature(method.resolve.getDeclaringClass.toString.replaceAll("\\$", "")).head
+              val mdef = cdef.methods.filter(m => m.name.equals(method.name)).head
+              val paramName = mdef.params(index).name
+              println("FUNCTION PARAM IS NAMED: " + paramName)
+
+              anonFunsLookup += paramName -> value
+            }
+
+            val FunDef(_, _, addParams, _) = compileMethod(method.resolve, symtab.level + 1, false, anonFunsLookup)
+
+            assert(possibleReceivers.length == methodReceiversRef.length)
+
+            val argsToPass = args.map(a => translateExp(a, symtab, anonFuns)) // Will need to cast "self" to appropriate type
+
+            if (possibleReceivers.length == 1) {
+              // monomorphic call
+              // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
+              println("Monomorphic call to " + methodName(method))
+              if (methodName(method).startsWith("firepile_Spaces_Point") || methodName(method).startsWith("firepile_Spaces_point")) {
+                if (args.length == 1) 
+                  handleIdsVirtualInvoke(args(0)) match {
+                    case Some(x) => return x
+                    case _ => { }
+                  }
+              }
+
+
+              symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount))
+              Call(Id(methodName(methodReceiversRef.head)), Id("_this") :: argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(a => Id(a.asInstanceOf[Formal].name)))
+
+              // TODO: pass in base, not this.  See 'should be' above :-)
+
+              // If base is a 'new anonfun', should generate the call to apply right here (above).
+              // calls on 'new anonfun' should not be polymorphic.
+            } else {
+              // polymorphic call--generate a switch
+
+              val methodFormals: List[Tree] = compileMethod(method.resolve, 0, false, null) match {
+                case FunDef(_, _, formals, _) => formals
+                case _ => Nil
+              }
+
+              val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
+                case Formal(_, name) => Id(name)
+                case _ => Id("Wtf: No Name?")
+              })
+
+              val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
+
+              val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName + "_intr")), Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
+
+              // add appropriate formal parameters for call
+              worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString), Id("dispatch_" + method.declaringClass.getName), Formal(PtrType(Id(method.declaringClass.getName + "_intr")), "cls") :: methodFormals, List(switchStmt).toArray: _*))
+
+              // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
+              // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
+              Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
+            }
+
+          }
         }
       }
 
@@ -1272,135 +1399,6 @@ object JVM2CL {
     None
   }
 
-  private def defaultGVirtualInvoke(base: Value, method: SootMethodRef, args: List[Value], symtab: SymbolTable, anonFuns: HashMap[String, Value]): Tree = {
-    {
-      //implicit val iv: (SymbolTable, HashMap[String,Value]) = (symtab, anonFuns)
-      val anonFunParams = new ListBuffer[(Int, Value)]()
-      var argCount = 0
-      args.zipWithIndex.foreach {
-        case (a, argCount) => if (isFunction(a.getType)) { anonFunParams += ((argCount, a)) }
-      }
-
-      // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
-      // Then generate a call to a dispatch method:
-      // e.g.,
-      // class A { def m = ... }
-      // class B extends A { def m = ... }
-      // class C extends A { def m = ... }
-      // val x: A = new C
-      // x.m   // invokevirtual(x, A.m, Nil)
-      // -->
-      // dispatch_m(x)
-      // where:
-      // void dispatch_m(A* x) {
-      //    switch (x.type) {
-      //       case TYPE_A: A_m((A*) x);
-      //       case TYPE_B: B_m((B*) x)R
-      //       case TYPE_C: C_m((C*) x);
-      //    }
-      // }
-      //
-      // Also need to define structs for each class with a type field as the first word.
-      //
-      // For now: just handle calls x.m() where we know either the static type
-      // of x (e.g., A) is final, or m is final in A, or we know that no
-      // subclasses of A override m
-
-      // rewrite to:
-
-      val possibleReceivers = getPossibleReceivers(base, method)
-      println("possibleReceiver(" + base + ", " + method + ") = " + possibleReceivers)
-
-      assert(possibleReceivers.length > 0)
-
-      val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
-
-      val methodReceiversRef = ListBuffer[SootMethod]()
-
-      for (pr <- possibleReceivers) {
-        for (m <- pr.methodIterator) {
-          if (!m.isAbstract) {
-            val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-            println("Checking method: " + sig + " against " + methodSig)
-            if (sig.equals(methodSig)) {
-              println("Adding CompileMethodTask(" + method + ", " + pr + ")")
-              if (args.length > 0)
-                worklist += CompileMethodTask(method, true, anonFunParams.toList)
-              else
-                worklist += CompileMethodTask(method, true)
-              methodReceiversRef += m
-              classtab.addClass(pr)
-            }
-          }
-        }
-      }
-
-      val anonFunsLookup = new HashMap[String, Value]()
-
-      for (af <- anonFunParams) {
-        val (index, value) = af
-        println("FUNCTION TYPE: " + value.getType.toString + " IS ARG OF " + method.resolve.getDeclaringClass)
-        val cdef = getScalaSignature(method.resolve.getDeclaringClass.toString.replaceAll("\\$", "")).head
-        val mdef = cdef.methods.filter(m => m.name.equals(method.name)).head
-        val paramName = mdef.params(index).name
-        println("FUNCTION PARAM IS NAMED: " + paramName)
-
-        anonFunsLookup += paramName -> value
-      }
-
-      val FunDef(_, _, addParams, _) = compileMethod(method.resolve, symtab.level + 1, false, anonFunsLookup)
-
-      assert(possibleReceivers.length == methodReceiversRef.length)
-
-      val argsToPass = args.map(a => translateExp(a, symtab, anonFuns)) // Will need to cast "self" to appropriate type
-
-      if (possibleReceivers.length == 1) {
-        // monomorphic call
-        // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
-        println("Monomorphic call to " + methodName(method))
-        if (methodName(method).startsWith("firepile_Spaces_Point") || methodName(method).startsWith("firepile_Spaces_point")) {
-          if (args.length == 1) 
-            handleIdsVirtualInvoke(args(0)) match {
-              case Some(x) => return x
-              case _ => { }
-            }
-        }
-
-
-        symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount))
-        Call(Id(methodName(methodReceiversRef.head)), Id("_this") :: argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(a => Id(a.asInstanceOf[Formal].name)))
-
-        // TODO: pass in base, not this.  See 'should be' above :-)
-
-        // If base is a 'new anonfun', should generate the call to apply right here (above).
-        // calls on 'new anonfun' should not be polymorphic.
-      } else {
-        // polymorphic call--generate a switch
-
-        val methodFormals: List[Tree] = compileMethod(method.resolve, 0, false, null) match {
-          case FunDef(_, _, formals, _) => formals
-          case _ => Nil
-        }
-
-        val methodFormalIds: List[Id] = methodFormals.map(mf => mf match {
-          case Formal(_, name) => Id(name)
-          case _ => Id("Wtf: No Name?")
-        })
-
-        val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
-
-        val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName + "_intr")), Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
-
-        // add appropriate formal parameters for call
-        worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString), Id("dispatch_" + method.declaringClass.getName), Formal(PtrType(Id(method.declaringClass.getName + "_intr")), "cls") :: methodFormals, List(switchStmt).toArray: _*))
-
-        // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
-        // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
-        Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
-      }
-
-    }
-  }
   private def translateUnits(units: List[SootUnit], result: List[Tree], symtab: SymbolTable, anonFuns: HashMap[String, Value]): List[Tree] = {
     implicit val iv: (SymbolTable, HashMap[String, Value]) = (symtab, anonFuns)
     units match {
