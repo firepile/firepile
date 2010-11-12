@@ -8,6 +8,8 @@ object Reduce3 {
   import firepile.Spaces._
   import firepile.Args._
   import firepile.util.BufferBackedArray._
+  import com.nativelibs4java.opencl._
+  import com.nativelibs4java.util._
 
   class size(exp: Int) extends scala.StaticAnnotation { }
   class local extends scala.StaticAnnotation { }
@@ -36,8 +38,27 @@ object Reduce3 {
   def main(args: Array[String]) = compile
 
   def compile = {
-    firepile.Compose.compileToTree(
+    val kernelStr = new StringBuffer()
+    val platform = JavaCL.listPlatforms()(0)
+    val devices = platform.listAllDevices(true)
+
+    val context = platform.createContext(null, devices(0))
+
+    val (_,tree) = firepile.Compose.compileToTree(
       (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f), 2)
+
+    println("---------------------")
+    for (t <- tree.reverse) {
+      println(t.toCL)
+      kernelStr.append(t.toCL)
+    }
+
+    try {
+      val program = context.createProgram(kernelStr.toString).build
+    } catch {
+      case e => println(e)
+    }
+
     /*
     firepile.Compose.compileToTree(
       (A: Array[Float], B: Array[Float], z: Float, f: (Float,Float)=>Float) => reduce(A, B, A.length, f, z), 2)

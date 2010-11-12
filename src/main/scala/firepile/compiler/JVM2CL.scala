@@ -91,6 +91,7 @@ object JVM2CL {
   private val makeCallGraph = true
   private var activeHierarchy: Hierarchy = null
   private var ids = Array(false, false, false)
+  private val preamble = ListBuffer[Tree]()
 
   setup
 
@@ -166,6 +167,8 @@ object JVM2CL {
       Options.v.set_whole_program(true)
 
     activeHierarchy = Scene.v.getActiveHierarchy
+
+   
   }
 
   def methodName(m: SootMethod): String = mangleName(m.getDeclaringClass.getName + m.getName)
@@ -235,16 +238,57 @@ object JVM2CL {
         }
       }
 
-      compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
-        case null => Nil
-        case t => t :: Nil
-      }
+      println("TASK RUN ON METHOD NAME: " + m.name)
+
+      if (m.declaringClass.getName.startsWith("java.lang") || m.declaringClass.getName.startsWith("firepile.Spaces") || m.declaringClass.getName.startsWith("scala.runtime") || m.declaringClass.getName.startsWith("scala.Product") || m.name.equals("<init>"))
+        Nil
+      else
+        compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
+          case null => Nil
+          case t => t :: Nil
+        }
     }
   }
 
   // for now, alias the types; later there may be a difference
-  val CompileRootMethodTask = CompileMethodTask
-  type CompileRootMethodTask = CompileMethodTask
+  // val CompileRootMethodTask = CompileMethodTask
+  // type CompileRootMethodTask = CompileMethodTask
+
+  case class CompileRootMethodTask(method: SootMethodRef, takesThis: Boolean, anonFuns: List[(Int, Value)]) extends Task {
+    def run = {
+      val m = method
+      val anonFunsLookup = new HashMap[String, Value]()
+
+      // Force the class's method bodies to be loaded.
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.HIERARCHY)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.SIGNATURES)
+      Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.BODIES)
+
+      if (anonFuns != null) {
+        for (af <- anonFuns) {
+          val (index, value) = af
+          println("FUNCTION TYPE: " + value.getType.toString + " IS ARG OF " + method.resolve.getDeclaringClass)
+          val cdef = getScalaSignature(method.resolve.getDeclaringClass.toString.replaceAll("\\$", "")).head
+          val mdef = cdef.methods.filter(m => m.name.equals(method.name)).head
+          val paramName = mdef.params(index).name
+          println("FUNCTION PARAM IS NAMED: " + paramName)
+
+          anonFunsLookup += paramName -> value
+        }
+      }
+
+      preamble += Id("#define makeClosure(x) NULL")
+      // preamble += Id("#define boxToFloat(x) x")
+      // preamble += Id("#define unboxToFloat(x) x")
+      preamble += Id("typedef void scala_Function2;")
+
+      compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
+        case null => Nil
+        case t => KernelFunDef(t.name, t.formals, t.body) :: Nil
+      }
+    }
+  }
+
 
   private val worklist = new Worklist[Task]
 
@@ -283,13 +327,29 @@ object JVM2CL {
 
   private def processWorklist = {
     val results = ListBuffer[Tree]()
+    val functionDefs = HashMap[String,Tree]()
 
     while (!worklist.isEmpty) {
       val task = worklist.dequeue
       val ts = task.run
-      results ++= ts
+      ts match {
+        case FunDef(PtrType(ValueType("scala_Function2")), n, f, b) :: fs => {
+          if (!functionDefs.contains(n) && !n.equals("firepile_Spaces_Point1<init>")) {
+            functionDefs += n -> FunDec(VoidType, n, f)
+            results ++= FunDef(VoidType, n, f, b) :: fs
+          }
+        }
+        case FunDef(t, n, f, _) :: fs => {
+          if (!functionDefs.contains(n) && !n.equals("firepile_Spaces_Point1<init>")) {
+            functionDefs += n -> FunDec(t, n, f)
+            results ++= ts
+          }
+        }
+        case _ => results ++= ts
+      }
     }
-    val tree = preamble.toList ::: classtab.dumpClassTable ::: arraystructs.dumpArrayStructs ::: results.toList
+
+    val tree = preamble.toList ::: /* classtab.dumpClassTable ::: */ arraystructs.dumpArrayStructs ::: functionDefs.values.toList ::: results.toList
 
     println()
     println("Result tree:")
@@ -329,6 +389,11 @@ object JVM2CL {
     val symtab = new SymbolTable(methodName(m))
     symtab.level = level
 
+    if (kernelMethod) {
+      symtab.kernelMethod = true
+      kernelMethod = false
+    }
+
     val b = m.retrieveActiveBody
     val gb = Grimp.v.newBody(b, "gb")
 
@@ -349,7 +414,7 @@ object JVM2CL {
 
     val labeled = insertLabels(units, symtab, body, Nil)
 
-    val fun = makeFunction(m, removeThis(labeled, symtab), symtab, takesThis)
+    val fun = makeFunction(m, removeThis(labeled, symtab), symtab, false)
 
     // TODO: don't removeThis for normal methods; do removeThis for closures
     // TODO: verify that this is not used in the body of the method
@@ -410,7 +475,8 @@ object JVM2CL {
 
   val ANY_TYPE = ValueType("__any__")
 
-  val preamble = ListBuffer[Tree]()
+
+  var kernelMethod = true
 
   class SymbolTable(val methodName: String) {
     val labels = new HashMap[SootUnit, String]()
@@ -418,6 +484,7 @@ object JVM2CL {
     val locals = new HashMap[Id, Tree]()
     val arrays = new HashMap[Id, (Tree /*type*/ , Tree /*size*/ )]()
     var thisParam: (Id, Tree) = null
+    var kernelMethod = false
     var level: Int = 0
 
     def addThisParam(typ: SootType, id: Id) = {
@@ -472,21 +539,10 @@ object JVM2CL {
       if (!knownClasses.contains(cls) && !cls.getName.startsWith("java.")) {
         enumElements += Id(cls.getName + "_ID")
 
-        // Broken in 184
-
         val sSig = if (cls.getName.contains("$")) getScalaJavaSignature(cls.getName, cls)
         else getScalaSignature(cls.getName)
 
         val scalaSig = sSig.asInstanceOf[List[ScalaClassDef]]
-
-        // TEMPORARY FIX
-        //val scalaSig = getScalaSignature(cls.getName)
-
-        /*
-            println(" Scala Sig Class Name:"+cls.getName)
-            println(" Scala Sig ")
-            printClassDef(scalaSig)
-            */
 
         if (scalaSig == null)
           throw new RuntimeException("ClassTable::addClass unable to getScalaSignature for " + cls.getName)
@@ -573,7 +629,7 @@ object JVM2CL {
           StructDef("p_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
       }
 
-      StructType(arrayTyp.name + "Array")
+      MemType("global", StructType("g_" + arrayTyp.name + "Array"))
     }
 
     def dumpArrayStructs = {
@@ -1213,12 +1269,16 @@ object JVM2CL {
                   case _ => { }
                 }
               }
-              
-              idStructPops += Call(Id(methodName(methodReceiversRef.head)), Id("_this") :: argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(p => p match { 
-                  case Formal(PtrType(ValueType(s)),name) if s.startsWith("firepile_Spaces_Id") => Ref(Id(name))
-                  case Formal(PtrType(ValueType(s)),name) => Id(name) 
-                  case _ => Id(p.asInstanceOf[Formal].name)
-                }))
+
+              // TODO: calls to firepile_Spaces_point12int(i); shouldn't be hardcoded
+              if (methodName(methodReceiversRef.head).equals("firepile_Spaces_point12int")) 
+                idStructPops ++= argsToPass
+              else
+                idStructPops += Call(Id(methodName(methodReceiversRef.head)), /* Id("_this") :: */ argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(p => p match { 
+                    case Formal(PtrType(ValueType(s)),name) if s.startsWith("firepile_Spaces_Id") => Ref(Id(name))
+                    case Formal(PtrType(ValueType(s)),name) => Id(name) 
+                    case _ => Id(p.asInstanceOf[Formal].name)
+                  }))
 
               TreeSeq(idStructPops.toList)
 
@@ -1502,7 +1562,6 @@ object JVM2CL {
               TreeSeq(VarDef(StructType("EnvX"), Id("this")) :: args.map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
                 List(ClosureCall(Id(mangleName(base.toString) + method.name), args.map(ca => translateExp(ca, symtab, anonFuns)))))
             }
-
             case _ => Return(translateExp(returned, symtab, anonFuns)) match {
               case Return(Cast(typ, StructLit(fields))) => {
                 val tmp = freshName("ret")
@@ -1626,7 +1685,7 @@ object JVM2CL {
 
     for (((id: Id), (typ: Tree, size: IntLit)) <- symtab.arrays)
       varTree += ArrayDef(id, typ, size)
-
+    
     FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray: _*)
   }
 }

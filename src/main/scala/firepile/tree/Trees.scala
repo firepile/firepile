@@ -240,6 +240,12 @@ object Trees {
         def toCL = typ.toCL + " " + name + formals.map((t:Tree) => t.toCL).mkString("(", ", ", ") {\n") + indent(body.toCL) + "}\n\n"
 
     }
+    object FunDec {
+        def apply(typ: Tree, name: Id, formals: List[Tree]): FunDec = FunDec(typ, name.name, formals)
+    }
+    case class FunDec(typ: Tree, name: String, formals: List[Tree]) extends Tree {
+        def toCL = typ.toCL + " " + name + formals.map((t: Tree) => t.toCL).mkString("(", ", ", ");\n")
+    }
     object KernelFunDef {
         def apply(name: Id, formals: List[Tree], body: Tree): KernelFunDef = KernelFunDef(name.name, formals, body)
         def apply(name: Id, formals: List[Tree], body: Tree*): KernelFunDef = KernelFunDef(name.name, formals, Seq(body:_*))
