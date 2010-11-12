@@ -289,7 +289,7 @@ object JVM2CL {
       val ts = task.run
       results ++= ts
     }
-    val tree = classtab.dumpClassTable ::: arraystructs.dumpArrayStructs ::: results.toList
+    val tree = preamble.toList ::: classtab.dumpClassTable ::: arraystructs.dumpArrayStructs ::: results.toList
 
     println()
     println("Result tree:")
@@ -409,6 +409,8 @@ object JVM2CL {
   }
 
   val ANY_TYPE = ValueType("__any__")
+
+  val preamble = ListBuffer[Tree]()
 
   class SymbolTable(val methodName: String) {
     val labels = new HashMap[SootUnit, String]()
@@ -1176,8 +1178,51 @@ object JVM2CL {
               }
 
 
-              symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount))
-              Call(Id(methodName(methodReceiversRef.head)), Id("_this") :: argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(a => Id(a.asInstanceOf[Formal].name)))
+              symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount).filter(p => {
+                p match {
+                  case Formal(PtrType(ValueType(s)), _) if s.startsWith("firepile_Spaces_Id") => false
+                  case _ => true
+                }
+              }))
+
+              // Find Id param, remove it and create/populate Id struct
+              val idStructPops = ListBuffer[Tree]()
+              for (p <- addParams) {
+                p match {
+                  case Formal(typ: Tree, name: String) => typ match {
+                    case PtrType(ValueType("firepile_Spaces_Id1")) => {
+                      idStructPops += VarDef(StructType(Id("firepile_Spaces_Id1")), Id(name))
+                      idStructPops += Assign(Select(Id(name), Id("local")), Call(Id("get_local_id"), IntLit(0)))
+                      idStructPops += Assign(Select(Id(name), Id("global")), Call(Id("get_global_id"), IntLit(0)))
+                      idStructPops += Assign(Select(Id(name), Id("localsize")), Call(Id("get_local_size"), IntLit(0)))
+                    }
+                    case PtrType(ValueType("firepile_Spaces_Id2")) => {
+                      idStructPops += VarDef(StructType(Id("firepile_Spaces_Id2")), Id(name))
+                      idStructPops += Assign(Select(Id(name), Id("local")), Call(Id("get_local_id"), IntLit(1)))
+                      idStructPops += Assign(Select(Id(name), Id("global")), Call(Id("get_global_id"), IntLit(1)))
+                      idStructPops += Assign(Select(Id(name), Id("localsize")), Call(Id("get_local_size"), IntLit(1)))
+                    }
+                    case PtrType(ValueType("firepile_Spaces_Id3")) => {
+                      idStructPops += VarDef(StructType(Id("firepile_Spaces_Id3")), Id(name))
+                      idStructPops += Assign(Select(Id(name), Id("local")), Call(Id("get_local_id"), IntLit(2)))
+                      idStructPops += Assign(Select(Id(name), Id("global")), Call(Id("get_global_id"), IntLit(2)))
+                      idStructPops += Assign(Select(Id(name), Id("localsize")), Call(Id("get_local_size"), IntLit(2)))
+                    }
+                    case _ => { }
+                  }
+                  case _ => { }
+                }
+              }
+              
+              idStructPops += Call(Id(methodName(methodReceiversRef.head)), Id("_this") :: argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(p => p match { 
+                  case Formal(PtrType(ValueType(s)),name) if s.startsWith("firepile_Spaces_Id") => Ref(Id(name))
+                  case Formal(PtrType(ValueType(s)),name) => Id(name) 
+                  case _ => Id(p.asInstanceOf[Formal].name)
+                }))
+
+              TreeSeq(idStructPops.toList)
+
+
 
               // TODO: pass in base, not this.  See 'should be' above :-)
 
@@ -1436,18 +1481,9 @@ object JVM2CL {
               TreeSeq(VarDef(StructType(symtab.methodName + "_EnvX"), Id("this")) :: closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
                 List(ClosureCall(Id(mangleName(closureTyp.toString) + "apply"), Ref(Id("this")) :: fd.formals.map(fp => Id(fp.asInstanceOf[Formal].name + "_c")))))
             }
-            /*
-            case GVirtualInvoke(base, method, args) => {
-              println("GReturn::VirtualInvoke Translating method: " + method.getSignature + " of " + base.getType.toString)
-              // args.map(ca => { symtab.addParamVar(ca.getType, symtab.lastParamIndex + 1, Id("_arg" + (symtab.lastParamIndex + 1))) })
+            
+            case GVirtualInvoke(base, method, args) => translateExp(returned, symtab, anonFuns)
 
-              compileMethod(method.resolve, base, symtab.level + 1, false, anonFuns)
-
-
-              ClosureCall(Id(mangleName(base.toString) + method.name), args.map(ca => translateExp(ca, symtab, anonFuns)))
-
-            }
-            */
             case GInterfaceInvoke(base, method, args) if base.getType.toString.startsWith("scala.Function") => {
               // println("GReturn::NewInvoke Found apply method: " + applyMethod.getSignature)
               val applyMethods = new SootClass(base.getType.toString).getMethods.filter(mn => mn.getName.equals("apply"))
