@@ -354,12 +354,43 @@ object JVM2CL {
 
     println()
     println("Result tree:")
-    println(tree)
+    printTree(tree.asInstanceOf[scala.Product],0)
 
     println()
     println("Result CL:")
     for (t <- tree) println(t.toCL)
     tree
+  }
+  
+    def printTree(a: scala.Product, indent: Int): Unit =  { 
+  
+    for(i <- a.productIterator){ 
+  
+  	  try {
+  	  i match {
+  	  case l: List[Any] => println(); for( j <- l.asInstanceOf[List[scala.Product]] ) printTree(j,indent+2)
+  	  case TreeSeq(tree: Tree) => printTree(tree.asInstanceOf[scala.Product],indent+2)
+  	  case TreeSeq(list: List[Tree]) => println(); for(i <-list ) printTree(i.asInstanceOf[scala.Product],indent+2)
+            case TreeSeq(_) => printIndent(indent, i)
+            case Seq(a) => println(); for( j <-i.asInstanceOf[Seq[scala.Product]]) printTree(j,indent+2)
+            case _ => printIndent(indent, i)
+  	          
+  	  }
+  	  
+  	  }catch {
+  	  case e: ClassCastException => printIndent(indent,i)
+  	  case _ => printIndent(indent,i)
+  	  }
+  	  
+     } 
+    }
+    
+    def printIndent(indent: Int, item: Any): Unit ={
+    
+    println("")
+    for(i <-0 to indent)
+    print(" ")
+    print(item)
   }
 
   def isStatic(flags: Int) = (flags & 0x0008) != 0
