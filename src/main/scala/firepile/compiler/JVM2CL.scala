@@ -286,10 +286,22 @@ object JVM2CL {
       compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
         case null => Nil
         case t => {
-          KernelFunDef(t.name, t.formals.filter(f => f match {
+          val popArrayStructs = ListBuffer[Tree]()
+          // Convert array struct into raw type and length params for root
+          val frmls = t.formals.filter(f => f match {
               case Formal(StructType(typ),_) if typ.startsWith("firepile_Spaces_Id") => false
               case _ => true
-            }), t.body) :: Nil
+            }).flatMap(f => f match {
+              case Formal(StructType(typ), name) if typ.endsWith("Array") => {
+                val rawTypeName = typ.substring(typ.indexOf('_')+1, typ.lastIndexOf("Array"))
+                popArrayStructs += VarDef(StructType(typ), Id(name))
+                popArrayStructs += Assign(Select(Id(name), Id("data")), Id(name + "_data"))
+                popArrayStructs += Assign(Select(Id(name), Id("length")), Id(name + "_len"))
+                List(Formal(MemType("global", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("global",IntType), name + "_len"))
+              }
+              case x => List(x)
+            })
+          KernelFunDef(Id(t.name), frmls, TreeSeq(popArrayStructs.toList), t.body) :: Nil
         }
       }
     }
