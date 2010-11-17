@@ -285,7 +285,12 @@ object JVM2CL {
 
       compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
         case null => Nil
-        case t => KernelFunDef(t.name, t.formals, t.body) :: Nil
+        case t => {
+          KernelFunDef(t.name, t.formals.filter(f => f match {
+              case Formal(StructType(typ),_) if typ.startsWith("firepile_Spaces_Id") => false
+              case _ => true
+            }), t.body) :: Nil
+        }
       }
     }
   }
@@ -362,34 +367,30 @@ object JVM2CL {
     tree
   }
   
-    def printTree(a: scala.Product, indent: Int): Unit =  { 
-  
+  def printTree(a: scala.Product, indent: Int): Unit = { 
     for(i <- a.productIterator){ 
-  
-  	  try {
-  	  i match {
+      try {
+        i match {
   	  case l: List[Any] => println(); for( j <- l.asInstanceOf[List[scala.Product]] ) printTree(j,indent+2)
   	  case TreeSeq(tree: Tree) => printTree(tree.asInstanceOf[scala.Product],indent+2)
   	  case TreeSeq(list: List[Tree]) => println(); for(i <-list ) printTree(i.asInstanceOf[scala.Product],indent+2)
-            case TreeSeq(_) => printIndent(indent, i)
-            case Seq(a) => println(); for( j <-i.asInstanceOf[Seq[scala.Product]]) printTree(j,indent+2)
-            case _ => printIndent(indent, i)
+          case TreeSeq(_) => printIndent(indent, i)
+          case Seq(a) => println(); for( j <-i.asInstanceOf[Seq[scala.Product]]) printTree(j,indent+2)
+          case _ => printIndent(indent, i)
   	          
-  	  }
+        }
+      } catch {
+        case e: ClassCastException => printIndent(indent,i)
+        case _ => printIndent(indent,i)
+      }
   	  
-  	  }catch {
-  	  case e: ClassCastException => printIndent(indent,i)
-  	  case _ => printIndent(indent,i)
-  	  }
-  	  
-     } 
-    }
+    } 
+  }
     
-    def printIndent(indent: Int, item: Any): Unit ={
-    
+  def printIndent(indent: Int, item: Any): Unit = {
     println("")
     for(i <-0 to indent)
-    print(" ")
+      print(" ")
     print(item)
   }
 
@@ -1285,19 +1286,19 @@ object JVM2CL {
               for (p <- addParams) {
                 p match {
                   case Formal(typ: Tree, name: String) => typ match {
-                    case PtrType(StructType("firepile_Spaces_Id1")) => {
+                    case StructType("firepile_Spaces_Id1") => {
                       idStructPops += VarDef(StructType(Id("firepile_Spaces_Id1")), Id(name))
                       idStructPops += Assign(Select(Id(name), Id("localId")), Call(Id("get_local_id"), IntLit(0)))
                       idStructPops += Assign(Select(Id(name), Id("globalId")), Call(Id("get_global_id"), IntLit(0)))
                       idStructPops += Assign(Select(Id(name), Id("localSize")), Call(Id("get_local_size"), IntLit(0)))
                     }
-                    case PtrType(ValueType("firepile_Spaces_Id2")) => {
+                    case StructType("firepile_Spaces_Id2") => {
                       idStructPops += VarDef(StructType(Id("firepile_Spaces_Id2")), Id(name))
                       idStructPops += Assign(Select(Id(name), Id("localId")), Call(Id("get_local_id"), IntLit(1)))
                       idStructPops += Assign(Select(Id(name), Id("globalId")), Call(Id("get_global_id"), IntLit(1)))
                       idStructPops += Assign(Select(Id(name), Id("localSize")), Call(Id("get_local_size"), IntLit(1)))
                     }
-                    case PtrType(ValueType("firepile_Spaces_Id3")) => {
+                    case StructType("firepile_Spaces_Id3") => {
                       idStructPops += VarDef(StructType(Id("firepile_Spaces_Id3")), Id(name))
                       idStructPops += Assign(Select(Id(name), Id("localId")), Call(Id("get_local_id"), IntLit(2)))
                       idStructPops += Assign(Select(Id(name), Id("globalId")), Call(Id("get_global_id"), IntLit(2)))
@@ -1310,8 +1311,8 @@ object JVM2CL {
               }
 
               idStructPops += Call(Id(methodName(methodReceiversRef.head)), /* Id("_this") :: */ argsToPass ::: addParams.takeRight(addParams.length - method.resolve.getParameterCount).map(p => p match { 
-                    case Formal(PtrType(ValueType(s)),name) if s.startsWith("firepile_Spaces_Id") => Id(name)
-                    case Formal(PtrType(ValueType(s)),name) => Id(name) 
+                    case Formal(StructType(s),name) if s.startsWith("firepile_Spaces_Id") => Id(name)
+                    case Formal(StructType(s),name) => Id(name) 
                     case _ => Id(p.asInstanceOf[Formal].name)
                   }))
 
