@@ -294,10 +294,21 @@ object JVM2CL {
             }).flatMap(f => f match {
               case Formal(StructType(typ), name) if typ.endsWith("Array") => {
                 val rawTypeName = typ.substring(typ.indexOf('_')+1, typ.lastIndexOf("Array"))
-                popArrayStructs += VarDef(StructType(typ), Id(name))
-                popArrayStructs += Assign(Select(Id(name), Id("data")), Id(name + "_data"))
-                popArrayStructs += Assign(Select(Id(name), Id("length")), Id(name + "_len"))
-                List(Formal(MemType("global", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("global",IntType), name + "_len"))
+                typ match {
+                  case x if x.startsWith("g") => { // handle the global arrays
+                    popArrayStructs += VarDef(StructType(typ), Id(name))
+                    popArrayStructs += Assign(Select(Id(name), Id("data")), Id(name + "_data"))
+                    popArrayStructs += Assign(Select(Id(name), Id("length")), Id(name + "_len"))
+                    List(Formal(MemType("global", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("global",IntType), name + "_len"))
+                  }
+                  case x if x.startsWith("l") => { // handle the local arrays
+                    popArrayStructs += VarDef(StructType(typ), Id(name))
+                    popArrayStructs += Assign(Select(Id(name), Id("data")), Id(name + "_data"))
+                    popArrayStructs += Assign(Select(Id(name), Id("length")), Id(name + "_len"))
+                    List(Formal(MemType("local", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("local",IntType), name + "_len"))
+                  }
+                  case x => Nil
+                }
               }
               case x => List(x)
             })
@@ -1291,7 +1302,10 @@ object JVM2CL {
                   case Formal(PtrType(StructType(s)), _) if s.startsWith("firepile_Spaces_Id") => false
                   case _ => true
                 }
-              }))
+              }).map(p => p match {
+                   case Formal(StructType(s), name) if s.endsWith("Array") => Formal(StructType("l" + s.substring(1)), name)
+                   case x => x
+                 }))
 
               // Find Id param, remove it and create/populate Id struct
               val idStructPops = ListBuffer[Tree]()
@@ -1579,10 +1593,20 @@ object JVM2CL {
                 fd = compileMethod(closureMethod.resolve, symtab.level + 1, false, anonFuns)
 
               // Add closure formals to calling function params
-              symtab.addInlineParams(fd.formals)
+              symtab.addInlineParams(fd.formals.map(p => p match {
+                case Formal(StructType(s), name) if s.endsWith("Array")  => Formal(StructType("l" + s.substring(1)), name)
+                case x => x
+              }))
 
               // Add closure function to worklist that takes ENV struct
-              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_EnvX")), Id("this")) :: fd.formals, fd.body))
+              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_EnvX")), Id("this")) :: fd.formals.map(f =>
+                f match {
+                  case Formal(StructType(s), name) if s.endsWith("Array") => Formal(StructType("l" + s.substring(1)), name)
+                  case x => x
+                }), fold({
+                                  case StructType(s) if s.endsWith("Array") => StructType("l" + s.substring(1)) 
+                                  case t => t
+                                })(fd.body)))
 
               arraystructs.structs += ValueType(symtab.methodName + "_EnvX") -> List(StructDef(Id(symtab.methodName + "_EnvX"), closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => VarDef(translateType(ca.getType), Id(mangleName(ca.asInstanceOf[Local].getName))))))
 

@@ -10,6 +10,11 @@ object Reduce3 {
   import firepile.util.BufferBackedArray._
   import com.nativelibs4java.opencl._
   import com.nativelibs4java.util._
+  import java.nio.FloatBuffer
+  import java.nio.ByteOrder
+  import scala.collection.JavaConversions._
+  import scala.util.Random
+  import scala.math.{ceil, pow, log}
 
   class size(exp: Int) extends scala.StaticAnnotation { }
   class local extends scala.StaticAnnotation { }
@@ -34,10 +39,15 @@ object Reduce3 {
     println(B)
   }
 */
+  
+  val NUM_ITEMS = 1048576
+  val maxThreads = 64
+  val maxBlocks = 64
 
   def main(args: Array[String]) = compile
 
   def compile = {
+    val randInput = Array.fill(NUM_ITEMS)(Random.nextFloat)
     val kernelStr = new StringBuffer()
     val platform = JavaCL.listPlatforms()(0)
     val devices = platform.listAllDevices(true)
@@ -47,17 +57,52 @@ object Reduce3 {
     val (_,tree) = firepile.Compose.compileToTree(
       (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f), 2)
 
-    println("---------------------")
     for (t <- tree.reverse) {
-      println(t.toCL)
       kernelStr.append(t.toCL)
     }
 
+    println("-------------")
+    println(kernelStr.toString)
+
+    var program: CLProgram = null
     try {
-      val program = context.createProgram(kernelStr.toString).build
+      program = context.createProgram(kernelStr.toString).build
     } catch {
       case e => println(e)
     }
+
+    val kernel = program.createKernel("firepile_tests_Reduce3__anonfun_2apply")
+    val queue = context.createDefaultQueue()
+
+    val threads = if (NUM_ITEMS < maxThreads*2) pow(2, ceil(log(NUM_ITEMS) / log(2))) else maxThreads
+    val blocks = ((NUM_ITEMS + (threads * 2 - 1)) / (threads * 2)).toInt
+
+    val outputData = new Array[Float](blocks)
+    
+    val memIn1 = context.createFloatBuffer(CLMem.Usage.Input, NUM_ITEMS * 4)
+    val memOut = context.createFloatBuffer(CLMem.Usage.Output, blocks * 4)
+    val localMem = new CLKernel.LocalSize(threads.toLong * 4L)
+
+    kernel.setArgs(memIn1, NUM_ITEMS.asInstanceOf[AnyRef], memOut, blocks.asInstanceOf[AnyRef], localMem, threads.toInt.asInstanceOf[AnyRef])
+
+    val a = FloatBuffer.allocate(NUM_ITEMS * 4)
+    for (rNum <- randInput)
+      a.put(rNum)
+
+    memIn1.write(queue, a, true)
+
+    kernel.enqueueNDRange(queue, Array[Int](blocks), Array[Int](threads.toInt))
+
+    queue.finish
+
+    val output = NIOUtils.directFloats(blocks * threads.toInt, ByteOrder.nativeOrder)
+    memOut.read(queue, output, true)
+
+    /*
+    firepile_tests_Reduce3__anonfun_1apply(__global float* _arg0_data, __global int _arg0_len, __global float* _arg1_data, __global int _arg1_len, __local float* _arg1_c_data, __local int _arg1_c_len)
+    */
+
+
 
     /*
     firepile.Compose.compileToTree(
