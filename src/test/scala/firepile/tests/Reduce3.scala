@@ -65,7 +65,6 @@ object Reduce3 {
     println("-------------")
     println(kernelStr.toString)
     
-
     var program: CLProgram = null
     try {
       program = context.createProgram(kernelStr.toString).build
@@ -83,34 +82,30 @@ object Reduce3 {
     
     val memIn1 = context.createFloatBuffer(CLMem.Usage.Input, NUM_ITEMS)
     val memOut = context.createFloatBuffer(CLMem.Usage.Output, blocks)
-    val localMem = new CLKernel.LocalSize(threads.toLong * 4L)
+    val localMem = new CLKernel.LocalSize(threads * 4L)
 
-    // HACK
-    // val localMemSize = new CLKernel.LocalSize(threads.toLong * 4L)
+    kernel.setArg(0, memIn1)
+    kernel.setArg(1, NUM_ITEMS)
+    kernel.setArg(2, memOut)
+    kernel.setArg(3, blocks)
+    kernel.setLocalArg(4, threads * 4L)
+    kernel.setArg(5, threads)
 
     val a = FloatBuffer.allocate(NUM_ITEMS)
-    for (rNum <- randInput)
-      a.put(rNum)
+    for (i <- 0 until randInput.length)
+      a.put(i, randInput(i))
 
   
-    kernel.setArgs(memIn1, NUM_ITEMS.asInstanceOf[AnyRef], memOut, blocks.asInstanceOf[AnyRef], localMem, threads.asInstanceOf[AnyRef])
-    // kernel.setArgs(memIn1, NUM_ITEMS.asInstanceOf[AnyRef], memOut, blocks.asInstanceOf[AnyRef], localMem, threads.asInstanceOf[AnyRef])
-
-
     memIn1.write(queue, a, true)
 
     println("# blocks = " + blocks + "   # threads = " + threads)
 
-    val kernEvent = kernel.enqueueNDRange(queue, Array[Int](blocks * threads), Array[Int](threads))
-    //kernel.enqueueNDRange(queue, Array[Int](blocks), Array[Int](threads))
+    kernel.enqueueNDRange(queue, Array[Int](blocks * threads), Array[Int](threads))
 
-    // kernEvent.waitFor
+    queue.finish
 
     val output = NIOUtils.directFloats(blocks, ByteOrder.nativeOrder)
     memOut.read(queue, output, true)
-
-    queue.finish
-    
 
     /*
     firepile_tests_Reduce3__anonfun_1apply(__global float* _arg0_data, __global int _arg0_len, __global float* _arg1_data, __global int _arg1_len, __local float* _arg1_c_data, __local int _arg1_c_len)
@@ -119,7 +114,12 @@ object Reduce3 {
     val cpuSum = randInput.sum
     var gpuSum = 0.0f 
 
-    for (i <- 0 until blocks)
+    /* for (i <- 0 until randInput.length) {
+      println("a[" + i + "] = " + a.get(i))
+    }
+    */
+
+    for (i <- 0 until blocks) 
       gpuSum += output.get(i)
 
     println("CPU sum = " + cpuSum + "   GPU sum = " + gpuSum)
@@ -151,13 +151,17 @@ object Reduce3 {
     // something like:
     // IdSpace(id.numGroups, localSize*2).index(id.group, id.local).toInt
     // Oy!
-    val i = id.group * (id.config.localSize*2) + id.local
+
+    // HACK
+    // val i = id.group * (id.config.localSize*2) + id.local
+
+    val grpId = id.group.toInt
+    val lclSize2 = id.config.localSize.toInt * 2
+    val lclId = id.local.toInt
+    val i = grpId * lclSize2 + lclId
+
 
     sdata(tid) = if (i < n) idata(i) else z
-    /*
-    val ii = if (i < n) idata(i) else z
-    sdata(tid) = ii
-    */
 
     if (i + id.config.localSize < n)
       sdata(tid) = f(sdata(tid), idata(i + id.config.localSize))
