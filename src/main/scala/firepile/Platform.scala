@@ -20,11 +20,11 @@ class Platform(private[firepile] val clp: CLPlatform) {
   def isNVDeviceAttributeQuerySupported: Boolean = clp.isNVDeviceAttributeQuerySupported
 
   private[firepile] def createContext(devices: CLDevice*): CLContext = {
-    val map: java.util.Map[CLPlatform.ContextProperties,Number] = null
+    val map: java.util.Map[CLPlatform.ContextProperties,AnyRef] = null
     clp.createContext(map, devices:_*)
   }
 
-  private[firepile] def createContext(contextProperties: java.util.Map[CLPlatform.ContextProperties,Number], devices: CLDevice*): CLContext = {
+  private[firepile] def createContext(contextProperties: java.util.Map[CLPlatform.ContextProperties,AnyRef], devices: CLDevice*): CLContext = {
     clp.createContext(contextProperties, devices:_*)
   }
 
