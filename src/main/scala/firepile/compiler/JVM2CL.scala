@@ -1011,6 +1011,7 @@ object JVM2CL {
   }
 
   private def translateExp(v: Value, symtab: SymbolTable, anonFuns: HashMap[String, Value]): Tree = {
+  
     implicit val iv: (SymbolTable, HashMap[String, Value]) = (symtab, anonFuns)
     v match {
       // Must be first
@@ -1027,8 +1028,12 @@ object JVM2CL {
       case GDoubleConstant(value) => DoubleLit(value)
 
       case GArrayLength(op: Local) => Select(op, "length")
-
+      
+      case GCast(op, castTyp) => Cast(translateType(castTyp), op)
+   
+   /*
       case GCast(op, castTyp) => v match {
+    
         case GCast(GVirtualInvoke(GLocal(baseName, _), SMethodRef(classname, "local", _, _, _), _), _) => classname match {
           case SClassName("firepile.Spaces$Id1") => ids(0) = true; return Select(Id(baseName), Id("localId"))
           case SClassName("firepile.Spaces$Id2") => ids(1) = true; return Select(Id(baseName), Id("localId"))
@@ -1041,9 +1046,12 @@ object JVM2CL {
           case SClassName("firepile.Spaces$Id3") => ids(2) = true; return Select(Id(baseName), Id("globalId"))
           case _ => Cast(translateType(castTyp), op)
         }
+       
         case _ => Cast(translateType(castTyp), op)
       }
-
+    */
+      
+      
       // IGNORE
       case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
 
@@ -1284,14 +1292,15 @@ object JVM2CL {
               // monomorphic call
               // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
               println("Monomorphic call to " + methodName(method))
-              if (methodName(method).startsWith("firepile_Spaces_Point") || methodName(method).startsWith("firepile_Spaces_point")) {
+             /* deleted 
+             if (methodName(method).startsWith("firepile_Spaces_Point") || methodName(method).startsWith("firepile_Spaces_point")) {
                 if (args.length == 1) 
                   handleIdsVirtualInvoke(args(0)) match {
                     case Some(x) => return x
                     case _ => { }
                   }
               }
-
+            */
 
               symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount).filter(p => {
                 p match {
@@ -1466,6 +1475,13 @@ object JVM2CL {
         case _ => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v)
       }
 
+     case GLocal(name, typ) => {
+          if (anonFuns.contains(name))
+            translateExp(anonFuns(name), symtab, anonFuns)
+          else
+            symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
+        }
+     /* deleted
       case GLocal(name, typ) => v match {
         case GLocal(baseName, SMethodRef(classname, "local", _, _, _)) => classname match {
           case SClassName("firepile.Spaces$Id1") => ids(0) = true; return Select(Id(baseName), Id("localId"))
@@ -1496,6 +1512,8 @@ object JVM2CL {
             symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
         }
       }
+      */
+      
       case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
       case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
       case GStaticFieldRef(fieldRef) => { classtab.addClass(new SootClass(fieldRef.`type`.toString)); Id("unimplemented:staticfield") }
