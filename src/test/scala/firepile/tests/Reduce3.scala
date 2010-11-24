@@ -40,14 +40,15 @@ object Reduce3 {
   }
 */
   
-  val NUM_ITEMS = 1048576
-  val maxThreads = 64
+  val NUM_ITEMS = 16384 // 1048576
+  val maxThreads = 128 
   val maxBlocks = 64
 
   def main(args: Array[String]) = compile
 
   def compile = {
-    val randInput = Array.fill(NUM_ITEMS)(Random.nextFloat)
+    val random = new Random(0)
+    val randInput = Array.fill(NUM_ITEMS)(random.nextFloat)
     val kernelStr = new StringBuffer()
     val platform = JavaCL.listPlatforms()(0)
     val devices = platform.listAllDevices(true)
@@ -63,6 +64,7 @@ object Reduce3 {
 
     println("-------------")
     println(kernelStr.toString)
+    
 
     var program: CLProgram = null
     try {
@@ -74,35 +76,53 @@ object Reduce3 {
     val kernel = program.createKernel("firepile_tests_Reduce3__anonfun_2apply")
     val queue = context.createDefaultQueue()
 
-    val threads = if (NUM_ITEMS < maxThreads*2) pow(2, ceil(log(NUM_ITEMS) / log(2))) else maxThreads
+    val threads = (if (NUM_ITEMS < maxThreads*2) pow(2, ceil(log(NUM_ITEMS) / log(2))) else maxThreads).toInt
     val blocks = ((NUM_ITEMS + (threads * 2 - 1)) / (threads * 2)).toInt
 
     val outputData = new Array[Float](blocks)
     
-    val memIn1 = context.createFloatBuffer(CLMem.Usage.Input, NUM_ITEMS * 4)
-    val memOut = context.createFloatBuffer(CLMem.Usage.Output, blocks * 4)
+    val memIn1 = context.createFloatBuffer(CLMem.Usage.Input, NUM_ITEMS)
+    val memOut = context.createFloatBuffer(CLMem.Usage.Output, blocks)
     val localMem = new CLKernel.LocalSize(threads.toLong * 4L)
 
-    kernel.setArgs(memIn1, NUM_ITEMS.asInstanceOf[AnyRef], memOut, blocks.asInstanceOf[AnyRef], localMem, threads.toInt.asInstanceOf[AnyRef])
+    // HACK
+    // val localMemSize = new CLKernel.LocalSize(threads.toLong * 4L)
 
-    val a = FloatBuffer.allocate(NUM_ITEMS * 4)
+    val a = FloatBuffer.allocate(NUM_ITEMS)
     for (rNum <- randInput)
       a.put(rNum)
 
+  
+    kernel.setArgs(memIn1, NUM_ITEMS.asInstanceOf[AnyRef], memOut, blocks.asInstanceOf[AnyRef], localMem, threads.asInstanceOf[AnyRef])
+    // kernel.setArgs(memIn1, NUM_ITEMS.asInstanceOf[AnyRef], memOut, blocks.asInstanceOf[AnyRef], localMem, threads.asInstanceOf[AnyRef])
+
+
     memIn1.write(queue, a, true)
 
-    kernel.enqueueNDRange(queue, Array[Int](blocks), Array[Int](threads.toInt))
+    println("# blocks = " + blocks + "   # threads = " + threads)
+
+    val kernEvent = kernel.enqueueNDRange(queue, Array[Int](blocks * threads), Array[Int](threads))
+    //kernel.enqueueNDRange(queue, Array[Int](blocks), Array[Int](threads))
+
+    // kernEvent.waitFor
+
+    val output = NIOUtils.directFloats(blocks, ByteOrder.nativeOrder)
+    memOut.read(queue, output, true)
 
     queue.finish
-
-    val output = NIOUtils.directFloats(blocks * threads.toInt, ByteOrder.nativeOrder)
-    memOut.read(queue, output, true)
+    
 
     /*
     firepile_tests_Reduce3__anonfun_1apply(__global float* _arg0_data, __global int _arg0_len, __global float* _arg1_data, __global int _arg1_len, __local float* _arg1_c_data, __local int _arg1_c_len)
     */
 
+    val cpuSum = randInput.sum
+    var gpuSum = 0.0f 
 
+    for (i <- 0 until blocks)
+      gpuSum += output.get(i)
+
+    println("CPU sum = " + cpuSum + "   GPU sum = " + gpuSum)
 
     /*
     firepile.Compose.compileToTree(
@@ -133,7 +153,12 @@ object Reduce3 {
     // Oy!
     val i = id.group * (id.config.localSize*2) + id.local
 
+    sdata(tid) = if (i < n) idata(i) else z
+    /*
     val ii = if (i < n) idata(i) else z
+    sdata(tid) = ii
+    */
+
     if (i + id.config.localSize < n)
       sdata(tid) = f(sdata(tid), idata(i + id.config.localSize))
 
