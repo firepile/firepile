@@ -313,10 +313,20 @@ object GrimpUnapply {
 
   object GInterfaceInvoke {
     def unapply(v: Value) = v match {
+      case x: soot.grimp.internal.GInterfaceInvokeExpr => Some((x.getBase, x.getMethodRef, x.getArgs.asInstanceOf[java.util.List[Value]].toList))
       case x: InterfaceInvokeExpr => Some((x.getBase, x.getMethodRef, x.getArgs.asInstanceOf[java.util.List[Value]].toList))
       case _ => None
     }
   }
+ 
+  /*
+  object GInterfaceInvokeExpr {
+    def unapply(v: Value) = v match {
+      case x: soot.grimp.internal.GInterfaceInvokeExpr => Some((x.getBase, x.getMethodRef, x.getArgs.asInstanceOf[java.util.List[Value]].toList))
+      case _ => None
+    }
+  }
+  */
  
   object GThrow {
     def unapply(v: SootUnit) = v match {

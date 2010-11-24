@@ -343,6 +343,9 @@ object Trees {
 
   def fold(f: Tree => Tree)(t: Tree): Tree = f(t match {
     case Call(fun, args) => Call(fold(f)(fun), args.map(a => fold(f)(a)))
+    case Seq(t) => Seq(t.map(a => fold(f)(a)))
+    case StructType(n) => StructType(n)
+    case VarDef(t, n) => VarDef(fold(f)(t), n)
     case ClosureCall(fun, args) => ClosureCall(fold(f)(fun), args.map(a => fold(f)(a)))
     case Switch(e, cases) => Switch(fold(f)(e), cases.map(a => fold(f)(a)))
     case Case(e, s) => Case(fold(f)(e), fold(f)(s))

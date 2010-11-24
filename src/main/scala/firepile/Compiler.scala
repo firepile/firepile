@@ -404,6 +404,7 @@ object Compose {
     (Call(Id(methodName(apply)), (0 until arity).map(i => Id(varNames(i).toString)).toList), trees)
   }
 
+
   trait KernelLike {
     def trees: List[Tree]
 
