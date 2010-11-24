@@ -250,10 +250,6 @@ object JVM2CL {
     }
   }
 
-  // for now, alias the types; later there may be a difference
-  // val CompileRootMethodTask = CompileMethodTask
-  // type CompileRootMethodTask = CompileMethodTask
-
   case class CompileRootMethodTask(method: SootMethodRef, takesThis: Boolean, anonFuns: List[(Int, Value)]) extends Task {
     def run = {
       val m = method
@@ -305,7 +301,7 @@ object JVM2CL {
                     popArrayStructs += VarDef(StructType(typ), Id(name))
                     popArrayStructs += Assign(Select(Id(name), Id("data")), Id(name + "_data"))
                     popArrayStructs += Assign(Select(Id(name), Id("length")), Id(name + "_len"))
-                    List(Formal(MemType("local", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("local",IntType), name + "_len"))
+                    List(Formal(MemType("local", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("global",IntType), name + "_len"))
                   }
                   case x => Nil
                 }
