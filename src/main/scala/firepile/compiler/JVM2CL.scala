@@ -1526,6 +1526,7 @@ object JVM2CL {
       case GArrayRef(base, index) => ArrayAccess(Select(base, "data"), index)
 
       case v => Id("unsupported:" + v.getClass.getName)
+
     }
   }
   
