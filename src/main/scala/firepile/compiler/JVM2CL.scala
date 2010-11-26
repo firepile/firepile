@@ -1028,7 +1028,10 @@ object JVM2CL {
       case GDoubleConstant(value) => DoubleLit(value)
 
       case GArrayLength(op: Local) => Select(op, "length")
-
+      
+      //case GCast(op, castTyp) => Cast(translateType(castTyp), translateExp(op, symtab, anonFuns))
+    
+     
       case GCast(op, castTyp) => v match {
         case GCast(GVirtualInvoke(GLocal(baseName, _), SMethodRef(classname, "local", _, _, _), _), _) => classname match {
           case SClassName("firepile.Spaces$Id1") => ids(0) = true; return Select(Id(baseName), Id("localId"))
@@ -1050,7 +1053,8 @@ object JVM2CL {
         }
         case _ => Cast(translateType(castTyp), translateExp(op, symtab, anonFuns))
       }
-
+      
+      
       // IGNORE
       case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
 
@@ -1291,6 +1295,16 @@ object JVM2CL {
               // monomorphic call
               // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
               println("Monomorphic call to " + methodName(method))
+              if(methodName(method).startsWith("firepile_Spaces_Point1_plus"))
+              return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
+              
+              if(methodName(method).startsWith("firepile_Spaces_Point1_minus"))
+              return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
+              
+              if(methodName(method).startsWith("firepile_Spaces_Point1_times"))
+              return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
+              
+              
               if (methodName(method).startsWith("firepile_Spaces_Point") || methodName(method).startsWith("firepile_Spaces_point")) {
                 if (args.length == 1) 
                   handleIdsVirtualInvoke(args(0)) match {
@@ -1299,7 +1313,7 @@ object JVM2CL {
                   }
               }
 
-
+              
               symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount).filter(p => {
                 p match {
                   case Formal(PtrType(StructType(s)), _) if s.startsWith("firepile_Spaces_Id") => false
@@ -1458,6 +1472,8 @@ object JVM2CL {
 
         }
         case GStaticInvoke(method, args) => Id("STATICINVOKE inside INTERFACE INVOKE")
+        
+        
         case GVirtualInvoke(GLocal(baseName, _), SMethodRef(classname, "config", _, _, _), _) => classname match {
           case SClassName("firepile.Spaces$Id1") => method match {
             case SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _) => ids(0) = true; return Select(Id(baseName), Id("localSize"))
@@ -1473,10 +1489,12 @@ object JVM2CL {
           }
           case _ => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v)
         }
+        
         case _ => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v)
       }
 
       case GLocal(name, typ) => v match {
+      
         case GLocal(baseName, SMethodRef(classname, "local", _, _, _)) => classname match {
           case SClassName("firepile.Spaces$Id1") => ids(0) = true; return Select(Id(baseName), Id("localId"))
           case SClassName("firepile.Spaces$Id2") => ids(1) = true; return Select(Id(baseName), Id("localId"))
@@ -1509,6 +1527,13 @@ object JVM2CL {
             else
               symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
           }
+        }
+        
+        case GLocal(baseName, SMethodRef(classname, "Something", _, _, _)) => {
+          if (anonFuns.contains(name))
+            translateExp(anonFuns(name), symtab, anonFuns)
+          else
+            symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
         }
         case _ => {
           if (anonFuns.contains(name))
