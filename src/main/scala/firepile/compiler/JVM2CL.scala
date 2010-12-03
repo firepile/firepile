@@ -296,13 +296,13 @@ object JVM2CL {
                     popArrayStructs += VarDef(StructType(typ), Id(name))
                     popArrayStructs += Assign(Select(Id(name), Id("data")), Id(name + "_data"))
                     popArrayStructs += Assign(Select(Id(name), Id("length")), Id(name + "_len"))
-                    List(Formal(MemType("global", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("global",IntType), name + "_len"))
+                    List(Formal(MemType("global", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(ConstType(IntType), name + "_len"))
                   }
                   case x if x.startsWith("l") => { // handle the local arrays
                     popArrayStructs += VarDef(StructType(typ), Id(name))
                     popArrayStructs += Assign(Select(Id(name), Id("data")), Id(name + "_data"))
                     popArrayStructs += Assign(Select(Id(name), Id("length")), Id(name + "_len"))
-                    List(Formal(MemType("local", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(MemType("global",IntType), name + "_len"))
+                    List(Formal(MemType("local", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(ConstType(IntType), name + "_len"))
                   }
                   case x => Nil
                 }
