@@ -3,7 +3,6 @@ package firepile
 import firepile._
 import firepile.util.BufferBackedArray._
 import firepile.Marshaling._
-import firepile.Args._
 
 import java.nio.ByteBuffer
 
@@ -44,32 +43,6 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     val program = context.createProgram(src).build
     val code = program.createKernel(name)
     (d: Dist, e: Effect) => new BufKernel(this, code, d, e)
-  }
-
-  import Args.Arg
-
-  def compile[ArgA <: Arg[_,ArgA],ArgB <: Arg[_,ArgB]](name: String, src: String, dist: ArgA => Dist, effect: ArgA => Effect, builder: List[ByteBuffer] => ArgB) = {
-    val kernel: (Dist,Effect) => BufKernel = compileString(name, src)
-
-    new Kernel1[ArgA,ArgB] {
-      def apply(input: ArgA) = new Future[ArgB] {
-        lazy val future: Future[List[ByteBuffer]] = {
-          val bufIn: List[ByteBuffer] = input.buffers
-          val d: Dist = dist(input)
-          val e: Effect = effect(input)
-          val k = kernel(d, e)
-          k(bufIn:_*)
-        }
-
-        def run: Unit = future.start
-
-        def finish = {
-          val bufOut: List[ByteBuffer] = future.force
-          val result: ArgB = builder(bufOut)
-          result
-        }
-      }
-    }
   }
 
   def compile1[A: Marshal, B: Marshal](name: String, src: String, dist: Dist1[A], effect: Effect1[A]) = {

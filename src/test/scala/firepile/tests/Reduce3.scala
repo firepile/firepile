@@ -8,11 +8,13 @@ object Reduce3 {
   import firepile.Spaces._
   import firepile.Args._
   import firepile.util.BufferBackedArray._
+  import firepile.tree.Trees.Tree
   import com.nativelibs4java.opencl._
   import com.nativelibs4java.util._
   import java.nio.FloatBuffer
   import java.nio.ByteOrder
   import scala.collection.JavaConversions._
+  import firepile.Marshaling._
   import scala.util.Random
   import scala.math.{ceil, pow, log}
 
@@ -44,20 +46,80 @@ object Reduce3 {
   val maxThreads = 128 
   val maxBlocks = 64
 
-  def main(args: Array[String]) = compile
+  def main(args: Array[String]) = run
 
-  def compile = {
+  def compile[T:FixedSizeMarshal](f: Function2[Array[T],Array[T],Unit]): (Array[T],Array[T]) => Unit = {
+    new Function2[Array[T],Array[T],Unit] {
+      def apply(a: Array[T], b: Array[T]) = {
+        val platform = JavaCL.listPlatforms()(0)
+        val devices = platform.listAllDevices(true)
+        val context = platform.createContext(null, devices(0))
+        val kernStr = new StringBuffer()
+        var program: CLProgram = null
+        val queue = context.createDefaultQueue()
+        val threads = (if (a.length < maxThreads*2) pow(2, ceil(log(a.length) / log(2))) else maxThreads).toInt  // MAX THREADS can be gotten from CL lib
+        
+        val (kernName: String, tree: List[Tree]) = firepile.Compose.compileToTreeName(f, 2)
+        
+        for (t: Tree <- tree.reverse)
+          kernStr.append(t.toCL)
+    
+        try {
+          program = context.createProgram(kernStr.toString).build
+        } catch {
+          case e => println(e)
+        }
+
+        val kernel = program.createKernel(kernName)
+
+        // Need to use BB arrays here
+        val memIn1 = context.createFloatBuffer(CLMem.Usage.Input, a.length)
+        val memOut = context.createFloatBuffer(CLMem.Usage.Output, b.length)
+        val localMem = new CLKernel.LocalSize(threads * 4L)
+
+        kernel.setArg(0, memIn1)
+        kernel.setArg(1, a.length)
+        kernel.setArg(2, memOut)
+        kernel.setArg(3, b.length)
+        kernel.setLocalArg(4, threads * 4L)
+        kernel.setArg(5, threads)
+
+        val aBuff = FloatBuffer.allocate(a.length)
+        for (i <- 0 until a.length)
+          aBuff.put(i, a(i).asInstanceOf[Float])
+
+        memIn1.write(queue, aBuff, true)
+
+        kernel.enqueueNDRange(queue, Array[Int](b.length * threads), Array[Int](threads))
+
+        queue.finish
+
+        val output = NIOUtils.directFloats(b.length, ByteOrder.nativeOrder)
+        memOut.read(queue, output, true)
+
+        for (i <- 0 until b.length) 
+          b(i) = output.get(i).asInstanceOf[T]
+      }
+    }
+  }
+
+  def sum(A: Array[Float]): Float = {
+    val threads = (if (NUM_ITEMS < maxThreads*2) pow(2, ceil(log(NUM_ITEMS) / log(2))) else maxThreads).toInt
+    val blocks = ((NUM_ITEMS + (threads * 2 - 1)) / (threads * 2)).toInt
+    val sumBlockReducer: (Array[Float], Array[Float]) => Unit = compile {
+      (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f)
+    }
+    val B: Array[Float] = new Array[Float](blocks)
+
+    sumBlockReducer(A, B)
+    B.reduceLeft(_+_)
+  }
+
+
+  def run = {
     val random = new Random(0)
     val randInput = Array.fill(NUM_ITEMS)(random.nextFloat)
-    val kernelStr = new StringBuffer()
-    val platform = JavaCL.listPlatforms()(0)
-    val devices = platform.listAllDevices(true)
-
-    val context = platform.createContext(null, devices(0))
-
-    val (_,tree) = firepile.Compose.compileToTree(
-      (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f), 2)
-
+    
     // Short term:
     // val sumBlockReducer: (Array[Float], Array[Float]) => Unit = Firepile.compile {
     //     (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f)
@@ -105,69 +167,8 @@ object Reduce3 {
     // trait Kernel2[A1,A2,B] extends Function2[A1,A2,B] {
     // }
 
-    for (t <- tree.reverse) {
-      kernelStr.append(t.toCL)
-    }
-
-    println("-------------")
-    println(kernelStr.toString)
-    
-    var program: CLProgram = null
-    try {
-      program = context.createProgram(kernelStr.toString).build
-    } catch {
-      case e => println(e)
-    }
-
-    val kernel = program.createKernel("firepile_tests_Reduce3__anonfun_2apply")
-    val queue = context.createDefaultQueue()
-
-    val threads = (if (NUM_ITEMS < maxThreads*2) pow(2, ceil(log(NUM_ITEMS) / log(2))) else maxThreads).toInt
-    val blocks = ((NUM_ITEMS + (threads * 2 - 1)) / (threads * 2)).toInt
-
-    val outputData = new Array[Float](blocks)
-    
-    val memIn1 = context.createFloatBuffer(CLMem.Usage.Input, NUM_ITEMS)
-    val memOut = context.createFloatBuffer(CLMem.Usage.Output, blocks)
-    val localMem = new CLKernel.LocalSize(threads * 4L)
-
-    kernel.setArg(0, memIn1)
-    kernel.setArg(1, NUM_ITEMS)
-    kernel.setArg(2, memOut)
-    kernel.setArg(3, blocks)
-    kernel.setLocalArg(4, threads * 4L)
-    kernel.setArg(5, threads)
-
-    val a = FloatBuffer.allocate(NUM_ITEMS)
-    for (i <- 0 until randInput.length)
-      a.put(i, randInput(i))
-
-  
-    memIn1.write(queue, a, true)
-
-    println("# blocks = " + blocks + "   # threads = " + threads)
-
-    kernel.enqueueNDRange(queue, Array[Int](blocks * threads), Array[Int](threads))
-
-    queue.finish
-
-    val output = NIOUtils.directFloats(blocks, ByteOrder.nativeOrder)
-    memOut.read(queue, output, true)
-
-    /*
-    firepile_tests_Reduce3__anonfun_1apply(__global float* _arg0_data, __global int _arg0_len, __global float* _arg1_data, __global int _arg1_len, __local float* _arg1_c_data, __local int _arg1_c_len)
-    */
-
     val cpuSum = randInput.sum
-    var gpuSum = 0.0f 
-
-    /* for (i <- 0 until randInput.length) {
-      println("a[" + i + "] = " + a.get(i))
-    }
-    */
-
-    for (i <- 0 until blocks) 
-      gpuSum += output.get(i)
+    val gpuSum = sum(randInput)
 
     println("CPU sum = " + cpuSum + "   GPU sum = " + gpuSum)
 

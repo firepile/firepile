@@ -5,7 +5,6 @@ import firepile.Marshaling._
 import firepile.Spaces._
 import firepile.tree.Trees._
 import firepile.Implicits._
-import firepile.Args._
 
 import compiler.JVM2CL.compileRoot
 import compiler.JVM2CL.mangleName
@@ -13,6 +12,7 @@ import compiler.JVM2CL.methodName
 
 import java.nio.ByteBuffer
 
+// TODO: remove most of this.
 object Compiler {
   val Header = ("\n" +
     "struct Point1 {                                                                               \n" +
@@ -221,6 +221,62 @@ object Compiler {
     base + next
   }
 
+  trait Kernel1[A] extends Function1[A,Unit]
+  trait Kernel2[A1,A2] extends Function2[A1,A2,Unit]
+
+  def compile[A](f: A => Unit)(implicit ma: Marshal[A], dev: Device): Kernel1[A] = throw new RuntimeException("unimplemented")
+  // e.g., reduce(input: Array[Int], output: Array[Int])
+  // e.g., map(input: Array[Int], output: Array[Float])
+  def compile[A1,A2](f: (A1,A2) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): Kernel2[A1,A2] = throw new RuntimeException("unimplemented")
+  // ...
+
+  // TODO:
+  // Write:
+  // object GPUArray {
+  //   // This will be compiled into a kernel specialized on f and A and B.
+  //   def map(a: BBArray[A], b: BBArray[B], f: A => B) = { ... }
+  //   def blockReduce(a: BBArray[A], b: BBArray[B], f: (A,A) => A) = { ... }
+  //
+  //   def mapKernel(f: A=>B): Kernel2[BBArray[A], BBArray[B]]
+  // }
+  //
+  // class GPUArray[A](a: BBArray[A]) {
+  //   def map(f: A => B)(implicit dev: Device) = {
+  //     val k = /* memoize */ dev.compile( (a:BBArray[A], b:BBArray[B]) => GPUArray.map(a, b, f) )
+  //     val that = BBArray.ofDim[B](a.length)
+  //     k(this, that)
+  //     new GPUArray(that)
+  //   }
+  //   def reduce(f: (A,A) => A)(implicit dev: Device) /* ??? (implicit blockSize: Int) */ = {
+  //     val that = blockReduce(f)
+  //     that.reduceLeft(f)
+  //   }
+  //   def blockReduce(f: (A,A) => A)(implicit dev: Device) /* ??? (implicit blockSize: Int) */ = {
+  //     val k = /* memoize */ dev.compile( (a:BBArray[A], b:BBArray[A]) => GPUArray.blockReduce(a, b, f) )
+  //     val that = BBArray.ofDim[B](a.length / blockSize)
+  //     k(this, that)
+  //     new GPUArray(that)
+  //   }
+  // }
+  //
+  // kinda want this:
+  // trait Kernel1[A,B] extends Function1[A,B]
+  // val k = mapk(_*2) compose reducek(_+_)
+  // k(a, b)
+  //
+  // val a = BBArray.tabulate[Float](1000000)(_.toFloat)
+  // val g = GPUArray(a, dev)
+  // val b = g.map(_*2).reduce(_+_)
+  //
+  // g.map returns a MapKernel1
+  //
+  //
+  // val k1 = dev.compile( ... GPUArray.map(.., _*2) )
+  // val k2 = dev.compile( ... GPUArray.blockReduce(.., _+_) )
+  // 
+
+/*
+  @Deprecated
   def f2bbarrayMapk1[A,B](f: A => B)(implicit ma: FixedSizeMarshal[A], mb: FixedSizeMarshal[B], dev: Device): BBArrayMapKernel1[A,B] = {
     val kernelName = freshName("theKernel")
     val src = compileMapKernel1(f, kernelName)
@@ -237,6 +293,7 @@ object Compiler {
     }
   }
 
+  @Deprecated
   def f2bbarrayMapk2[A1,A2,B](f: (A1,A2) => B)(implicit ma1: FixedSizeMarshal[A1], ma2: FixedSizeMarshal[A2], mb: FixedSizeMarshal[B], dev: Device): BBArrayMapKernel2[A1,A2,B] = {
     val kernelName = freshName("theKernel")
     val src = compileMapKernel2(f, kernelName)
@@ -255,6 +312,7 @@ object Compiler {
     }
   }
 
+  @Deprecated
   def f2bbarrayReducek1[A](f: (A,A) => A)(implicit ma: FixedSizeMarshal[A], dev: Device): BBArrayReduceKernel1[A] = {
     val kernelName = freshName("theKernel")
     val src = compileReduceKernel1(f, kernelName)
@@ -284,6 +342,7 @@ object Compiler {
     }
   }
 
+  @Deprecated
   def f2bbarrayLocalReducek1[A,B,L](f: BBArray[A] => GroupIndexed1[B] => (Id1, LocalIndexed1[L]) => Unit)(implicit ml: FixedSizeMarshal[L], ma: FixedSizeMarshal[A], mb: FixedSizeMarshal[B], dev: Device): BBArrayLocalReduceKernel1[A,B] = {
     val kernelName = freshName("theKernel")
     val src = compileReduceKernel1(f, kernelName)
@@ -299,6 +358,7 @@ object Compiler {
       def apply(a: BBArray[A]) = kernel(a)
     }
   }
+  */
 }
 
 object Compose {
@@ -310,86 +370,14 @@ object Compose {
   k = zipWith(f).reduce(g): Arg => Future[B]
 */
 
-  // usage:
-  // val f: (a: BBArray[A]) => Future[B] = dev.zipWith(f).reduce(g)
-  class EmptyKernel[A:FixedSizeMarshal,ArgA<:Arg[A,ArgA]](dev: Device) {
-    def mapk[B:FixedSizeMarshal,ArgB<:Arg[B,ArgB]](m: Mapper[A,B,ArgA,ArgB]) = new MapKernel[A,B,ArgA,ArgB](dev, m.trees, m.mapTree, m.builder, m.mab)
-    def zipWith[B:FixedSizeMarshal,ArgB<:Arg[B,ArgB]](m: Mapper[A,B,ArgA,ArgB]) = new MapKernel[A,B,ArgA,ArgB](dev, m.trees, m.mapTree, m.builder, m.mab)
-    def reduceBlock(r: Reducer[A]) = {
-      val m = idMapper[A]
-      new MapBlockReduceKernel[A,A,Arg1[A],Arg1[A]](dev, m.trees, r.trees, m.mapTree, r.reduceTree, m.builder, m.mab)
-    }
-    def reduce(r: Reducer[A]) = reduceBlock(r).reduce(r.reduceFun)
-  }
-  implicit def dev2empty[A:FixedSizeMarshal,ArgA<:Arg[A,ArgA]](dev: Device) = new EmptyKernel[A,ArgA](dev)
-
-  def generateMapKernel(tree: Tree, kernelName: String): String = tree match {
-    case FunDef(returnType, name, formals, _) => ("\n" +
-      "__kernel void " + kernelName + "(                                                           \n" +
-      (0 until formals.length).map(i => {
-        val Formal(formal, _) = formals(i)
-        "   __global const " + formal.toCL + "* " + varNames(i).toString + ",\n" +
-        "   const int " + varNames(i).toString + "_len,\n"
-      }).mkString("") +
-      "   __global " + returnType.toCL + "* output,                                                \n" +
-      "   const int output_len)                                                                    \n" +
-      "{                                                                                           \n" +
-      "   int i = get_global_id(0);                                                                \n" +
-      "   output[i] = " + name + "(" +
-        (0 until formals.length).map(i => varNames(i).toString + "[i]").mkString(", ") + ");\n" +
-      "}                                                                                           \n")
-    case _ => throw new RuntimeException("unexpected C AST " + tree.toCL)
-  }
-
   val varNames = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-  def generateMapReduceKernel(map: Tree, reduce: Tree, kernelName: String): String = (map,reduce) match {
-    case (FunDef(mreturnType, mname, mformals, _),
-          FunDef(rreturnType, rname, List(Formal(rformal1, _), Formal(rformal2, _)), _))
-          if mreturnType.equals(rreturnType) && mreturnType.equals(rformal1) && mreturnType.equals(rformal2) => ("\n" +
-      "#define BLOCKSIZE 32                                                                        \n" +
-      "__kernel void " + kernelName + "(                                                           \n" +
-      (0 until mformals.length).map(i => {
-        val Formal(formal, _) = mformals(i)
-        "   __global const " + formal.toCL + "* " + varNames(i).toString + ",\n" +
-        "   const int " + varNames(i).toString + "_len,\n"
-      }).mkString("") +
-      "   __global " + rreturnType.toCL + "* output,                                               \n" +
-      "   const int output_len,                                                                    \n" +
-      "   __local  " + mreturnType.toCL + "* tmp,                                                  \n" +
-      "   const int tmp_len)                                                                       \n" +
-      "{                                                                                           \n" +
-      "   int i = get_global_id(0);                                                                \n" +
-      "   int lid = get_local_id(0);                                                               \n" +
-      "   tmp[lid] = " + mname + "(" +
-        (0 until mformals.length).map(i => varNames(i).toString + "[i]").mkString(", ") + ");\n" +
-      "   barrier(CLK_LOCAL_MEM_FENCE);                                                            \n" +
-      "                                                                                            \n" +
-      "   int n = get_local_size(0);                                                               \n" +
-      "   int s = n/2;                                                                             \n" +
-      "   while (s >= BLOCKSIZE) {                                                                 \n" +
-      "     tmp[lid] = " + rname + "(tmp[lid], tmp[lid+s]);                                        \n" +
-      "     barrier(CLK_LOCAL_MEM_FENCE);                                                          \n" +
-      "     s /= 2;                                                                                \n" +
-      "   }                                                                                        \n" +
-      "                                                                                            \n" +
-      "   // Unroll the last loop and don't use barriers since                                     \n" +
-      "   // all accesses are within a block.                                                      \n" +
-      "   if (BLOCKSIZE >= 64) tmp[lid] = tmp[lid+32];                                             \n" +
-      "   if (BLOCKSIZE >= 32) tmp[lid] = tmp[lid+16];                                             \n" +
-      "   if (BLOCKSIZE >= 16) tmp[lid] = tmp[lid+8];                                              \n" +
-      "   if (BLOCKSIZE >=  8) tmp[lid] = tmp[lid+4];                                              \n" +
-      "   if (BLOCKSIZE >=  4) tmp[lid] = tmp[lid+2];                                              \n" +
-      "   if (BLOCKSIZE >=  2) tmp[lid] = tmp[lid+1];                                              \n" +
-      "                                                                                            \n" +
-      "   if (lid == 0) {                                                                          \n" +
-      "     int bid = get_group_id(0);                                                             \n" +
-      "     output[bid] = tmp[0];                                                                  \n" +
-      "   }                                                                                        \n" +
-      "}                                                                                           \n")
-    case _ => throw new RuntimeException("unexpected C AST " + map.toCL + " or " + reduce.toCL)
+  def genVarNames(xs: List[_]): List[String] = {
+    // TODO: what happens when i >= 52 ?
+    xs.indices.toList.map(i => varNames(i).toString)
   }
 
+  // TODO: move to Tree
   object Prototype {
     def apply(typ: Tree, name: Id, formals: List[Tree]): Prototype = Prototype(typ, name.name, formals)
   }
@@ -411,8 +399,6 @@ object Compose {
     (Call(Id(methodName(apply)), (0 until arity).map(i => Id(varNames(i).toString)).toList), trees)
   }
   
-
-
   trait KernelLike {
     def trees: List[Tree]
 
@@ -487,180 +473,4 @@ object Compose {
 
     protected def kernelSrc(trees: List[Tree]): String
   }
-
-  case class Mapper[A:FixedSizeMarshal,B:FixedSizeMarshal,ArgA<:Arg[A,ArgA],ArgB<:Arg[B,ArgB]](trees: List[Tree], mapTree: Tree, builder: List[ByteBuffer] => ArgB, mab: Marshal[ArgB])
-  case class Reducer[B:FixedSizeMarshal](trees: List[Tree], reduceTree: Tree, reduceFun: (B,B)=>B)
-
-  implicit def f2Mapper[A:FixedSizeMarshal,B:FixedSizeMarshal](f: A=>B): Mapper[A,B,Arg1[A],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 1)
-    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
-    val mab = implicitly[Marshal[Arg1[B]]]
-    new Mapper[A,B,Arg1[A],Arg1[B]](trees, mapTree, builder, mab)
-  }
-
-  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2)=>B): Mapper[(A1,A2),B,Arg2[A1,A2],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 2)
-    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
-    val mab = implicitly[Marshal[Arg1[B]]]
-    new Mapper[(A1,A2),B,Arg2[A1,A2],Arg1[B]](trees, mapTree, builder, mab)
-  }
-
-  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3)=>B): Mapper[(A1,A2,A3),B,Arg3[A1,A2,A3],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 3)
-    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
-    val mab = implicitly[Marshal[Arg1[B]]]
-    new Mapper[(A1,A2,A3),B,Arg3[A1,A2,A3],Arg1[B]](trees, mapTree, builder, mab)
-  }
-  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4)=>B): Mapper[(A1,A2,A3,A4),B,Arg4[A1,A2,A3,A4],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 4)
-    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
-    val mab = implicitly[Marshal[Arg1[B]]]
-    new Mapper[(A1,A2,A3,A4),B,Arg4[A1,A2,A3,A4],Arg1[B]](trees, mapTree, builder, mab)
-  }
-  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4,A5)=>B): Mapper[(A1,A2,A3,A4,A5),B,Arg5[A1,A2,A3,A4,A5],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 5)
-    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
-    val mab = implicitly[Marshal[Arg1[B]]]
-    new Mapper[(A1,A2,A3,A4,A5),B,Arg5[A1,A2,A3,A4,A5],Arg1[B]](trees, mapTree, builder, mab)
-  }
-  implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,A6:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4,A5,A6)=>B): Mapper[(A1,A2,A3,A4,A5,A6),B,Arg6[A1,A2,A3,A4,A5,A6],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 6)
-    val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
-    val mab = implicitly[Marshal[Arg1[B]]]
-    new Mapper[(A1,A2,A3,A4,A5,A6),B,Arg6[A1,A2,A3,A4,A5,A6],Arg1[B]](trees, mapTree, builder, mab)
-  }
-
-  implicit def f2Reducer[B:FixedSizeMarshal](f: (B,B)=>B): Reducer[B] = {
-    val (reduce, trees) = compileToTree(f, 2)
-    Reducer(trees, reduce, f)
-  }
-
-  class MapKernel[A:FixedSizeMarshal,B:FixedSizeMarshal,ArgA <: Arg[A,ArgA], ArgB <: Arg[B,ArgB]](dev: Device, val trees: List[Tree], val mapTree: Tree, builder: List[ByteBuffer] => ArgB, mab: Marshal[ArgB]) extends KernelLike with Function1[ArgA,Future[ArgB]] {
-    private val kernelName = Compiler.freshName("kernel")
-
-    protected def kernelSrc(trees: List[Tree]): String = {
-      val Call(Id(mname), _) = mapTree
-
-      trees.map {
-        case t @ FunDef(_, name, formals, _) if (name.equals(mname)) => generateMapKernel(t, kernelName)
-        case t => ""
-      }.mkString("")
-    }
-
-    private val kernel = {
-      println(src)
-      val d = (a: ArgA) => new Dist {
-        def totalNumberOfItems: Int = a.length
-      }
-      val e = (a: ArgA) => new Effect {
-        override def outputSizes = mab.sizes(a.length)
-      }
-      dev.compile[ArgA,ArgB](kernelName, src, d, e, builder)
-    }
-
-    def apply(input: ArgA) = new Future[ArgB] {
-      private lazy val future = kernel(input)
-      protected def run: Unit = future.start
-      protected def finish = future.force
-    }
-
-    // a.map(this).map(m)
-    def map[Z,ArgZ <: Arg[Z,ArgZ]](m: Mapper[B,Z,ArgB,ArgZ])(implicit zm: FixedSizeMarshal[Z], azm: Marshal[ArgZ]): MapKernel[A,Z,ArgA,ArgZ] = new MapKernel[A,Z,ArgA,ArgZ](dev, trees ++ m.trees, composeTrees(mapTree, m.mapTree), m.builder, m.mab)
-    // a.map(this).reduceBlock(r)
-    def reduceBlock(r: Reducer[B]) = new MapBlockReduceKernel[A,B,ArgA,ArgB](dev, trees, r.trees, mapTree, r.reduceTree, builder, mab)
-    // a.map(this).reduce(r)
-    def reduce(r: Reducer[B]) = reduceBlock(r).reduce(r.reduceFun)
-  }
-
-  class MapBlockReduceKernel[A:FixedSizeMarshal,B:FixedSizeMarshal,ArgA <: Arg[A,ArgA], ArgB <: Arg[B,ArgB]](dev: Device, val mapTrees: List[Tree], val reduceTrees: List[Tree], val mapTree: Tree, val reduceTree: Tree, val builder: List[ByteBuffer] => ArgB, val mab: Marshal[ArgB]) extends KernelLike with Function1[ArgA,Future[ArgB]] {
-
-    self: MapBlockReduceKernel[A,B,ArgA,ArgB] =>
-
-    private val kernelName = Compiler.freshName("kernel")
-
-    protected def kernelSrc(trees: List[Tree]): String = {
-      val Call(Id(mname), _) = mapTree
-      val Call(Id(rname), _) = reduceTree
-
-      val mapFd = mapTrees.filter {
-        case t @ FunDef(_, name, _, _) if name.equals(mname) => true
-        case t => false
-      }.headOption
-
-      val reduceFd = reduceTrees.filter {
-        case t @ FunDef(_, name, List(_, _), _) if (name.equals(rname)) => true
-        case t => false
-      }.headOption
-
-      (mapFd, reduceFd) match {
-        case (Some(mapFd : FunDef), Some(reduceFd : FunDef)) => generateMapReduceKernel(mapFd, reduceFd, kernelName)
-        case _ => throw new RuntimeException("Cannot find either map or reduce function in generated code: map=" + mapFd + " reduce=" + reduceFd)
-      }
-    }
-
-    def trees = mapTrees ++ reduceTrees
-
-    private val kernel = {
-      println(src)
-      val d = (a: ArgA) => new Dist {
-        val numThreads = 128
-        val totalNumberOfItems = (a.length + numThreads - 1) / numThreads
-        override val numberOfItemsPerGroup = numThreads
-        println("block reduce: " + a.length + " -> " + totalNumberOfItems)
-      }
-      val e = (a: ArgA) => new Effect {
-        val numThreads = 128
-        // override val outputSizes = a.length * implicitly[FixedSizeMarshal[B]].size
-        override val outputSizes = mab.sizes((a.length + numThreads - 1) / numThreads)
-        override val localBufferSizes = (numThreads * implicitly[FixedSizeMarshal[B]].size) :: Nil
-        println("block reduce: " + a.length + " -> " + outputSizes)
-      }
-      dev.compile[ArgA,ArgB](kernelName, src, d, e, builder)
-    }
-
-    def apply(input: ArgA) = new Future[ArgB] {
-      private lazy val future = kernel(input)
-      protected def run: Unit = future.start
-      protected def finish = future.force
-    }
-
-    // a.map(that).blockReduce(this).map(m)
-    def map[Z:FixedSizeMarshal,ArgZ<:Arg[Z,ArgZ]](m: Mapper[B,Z,ArgB,ArgZ]) = new ComposeKernel[ArgA,ArgB,ArgZ](this, new MapKernel[B,Z,ArgB,ArgZ](dev, m.trees, m.mapTree, m.builder, m.mab))
-
-    // a.map(this).blockReduce(this).reduce(r)
-    def reduce(r: Reducer[B]): ArgA => Future[B] = reduce(r.reduceFun)
-
-    def reduce(f: (B,B) => B): ArgA => Future[B] = (a:ArgA) => new Future[B] {
-      private lazy val future: Future[ArgB] = self(a)
-      protected def run: Unit = future.start
-      protected def finish: B = {
-        val z: ArgB = future.force
-        z.reduce(f)
-      }
-    }
-  }
-
-  private def composeTrees(call1: Tree, call2: Tree) = (call1, call2) match {
-    case ( Call(name1, args1 @ List(_)), Call(name2, List(_)) ) => Call(name2, Call(name1, args1))
-    case _ => throw new RuntimeException("Cannot compose " + call1 + " and " + call2 + "; not unary functions.")
-  }
-
-  class ComposeKernel[X,A,B](k1: Function1[X,Future[A]], k2: A => Future[B]) extends Function1[X,Future[B]] {
-    def apply(x: X) = new Future[B] {
-      private lazy val future = k1(x)
-      protected def run: Unit = future.start
-
-      // This is slow -- intermediate data gets copied back to the host
-      // Should use local memory to copy data.
-      protected def finish: B = {
-        val tmp: A = future.force
-        val k = k2(tmp)
-        k.start
-        k.force
-      }
-    }
-  }
-
-  def spawn[B](k: Future[B]) = k.start
-  def spawn[A,B](k: Function1[A,Future[B]]) = (a:A) => k(a).start
 }
