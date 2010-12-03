@@ -58,6 +58,53 @@ object Reduce3 {
     val (_,tree) = firepile.Compose.compileToTree(
       (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f), 2)
 
+    // Short term:
+    // val sumBlockReducer: (Array[Float], Array[Float]) => Unit = Firepile.compile {
+    //     (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f)
+    // }
+    // def sum(A: Array[Float]): Float = {
+    //    val B: Array[Float] = new Array[Float](Firepile.numGroups)
+    //    sumBlockReducer(A, B)  // parallel + on GPU
+    //    B.reduceLeft(_+_) // sequential + on CPU
+    // }
+
+
+    // No term:
+    // val blockReducer = Firepile.compile {
+    //     (A: Array[Float], B: Array[Float], f: (Float,Float) => Float, z: Float) => reduce(A, B, A.length, f, z)
+    // }
+    // def reduce(A: Array[Float], f: (Float,Float) => Float, z: Float): Float = {
+    //    val B: Array[Float] = new Array[Float](Firepile.numGroups)
+    //    blockReducer(A, B, f, z)  // parallel + on GPU; reducer is pre-compiled but not specialized on f
+    //    B.foldLeft(z)(f) // sequential + on CPU
+    // }
+    //
+    // Long term:
+    // def blockReducer(f: Float,Float) => Float, z: Float) = Firepile.getKernelOrElse((f,z), () => Firepile.compile {
+    //     (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, f, z)
+    // })
+    // def reduce(A: Array[Float], f: (Float,Float) => Float, z: Float): Float = {
+    //    val B: Array[Float] = new Array[Float](Firepile.numGroups)
+    //    val k = blockReducer(f, z) // specializes on f and z; compiles NOW (but could memoize to compile only on first invoke for any given f)
+    //    k(A, B)  // parallel + on GPU
+    //    B.foldLeft(z)(f) // sequential + on CPU
+    // }
+    // def sum(A: Array[Float]) = reduce(A, _+_, 0f)
+    //
+    // trait Kernel1[A,B] extends Function1[A,B] {
+    //   ??? need to say this.type <: Kx
+    //    def composeKernel[C,Kx <: Kernel1[A,B], Ky <: Kernel1[B,C], Kz: Kernel1[A,C]](k: Kx)(implicit composer: KernelComposer[Kx,Ky,Kz]): Kz = composer.compose(this, k)
+    // }
+    // class MapKernel1[A,B] extends Kernel1[A,B] {
+    //    ...
+    // }
+    // class MapKernelComposer[A,B,C] extends KernelComposer[MapKernel1[A,B], MapKernel1[B,C], MapKernel1[A,C]] {
+    //    def compose(kx: MapKernel1[A,B], ky: MapKernel1[B,C]): MapKernel1[A,C]
+    //    ...
+    // }
+    // trait Kernel2[A1,A2,B] extends Function2[A1,A2,B] {
+    // }
+
     for (t <- tree.reverse) {
       kernelStr.append(t.toCL)
     }
@@ -152,13 +199,14 @@ object Reduce3 {
     // IdSpace(id.numGroups, localSize*2).index(id.group, id.local).toInt
     // Oy!
 
-    // HACK
-    // val i = id.group * (id.config.localSize*2) + id.local
+    val i = id.group * (id.config.localSize*2) + id.local
 
+    /*
     val grpId = id.group.toInt
     val lclSize2 = id.config.localSize.toInt * 2
     val lclId = id.local.toInt
     val i = grpId * lclSize2 + lclId
+    */
 
 
     sdata(tid) = if (i < n) idata(i) else z
