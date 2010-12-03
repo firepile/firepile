@@ -397,12 +397,20 @@ object Compose {
     def toCL = typ.toCL + " " + name + formals.map((t:Tree) => t.toCL).mkString("(", ", ", ");\n\n")
   }
 
+  def compileToTreeName(src: AnyRef, arity: Int): (String,List[Tree]) = {
+    val k = src.getClass
+    val apply = Compiler.findApplyMethod(src, arity)
+    val trees = compileRoot(k.getName, Compiler.signature(apply)).reverse
+    (methodName(apply), trees)
+  }
+  
   def compileToTree(src: AnyRef, arity: Int): (Tree,List[Tree]) = {
     val k = src.getClass
     val apply = Compiler.findApplyMethod(src, arity)
     val trees = compileRoot(k.getName, Compiler.signature(apply)).reverse
     (Call(Id(methodName(apply)), (0 until arity).map(i => Id(varNames(i).toString)).toList), trees)
   }
+  
 
 
   trait KernelLike {
@@ -504,19 +512,19 @@ object Compose {
     new Mapper[(A1,A2,A3),B,Arg3[A1,A2,A3],Arg1[B]](trees, mapTree, builder, mab)
   }
   implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4)=>B): Mapper[(A1,A2,A3,A4),B,Arg4[A1,A2,A3,A4],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 3)
+    val (mapTree, trees) = compileToTree(f, 4)
     val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
     val mab = implicitly[Marshal[Arg1[B]]]
     new Mapper[(A1,A2,A3,A4),B,Arg4[A1,A2,A3,A4],Arg1[B]](trees, mapTree, builder, mab)
   }
   implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4,A5)=>B): Mapper[(A1,A2,A3,A4,A5),B,Arg5[A1,A2,A3,A4,A5],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 3)
+    val (mapTree, trees) = compileToTree(f, 5)
     val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
     val mab = implicitly[Marshal[Arg1[B]]]
     new Mapper[(A1,A2,A3,A4,A5),B,Arg5[A1,A2,A3,A4,A5],Arg1[B]](trees, mapTree, builder, mab)
   }
   implicit def f2Mapper[A1:FixedSizeMarshal,A2:FixedSizeMarshal,A3:FixedSizeMarshal,A4:FixedSizeMarshal,A5:FixedSizeMarshal,A6:FixedSizeMarshal,B:FixedSizeMarshal](f: (A1,A2,A3,A4,A5,A6)=>B): Mapper[(A1,A2,A3,A4,A5,A6),B,Arg6[A1,A2,A3,A4,A5,A6],Arg1[B]] = {
-    val (mapTree, trees) = compileToTree(f, 3)
+    val (mapTree, trees) = compileToTree(f, 6)
     val builder = (bs: List[ByteBuffer]) => new Arg1[B](new BBArray[B](bs.head))
     val mab = implicitly[Marshal[Arg1[B]]]
     new Mapper[(A1,A2,A3,A4,A5,A6),B,Arg6[A1,A2,A3,A4,A5,A6],Arg1[B]](trees, mapTree, builder, mab)
