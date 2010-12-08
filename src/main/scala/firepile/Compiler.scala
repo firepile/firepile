@@ -235,6 +235,8 @@ object Compiler {
   def compile[A1,A2](f: (A1,A2) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): Kernel2[A1,A2] = {
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
+    val sizeA1 = transA1.sizes(1).head
+    val sizeA2 = transA2.sizes(1).head
     val kernStr = new StringBuffer()
 
     val (kernName: String, tree: List[Tree]) = firepile.Compose.compileToTreeName(f, 2)
@@ -244,15 +246,13 @@ object Compiler {
 
     val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
 
-
     new Kernel2[A1,A2] {
       def apply(a1: A1, a2: A2) = { 
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
         val bufA2: ByteBuffer = transA2.toBuffer(a2).head
         
-        // Need to get element size from Marshal
-        val numItemsA1 = bufA1.capacity / 4 
-        val numItemsA2 = bufA2.capacity / 4
+        val numItemsA1 = bufA1.capacity / sizeA1 
+        val numItemsA2 = bufA2.capacity / sizeA2 
 
         val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
         // val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1.capacity)
@@ -264,7 +264,7 @@ object Compiler {
         kernBin.setArg(1, numItemsA1)
         kernBin.setArg(2, bufA2CLBuf)
         kernBin.setArg(3, numItemsA2)
-        kernBin.setLocalArg(4, threads * 4L)
+        kernBin.setLocalArg(4, threads * sizeA1)
         kernBin.setArg(5, threads)
 
         kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
