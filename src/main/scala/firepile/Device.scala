@@ -11,6 +11,8 @@ import scala.collection.mutable.ArraySeq
 
 import com.nativelibs4java.opencl.CLMem
 import com.nativelibs4java.opencl.CLDevice
+import com.nativelibs4java.opencl.CLKernel
+import com.nativelibs4java.opencl.CLProgram
 import com.nativelibs4java.opencl.CLEvent
 import com.nativelibs4java.opencl.CLKernel.LocalSize
 
@@ -39,6 +41,24 @@ object Device {
 }
 
 class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld) {
+  var program: CLProgram = null
+
+  def buildProgramSrc(name: String, src: String): CLKernel = {
+    try {
+      program = context.createProgram(src).build
+    }
+    catch {
+      case e => println(e)
+    }
+
+    val kernel = program.createKernel(name)
+
+    kernel
+  }
+
+  def maxThreads = cld.getMaxWorkGroupSize
+
+  /*
   private def compileString(name: String, src: String): (Dist,Effect) => BufKernel = {
     val program = context.createProgram(src).build
     val code = program.createKernel(name)
@@ -97,11 +117,12 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
       }
     }
   }
-
+*/
   private[firepile] lazy val queue = context.createDefaultQueue()
 
   lazy val global = new GlobalMem(this)
   lazy val local = new LocalMem(this)
 
-  def spawn[B](k: Future[B]) = k.start
+  // def spawn[B](k: Future[B]) = k.start
+
 }

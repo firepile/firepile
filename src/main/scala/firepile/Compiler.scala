@@ -6,6 +6,9 @@ import firepile.Spaces._
 import firepile.tree.Trees._
 import firepile.Implicits._
 
+import com.nativelibs4java.opencl.CLMem
+import com.nativelibs4java.opencl.CLKernel
+
 import compiler.JVM2CL.compileRoot
 import compiler.JVM2CL.mangleName
 import compiler.JVM2CL.methodName
@@ -227,7 +230,58 @@ object Compiler {
   def compile[A](f: A => Unit)(implicit ma: Marshal[A], dev: Device): Kernel1[A] = throw new RuntimeException("unimplemented")
   // e.g., reduce(input: Array[Int], output: Array[Int])
   // e.g., map(input: Array[Int], output: Array[Float])
-  def compile[A1,A2](f: (A1,A2) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): Kernel2[A1,A2] = throw new RuntimeException("unimplemented")
+
+
+  def compile[A1,A2](f: (A1,A2) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): Kernel2[A1,A2] = {
+    val transA1 = implicitly[Marshal[A1]]
+    val transA2 = implicitly[Marshal[A2]]
+    val kernStr = new StringBuffer()
+
+    val (kernName: String, tree: List[Tree]) = firepile.Compose.compileToTreeName(f, 2)
+        
+    for (t: Tree <- tree.reverse)
+      kernStr.append(t.toCL)
+
+    val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
+
+
+    new Kernel2[A1,A2] {
+      def apply(a1: A1, a2: A2) = { 
+        val bufA1: ByteBuffer = transA1.toBuffer(a1).head
+        val bufA2: ByteBuffer = transA2.toBuffer(a2).head
+        
+        // Need to get element size from Marshal
+        val numItemsA1 = bufA1.capacity / 4 
+        val numItemsA2 = bufA2.capacity / 4
+
+        val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
+        // val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1.capacity)
+        val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA2.capacity)
+        
+        val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
+
+        kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
+        kernBin.setArg(1, numItemsA1)
+        kernBin.setArg(2, bufA2CLBuf)
+        kernBin.setArg(3, numItemsA2)
+        kernBin.setLocalArg(4, threads * 4L)
+        kernBin.setArg(5, threads)
+
+        kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
+
+        dev.queue.finish
+
+        val bufOut = allocDirectBuffer(bufA2.capacity)
+        bufA2CLBuf.read(dev.queue, bufOut, true)
+
+        bufOut.rewind
+        Array.copy(transA2.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a2.asInstanceOf[AnyRef], 0, numItemsA2)
+
+      }
+    }
+  }
+
+
   // ...
 
   // TODO:

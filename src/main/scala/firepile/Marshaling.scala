@@ -113,6 +113,8 @@ object Marshaling {
     // def value: A // called only from gpu
   }
 
+  implicit object AMF extends ArrayMarshal[Float](FM, FM.manifest)
+
 
   implicit object LZM extends Local[Boolean] {
     val size = 1

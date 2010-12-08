@@ -6,7 +6,6 @@ object Reduce3 {
   import firepile.Device
   import firepile.Arrays._
   import firepile.Spaces._
-  import firepile.Args._
   import firepile.util.BufferBackedArray._
   import firepile.tree.Trees.Tree
   import com.nativelibs4java.opencl._
@@ -43,11 +42,12 @@ object Reduce3 {
 */
   
   val NUM_ITEMS = 16384 // 1048576
-  val maxThreads = 128 
+  val maxThreads = 512 
   val maxBlocks = 64
 
   def main(args: Array[String]) = run
 
+  /*
   def compile[T:FixedSizeMarshal](f: Function2[Array[T],Array[T],Unit]): (Array[T],Array[T]) => Unit = {
     new Function2[Array[T],Array[T],Unit] {
       def apply(a: Array[T], b: Array[T]) = {
@@ -102,11 +102,15 @@ object Reduce3 {
       }
     }
   }
+*/
 
   def sum(A: Array[Float]): Float = {
-    val threads = (if (NUM_ITEMS < maxThreads*2) pow(2, ceil(log(NUM_ITEMS) / log(2))) else maxThreads).toInt
-    val blocks = ((NUM_ITEMS + (threads * 2 - 1)) / (threads * 2)).toInt
-    val sumBlockReducer: (Array[Float], Array[Float]) => Unit = compile {
+    implicit val gpu: Device = firepile.gpu
+
+    val threads = (if (A.length < gpu.maxThreads*2) pow(2, ceil(log(A.length) / log(2))) else gpu.maxThreads).toInt
+    val blocks = ((A.length + (threads * 2 - 1)) / (threads * 2)).toInt
+    println("BLOCKS = " + blocks)
+    val sumBlockReducer: (Array[Float], Array[Float]) => Unit = firepile.Compiler.compile {
       (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f)
     }
     val B: Array[Float] = new Array[Float](blocks)
@@ -189,7 +193,7 @@ object Reduce3 {
   // @where(n <= numItems)
   /* @kernel("(__global float *idata, __global float *odata, int n, float z, __local float *sdata)") */
   def reduce(idata: Array[Float], odata: Array[Float], n: Int, f: (Float,Float) => Float, z: Float) =
-      (id: Id1, sdata: Array[Float] @local) => {
+      (id: Id1, sdata: Array[Float]) => {
     // perform first level of reduction reading from global memory, writing to shared memory
     val tid = id.local.toInt
 
