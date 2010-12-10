@@ -1580,7 +1580,7 @@ object JVM2CL {
       case SType("firepile.Spaces$Id3") => ids(2) = true; return Some(Select(Id(baseName), Id("globalId")))
       case _ => None
     } 
-    case GVirtualInvoke(_, SMethodRef(SClassName("firepile.tests.Reduce3$localMem$"), "barrier", _, _, _), _) => return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE")))
+    case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE")))
     case GVirtualInvoke(GVirtualInvoke(GLocal(baseName, stype), SMethodRef(SClassName("firepile.Spaces$Config"), "config", _, _, _), _), SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _), _) => stype match {
       case SType("firepile.Spaces$Id1") => ids(0) = true; return Some(Select(Id(baseName), Id("localSize")))
       case SType("firepile.Spaces$Id2") => ids(1) = true; return Some(Select(Id(baseName), Id("localSize")))
