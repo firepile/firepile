@@ -43,12 +43,17 @@ object TypeGen {
   }
   
  def getSignature( classname:  String, sootclass: SootClass) : List[ClassDef] = {
- 
- var sig: List[ClassDef] = if (classname.contains("$")) getScalaJavaSignature(classname, sootclass)
- else getScalaSignature(classname)
- if(sig==null)
- sig= getJavaSignature(classname, sootclass)
- sig
+   val sig = if (classname.contains("$"))
+     getScalaJavaSignature(classname, sootclass)
+   else
+     getScalaSignature(classname)
+
+   if (sig == null) {
+     println("SIG IS NULL")
+     getJavaSignature(classname, sootclass)
+   }
+   else
+     sig
  }
 
 }

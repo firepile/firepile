@@ -84,7 +84,8 @@
      def mapKernel(f: A=>B): Kernel2[BBArray[A], BBArray[B]] = { } 
      */
    }
-  
+
+/*
    class GPUArray[A](a: BBArray[A]) {
 
    /*   
@@ -110,6 +111,7 @@
      */
     
    }
+*/
   
   /*
    //kinda want this:

@@ -113,7 +113,6 @@ object Marshaling {
     // def value: A // called only from gpu
   }
 
-  implicit object AMF extends ArrayMarshal[Float](FM, FM.manifest)
 
 
   implicit object LZM extends Local[Boolean] {
@@ -183,7 +182,7 @@ object Marshaling {
   // Dummy Array2
   class Array2[A: FixedSizeMarshal]
 
-  // implicit def ArrayMarshal[A: FixedSizeMarshal: Manifest]: ArrayMarshal[A] = new ArrayMarshal[A]
+  implicit def ArrayMarshal[A: FixedSizeMarshal: Manifest]: ArrayMarshal[A] = new ArrayMarshal[A](implicitly[FixedSizeMarshal[A]], implicitly[ClassManifest[A]])
 
   // class LocalArray[A: FixedSizeMarshal](val value: Array[A])
   // class LocalArray[A: FixedSizeMarshal](length: Int) extends Local[Array[A]]

@@ -104,12 +104,63 @@ object Reduce3 {
   }
 */
 
+/*
+  def sumn[N](A: Array[N])(implicit num: Numeric[N]): N = {
+    implicit val gpu: Device = firepile.gpu
+
+    val threads = (if (A.length < gpu.maxThreads*2) pow(2, ceil(log(A.length) / log(2))) else gpu.maxThreads).toInter
+    val blocks = ((A.length + (threads * 2 - 1)) / (threads * 2)).toInt
+    
+    val sumBlockReducer = num match {
+      case _: Numeric[Int] => 
+        firepile.Compiler.compile {
+          (A: Array[Int], B: Array[Int]) => greduce(A, B, A.length, num.plus.asInstanceOf[(Int,Int) => Int], num.zero.asInstanceOf[Int])
+        }.asInstanceOf[(Array[N], Array[N]) => Unit]
+      case _: Numeric[Float] => 
+        firepile.Compiler.compile {
+          (A: Array[Float], B: Array[Float]) => greduce(A, B, A.length, num.plus.asInstanceOf[(Float,Float) => Float], num.zero.asInstanceOf[Float])
+        }.asInstanceOf[(Array[N], Array[N]) => Unit]
+      // want:
+        
+      //  firepile.Compiler.compile {
+      //    (A: Array[N], B: Array[N]) => greduce(A, B, A.length, num.plus, num.zero)
+      //  }
+        
+      // ...
+    }
+    val B: Array[N] = new Array[N](blocks)
+
+    sumBlockReducer(A, B)
+    B.reduceLeft(num.plus)
+  }
+*/
+
+
+  def sumint(A: Array[Int]): Int = {
+    implicit val gpu: Device = firepile.gpu
+
+    val threads = (if (A.length < gpu.maxThreads*2) pow(2, ceil(log(A.length) / log(2))) else gpu.maxThreads).toInt
+    val blocks = ((A.length + (threads * 2 - 1)) / (threads * 2)).toInt
+    
+    // val add: (Int,Int) => Int = _+_
+    val sumBlockReducer: (Array[Int], Array[Int]) => Unit = firepile.Compiler.compile {
+      (A: Array[Int], B: Array[Int]) => intreduce(A, B, A.length, _+_, 0)
+    }
+    val B: Array[Int] = new Array[Int](blocks)
+
+    sumBlockReducer(A, B)
+    B.reduceLeft(_+_)
+  }
+
+
   def sum(A: Array[Float]): Float = {
     implicit val gpu: Device = firepile.gpu
 
     val threads = (if (A.length < gpu.maxThreads*2) pow(2, ceil(log(A.length) / log(2))) else gpu.maxThreads).toInt
     val blocks = ((A.length + (threads * 2 - 1)) / (threads * 2)).toInt
-    println("BLOCKS = " + blocks)
+   
+    // val add: (Float, Float) => Float = _+_
+
     val sumBlockReducer: (Array[Float], Array[Float]) => Unit = firepile.Compiler.compile {
       (A: Array[Float], B: Array[Float]) => reduce(A, B, A.length, _+_, 0f)
     }
@@ -175,7 +226,19 @@ object Reduce3 {
     val gpuSum = sum(randInput)
 
     println("CPU sum = " + cpuSum + "   GPU sum = " + gpuSum)
+/*
+    val random2 = new Random(100)
 
+    val randInput2 = Array.fill(NUM_ITEMS)(random2.nextFloat)
+    val gpuSum2 = sum(randInput2)
+   
+    val randInput3 = Array.fill(NUM_ITEMS)(random.nextInt(100))
+    val gpuSum3 = sumint(randInput3)
+
+    println("CPU sum = " + cpuSum + "   GPU sum = " + gpuSum + "\nCPU sum2 = " + randInput2.sum + "   GPU sum2 = " + gpuSum2)
+
+    println("GPU sum3 (Int) = " + gpuSum3)
+*/
     /*
     firepile.Compose.compileToTree(
       (A: Array[Float], B: Array[Float], z: Float, f: (Float,Float)=>Float) => reduce(A, B, A.length, f, z), 2)
@@ -184,6 +247,57 @@ object Reduce3 {
 
 
   object localMem { def barrier = () }
+
+  /* Uses n/2 threads, performs the the first level of reduction when
+     reading from global memory
+     n - number of elements to reduce
+  */
+  // @kernel(numGroups = odata.length, numItems = idata.length)
+  // @where(n <= numItems)
+  /* @kernel("(__global float *idata, __global float *odata, int n, float z, __local float *sdata)") */
+  def greduce[A](idata: Array[A], odata: Array[A], n: Int, f: (A,A) => A, z: A) =
+      (id: Id1, sdata: Array[A]) => {
+    // perform first level of reduction reading from global memory, writing to shared memory
+    val tid = id.local.toInt
+
+    // i = get_group_id(0)*(get_local_size(0)*2) + get_local_id(0);
+
+    // (row=group, col=local, rowlength=localSize*2)
+    // something like:
+    // IdSpace(id.numGroups, localSize*2).index(id.group, id.local).toInt
+    // Oy!
+
+    val i = id.group * (id.config.localSize*2) + id.local
+
+    /*
+    val grpId = id.group.toInt
+    val lclSize2 = id.config.localSize.toInt * 2
+    val lclId = id.local.toInt
+    val i = grpId * lclSize2 + lclId
+    */
+
+
+    sdata(tid) = if (i < n) idata(i) else z
+
+    if (i + id.config.localSize < n)
+      sdata(tid) = f(sdata(tid), idata(i + id.config.localSize))
+
+    localMem.barrier 
+
+    // do reduction in shared memory
+    // byfun -> applying? byfunc?
+    var s = id.config.localSize / 2
+    while (s > 0) {
+      if (tid < s)
+        sdata(tid) = f(sdata(tid), sdata(tid + s))
+      localMem.barrier
+      s /= 2
+    }
+
+    // write results back to global
+    if (tid == 0) 
+      odata(id.group) = sdata(0)
+  }
 
   /* Uses n/2 threads, performs the the first level of reduction when
      reading from global memory
@@ -235,4 +349,49 @@ object Reduce3 {
     if (tid == 0) 
       odata(id.group) = sdata(0)
   }
+
+  def intreduce(idata: Array[Int], odata: Array[Int], n: Int, f: (Int,Int) => Int,  z: Int) =
+      (id: Id1, sdata: Array[Int]) => {
+    // perform first level of reduction reading from global memory, writing to shared memory
+    val tid = id.local.toInt
+
+    // i = get_group_id(0)*(get_local_size(0)*2) + get_local_id(0);
+
+    // (row=group, col=local, rowlength=localSize*2)
+    // something like:
+    // IdSpace(id.numGroups, localSize*2).index(id.group, id.local).toInt
+    // Oy!
+
+    val i = id.group * (id.config.localSize*2) + id.local
+
+    /*
+    val grpId = id.group.toInt
+    val lclSize2 = id.config.localSize.toInt * 2
+    val lclId = id.local.toInt
+    val i = grpId * lclSize2 + lclId
+    */
+
+
+    sdata(tid) = if (i < n) idata(i) else z
+
+    if (i + id.config.localSize < n)
+      sdata(tid) = f(sdata(tid), idata(i + id.config.localSize))
+
+    localMem.barrier 
+
+    // do reduction in shared memory
+    // byfun -> applying? byfunc?
+    var s = id.config.localSize / 2
+    while (s > 0) {
+      if (tid < s)
+        sdata(tid) = f(sdata(tid), sdata(tid + s))
+      localMem.barrier
+      s /= 2
+    }
+
+    // write results back to global
+    if (tid == 0) 
+      odata(id.group) = sdata(0)
+  }
+
 }

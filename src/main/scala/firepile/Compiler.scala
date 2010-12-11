@@ -224,15 +224,31 @@ object Compiler {
     base + next
   }
 
-  trait Kernel1[A] extends Function1[A,Unit]
-  trait Kernel2[A1,A2] extends Function2[A1,A2,Unit]
+  trait Kernel
+  trait Kernel1[A] extends Function1[A,Unit] with Kernel
+  trait Kernel2[A1,A2] extends Function2[A1,A2,Unit] with Kernel
 
   def compile[A](f: A => Unit)(implicit ma: Marshal[A], dev: Device): Kernel1[A] = throw new RuntimeException("unimplemented")
   // e.g., reduce(input: Array[Int], output: Array[Int])
   // e.g., map(input: Array[Int], output: Array[Float])
 
+  import scala.collection.mutable.HashMap
+  val kernelCache = new HashMap[AnyRef, Kernel]
+  // [NN] move to Device?
+  def memoize[A1,A2](f: (A1,A2) => Unit)(k: => Kernel2[A1,A2]) = {
+    val key = f.getClass
+    kernelCache.get(key) match {
+      case None =>
+        val kCompiled = k
+        kernelCache(key) = kCompiled
+        kCompiled
+      case Some(k2: Kernel2[A1,A2]) =>
+        println("found kernel in cache")
+        k2
+    }
+  }
 
-  def compile[A1,A2](f: (A1,A2) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): Kernel2[A1,A2] = {
+  def compile[A1,A2](f: (A1,A2) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): Kernel2[A1,A2] = memoize(f) {
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
     val sizeA1 = transA1.sizes(1).head
@@ -275,8 +291,9 @@ object Compiler {
         bufA2CLBuf.read(dev.queue, bufOut, true)
 
         bufOut.rewind
-        Array.copy(transA2.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a2.asInstanceOf[AnyRef], 0, numItemsA2)
 
+        // [NN] maybe need to copy?  but, probably not
+        Array.copy(transA2.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a2.asInstanceOf[AnyRef], 0, numItemsA2)
       }
     }
   }

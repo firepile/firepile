@@ -29,7 +29,7 @@ object ScalaTypeGen {
     }
     val cdlist = getScalaSignature(args(0))
 
-    if (cdlist == null) {
+    if (cdlist == Nil) {
       println("Class Def List is null")
       exit(1)
     }
@@ -155,8 +155,8 @@ object ScalaTypeGen {
   }
 
   def getScalaJavaSignature(cname: String, s: SootClass): List[ScalaClassDef] = {
-
     val sig = parseJavaSig(cname)
+    
     sig match {
       case ScalaJavaMethodDef(name: String, num: Int, scalaParent: String, apply: Boolean, applyInt: Int) => {
         println(" Name:"+name+"Num:"+num+"Scala Parent:"+scalaParent+"apply:"+apply+"applyNum:"+applyInt)
@@ -166,10 +166,11 @@ object ScalaTypeGen {
           case List(a: ScalaClassDef) => {
             for (i <- a.methods)
               if (i.name.equals(name))
+               // TODO: overloading?
                r = List(new ScalaClassDef(a.name, a.classtype, a.fields, List(i), null, 0L, null, null))
             r
           }
-          case _ => null
+          case _ => null // TODO: Nil not null
         }
       }
 
@@ -180,7 +181,7 @@ object ScalaTypeGen {
         else {
           s match {
             case List(a: ScalaClassDef) => { var cl: ScalaClassDef = null; for (i <- a.innerClasses) if (i.name.equals(name)) cl = i; List(cl) }
-            case _ => null
+            case _ => null // TODO: Nil not null
           }
         }
       }
@@ -206,32 +207,14 @@ object ScalaTypeGen {
     val classFile = ClassFileParser.parse(ByteCode(bytes))
     val SCALA_SIG = "ScalaSig"
 
-    val sig = classFile.attribute(SCALA_SIG).map(_.byteCode).map(ScalaSigAttributeParsers.parse) match {
+    val sig: List[MyClassDef] = classFile.attribute(SCALA_SIG).map(_.byteCode).map(ScalaSigAttributeParsers.parse) match {
       // No entries in ScalaSig attribute implies that the signature is stored in the annotation
       case Some(ScalaSig(_, _, entries)) if entries.length == 0 => unpickleFromAnnotation(classFile, isPackageObject)
       case Some(scalaSig) => parseScalaSignature(scalaSig, isPackageObject)
-      case None => None
+      case None => Nil
     }
 
-    sig match {
-
-      case List(myclassdef: MyClassDef) => List(getClassDef(myclassdef))
-      case scala.None => null
-      case _ => getListClassDef(sig.asInstanceOf[List[MyClassDef]])
-
-    }
-
-  }
-
-  def getListClassDef(myClassDefList: List[MyClassDef]): List[ScalaClassDef] = {
-
-    var fieldList = ListBuffer[ScalaClassDef]()
-
-    for (i <- myClassDefList)
-      fieldList += getClassDef(i)
-
-    fieldList.toList
-
+    sig.map(getClassDef(_))
   }
 
   def getClassDef(myClassDef: MyClassDef): ScalaClassDef = {
