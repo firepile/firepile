@@ -898,7 +898,8 @@ object JVM2CL {
   // Split library calls into separate objects.
   // This avoids an OutOfMemory error in scalac.
   object LibraryCall {
-    def unapply(v: Value) = {
+    def unapply(v: Value)(implicit iv: (SymbolTable, HashMap[String, Value])) = {
+      val (symtab, anonFuns) = iv
       val t: Tree = v match {
         // These are just here as examples for matching Array.ofDim.  We need a realy strategy for translating newarray.
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "ofDim", _, _, _),
@@ -913,7 +914,7 @@ object JVM2CL {
         case TupleSelect(t) => t
 
         // firepile.util.Math.sin(x)
-        case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, null, null)))
+        case FirepileMathCall(name, args) => Call(Id(name), args.map(a => translateExp(a, symtab, anonFuns)))
 
         // Predef$.MODULE$.floatWrapper(x).abs()
         case GVirtualInvoke(
@@ -1305,7 +1306,7 @@ object JVM2CL {
               for (m <- pr.methodIterator) {
                 if (!m.isAbstract) {
                   val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-                  println("Checking method: " + sig + " against " + methodSig)
+                  // println("Checking method: " + sig + " against " + methodSig)
                   if (sig.equals(methodSig)) {
                     println("Adding CompileMethodTask(" + method + ", " + pr + ")")
                     if (args.length > 0)
@@ -1447,6 +1448,7 @@ object JVM2CL {
                     case _ => Id(p.asInstanceOf[Formal].name)
                   }))
 
+              println("RETURNING idStructPops: " + TreeSeq(idStructPops.toList))
               TreeSeq(idStructPops.toList)
 
 

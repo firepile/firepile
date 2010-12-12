@@ -227,6 +227,8 @@ object Compiler {
   trait Kernel
   trait Kernel1[A] extends Function1[A,Unit] with Kernel
   trait Kernel2[A1,A2] extends Function2[A1,A2,Unit] with Kernel
+  trait Kernel3[A1,A2,A3] extends Function3[A1,A2,A3,Unit] with Kernel
+  trait Kernel4[A1,A2,A3,A4] extends Function4[A1,A2,A3,A4,Unit] with Kernel
 
   def compile[A](f: A => Unit)(implicit ma: Marshal[A], dev: Device): Kernel1[A] = throw new RuntimeException("unimplemented")
   // e.g., reduce(input: Array[Int], output: Array[Int])
@@ -248,6 +250,32 @@ object Compiler {
     }
   }
 
+  def memoize[A1,A2,A3](f: (A1,A2,A3) => Unit)(k: => Kernel3[A1,A2,A3]) = {
+    val key = f.getClass
+    kernelCache.get(key) match {
+      case None =>
+        val kCompiled = k
+        kernelCache(key) = kCompiled
+        kCompiled
+      case Some(k2: Kernel3[A1,A2,A3]) =>
+        println("found kernel in cache")
+        k2
+    }
+  }
+
+  def memoize[A1,A2,A3,A4](f: (A1,A2,A3,A4) => Unit)(k: => Kernel4[A1,A2,A3,A4]) = {
+    val key = f.getClass
+    kernelCache.get(key) match {
+      case None =>
+        val kCompiled = k
+        kernelCache(key) = kCompiled
+        kCompiled
+      case Some(k2: Kernel4[A1,A2,A3,A4]) =>
+        println("found kernel in cache")
+        k2
+    }
+  }
+
   def compile[A1,A2](f: (A1,A2) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): Kernel2[A1,A2] = memoize(f) {
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
@@ -263,7 +291,8 @@ object Compiler {
     val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
 
     new Kernel2[A1,A2] {
-      def apply(a1: A1, a2: A2) = { 
+      def apply(a1: A1, a2: A2): Unit = apply(a1, a2, -1, -1) 
+      def apply(a1: A1, a2: A2, globalWkSize: Int, localWkSize: Int): Unit = { 
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
         val bufA2: ByteBuffer = transA2.toBuffer(a2).head
         
@@ -280,10 +309,17 @@ object Compiler {
         kernBin.setArg(1, numItemsA1)
         kernBin.setArg(2, bufA2CLBuf)
         kernBin.setArg(3, numItemsA2)
-        kernBin.setLocalArg(4, threads * sizeA1)
-        kernBin.setArg(5, threads)
 
-        kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
+        if (globalWkSize == -1 && localWkSize == -1) {
+          kernBin.setLocalArg(4, threads * sizeA1)
+          kernBin.setArg(5, threads)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
+        }
+        else {
+          kernBin.setLocalArg(4, localWkSize * sizeA1)
+          kernBin.setArg(5, localWkSize)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](globalWkSize), Array[Int](localWkSize))
+        }
 
         dev.queue.finish
 
@@ -297,6 +333,81 @@ object Compiler {
       }
     }
   }
+
+  def compile[A1,A2,A3](f: (A1,A2,A3) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device) = throw new RuntimeException("compile3 unimplmented")
+
+  def compile[A1,A2,A3,A4](f: (A1,A2,A3,A4) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], dev: Device): Kernel4[A1,A2,A3,A4] = memoize(f) {
+    val transA1 = implicitly[Marshal[A1]]
+    val transA2 = implicitly[Marshal[A2]]
+    val transA3 = implicitly[Marshal[A3]]
+    val transA4 = implicitly[Marshal[A4]]
+    val sizeA1 = transA1.sizes(1).head
+    val sizeA2 = transA2.sizes(1).head
+    val sizeA3 = transA3.sizes(1).head
+    val sizeA4 = transA4.sizes(1).head
+    val kernStr = new StringBuffer()
+
+    val (kernName: String, tree: List[Tree]) = firepile.Compose.compileToTreeName(f, 4)
+        
+    for (t: Tree <- tree.reverse)
+      kernStr.append(t.toCL)
+
+    val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
+
+    new Kernel4[A1,A2,A3,A4] {
+      def apply(a1: A1, a2: A2, a3: A3, a4: A4): Unit = apply(a1, a2, a3, a4, -1, -1) 
+      def apply(a1: A1, a2: A2, a3: A3, a4: A4, globalWkSize: Int, localWkSize: Int): Unit = { 
+        val bufA1: ByteBuffer = transA1.toBuffer(a1).head
+        val bufA2: ByteBuffer = transA2.toBuffer(a2).head
+        val bufA3: ByteBuffer = transA3.toBuffer(a3).head
+        val bufA4: ByteBuffer = transA4.toBuffer(a4).head
+        
+        val numItemsA1 = bufA1.capacity / sizeA1 
+        val numItemsA2 = bufA2.capacity / sizeA2 
+        val numItemsA3 = bufA3.capacity / sizeA3 
+        val numItemsA4 = bufA4.capacity / sizeA4 
+
+        val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
+        val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
+        val bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
+        val bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA4.capacity)
+        
+        val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
+
+        kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
+        kernBin.setArg(1, numItemsA1)
+        kernBin.setArg(2, bufA2CLBuf)
+        kernBin.setArg(3, numItemsA2)
+        kernBin.setArg(4, bufA3CLBuf)
+        kernBin.setArg(5, numItemsA3)
+        kernBin.setArg(6, bufA4CLBuf)
+        kernBin.setArg(7, numItemsA4)
+
+        if (globalWkSize == -1 && localWkSize == -1) {
+          kernBin.setLocalArg(8, threads * sizeA1)
+          kernBin.setArg(9, threads)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
+        }
+        else {
+          // We don't really know if the local item types are the same as the global item types
+          kernBin.setLocalArg(8, localWkSize * sizeA1)
+          kernBin.setArg(9, localWkSize)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](globalWkSize), Array[Int](localWkSize))
+        }
+
+        dev.queue.finish
+
+        val bufOut = allocDirectBuffer(bufA4.capacity)
+        bufA4CLBuf.read(dev.queue, bufOut, true)
+
+        bufOut.rewind
+
+        // [NN] maybe need to copy?  but, probably not
+        Array.copy(transA4.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a4.asInstanceOf[AnyRef], 0, numItemsA4)
+      }
+    }
+  }
+
 
 
   // ...

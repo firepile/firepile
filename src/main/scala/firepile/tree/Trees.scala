@@ -15,7 +15,7 @@ object Trees {
         case s @ DoubleLit(_) => Eval(s).toCL
         case s @ Un(_,_) => Eval(s).toCL
         case s @ Bin(_,_,_) => Eval(s).toCL
-        case s @ Call(_,_) => Eval(s).toCL
+        case s @ Call(_,_) => s.toCL // Eval(s).toCL
         case s @ ClosureCall(_,_) => Eval(s).toCL
         case s @ Cast(_,_) => Eval(s).toCL
         case s @ Assign(_,_) => Eval(s).toCL

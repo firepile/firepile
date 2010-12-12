@@ -246,8 +246,7 @@ object Reduce3 {
   }
 
 
-  object localMem { def barrier = () }
-
+ 
   /* Uses n/2 threads, performs the the first level of reduction when
      reading from global memory
      n - number of elements to reduce

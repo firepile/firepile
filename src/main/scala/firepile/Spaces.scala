@@ -4,6 +4,9 @@ import util.BufferBackedArray._
 import firepile.Marshaling._
 
 object Spaces {
+
+  object localMem { def barrier = () }
+
   trait IdSpace[Pt <: Point[Pt]] extends Iterable[Pt] {
     def extent: Pt
     def length: Int
