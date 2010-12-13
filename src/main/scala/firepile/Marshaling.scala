@@ -3,6 +3,7 @@ package firepile
 import firepile.util.BufferBackedArray.allocBuffer
 import java.nio.ByteBuffer 
 import java.nio.ByteOrder 
+import firepile.util.Unsigned._
 
 object Marshaling {
   def marshal[A: Marshal] = implicitly[Marshal[A]]
@@ -107,7 +108,14 @@ object Marshaling {
     val manifest = Predef.manifest[Double]
   }
 
-
+ implicit object UM extends FixedSizeMarshal[UInt] {
+    val size = 4
+    val align = 4
+    def put(buf:ByteBuffer, i: Int, x: UInt) = buf.put(i, x.toByte)
+    def get(buf:ByteBuffer, i: Int) = (buf.get(i)).toUInt
+    val manifest = Predef.manifest[UInt]
+  }
+  
   // Local memory marshal
   abstract class Local[A: Marshal] {
     // def value: A // called only from gpu
