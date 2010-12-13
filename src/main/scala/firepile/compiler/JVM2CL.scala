@@ -467,7 +467,7 @@ object JVM2CL {
 
     for (i <- 0 until ids.length)
       if (ids(i))
-        arraystructs.structs += ValueType("firepile_Spaces_Id" + (i + 1)) -> List(StructDef("firepile_Spaces_Id" + (i + 1), List(VarDef(IntType, Id("localId")), VarDef(IntType, Id("groupId")), VarDef(IntType, Id("globalId")), VarDef(IntType, Id("localSize")))))
+        arraystructs.structs += ValueType("firepile_Spaces_Id" + (i + 1)) -> List(StructDef("firepile_Spaces_Id" + (i + 1), List(VarDef(IntType, Id("localId")), VarDef(IntType, Id("groupId")), VarDef(IntType, Id("globalId")), VarDef(IntType, Id("localSize")), VarDef(IntType, Id("globalSize")))))
 
     val body = translateUnits(units, Nil, symtab, anonFuns)
 
@@ -1075,7 +1075,7 @@ object JVM2CL {
       case GFloatConstant(value) => FloatLit(value)
       case GDoubleConstant(value) => DoubleLit(value)
 
-      case GArrayLength(op: Local) => Select(op, "length")
+      case GArrayLength(op) => Select(op, "length")
       
       //case GCast(op, castTyp) => Cast(translateType(castTyp), translateExp(op, symtab, anonFuns))
     
@@ -1644,7 +1644,7 @@ object JVM2CL {
       }
       case GArrayRef(base, index) => ArrayAccess(Select(base, "data"), index)
 
-      case v => Id("unsupported:" + v.getClass.getName)
+      case v => Id("translateExp:unsupported:" + v.getClass.getName)
 
     }
   }

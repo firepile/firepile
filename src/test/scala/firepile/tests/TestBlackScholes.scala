@@ -70,32 +70,26 @@ object TestBlackScholes {
         blackScholesK(S, X, T, CP)
       }
 
-    val CPOut = Array[Float](2)
+    val CPOut = Array[Float](S.length*2)
+
+    // hardcoded globalWorkSize and localWorkSize similar to nvidia example
+    // bs.setWorkSizes(...)
     bs(S, X, T, CPOut)
 
-    (CPOut(0), CPOut(1))
+    // Puts are stored at even index numbers, calls are stored at odd index numbers
+    (CPOut.sliding(1, 2).toArray.flatten.sum, CPOut.drop(1).sliding(1, 2).toArray.flatten.sum)
   } 
 
   def blackScholesK(S: Array[Float], X: Array[Float], T: Array[Float], Out: Array[Float]) = (id: Id1, ldata: Array[Float]) => {
     val                    R = 0.02f
     val                    V = 0.30f
-    // waste time
-    var i = 0
-    var p = 0.f
-    var c = 0.f
 
-    var globalS = S(id.global)
-    var globalX = X(id.global)
-    var globalT = T(id.global)
-
-    while (i < 100) {
-      p += BlackScholesBodyP(globalS, globalX, globalT, R, V)
-      c += BlackScholesBodyC(globalS, globalX, globalT, R, V)
-      i += 1
+    var i = id.global
+    while ( i < S.length) {
+      Out(i*2) = BlackScholesBodyP(S(i), X(i), T(i), R, V)
+      Out(i*2 + 1) = BlackScholesBodyC(S(i), X(i), T(i), R, V)
+      i += id.config.globalSize
     }
-    
-    Out(0) = p
-    Out(1) = c
   }
 
 

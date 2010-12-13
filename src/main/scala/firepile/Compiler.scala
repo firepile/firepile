@@ -228,7 +228,10 @@ object Compiler {
   trait Kernel1[A] extends Function1[A,Unit] with Kernel
   trait Kernel2[A1,A2] extends Function2[A1,A2,Unit] with Kernel
   trait Kernel3[A1,A2,A3] extends Function3[A1,A2,A3,Unit] with Kernel
-  trait Kernel4[A1,A2,A3,A4] extends Function4[A1,A2,A3,A4,Unit] with Kernel
+  trait Kernel4[A1,A2,A3,A4] extends Function4[A1,A2,A3,A4,Unit] with Kernel {
+    // def setWorkSizes(gs: Int, ls: Int)
+  }
+
 
   def compile[A](f: A => Unit)(implicit ma: Marshal[A], dev: Device): Kernel1[A] = throw new RuntimeException("unimplemented")
   // e.g., reduce(input: Array[Int], output: Array[Int])
@@ -355,7 +358,7 @@ object Compiler {
     val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
 
     new Kernel4[A1,A2,A3,A4] {
-      def apply(a1: A1, a2: A2, a3: A3, a4: A4): Unit = apply(a1, a2, a3, a4, -1, -1) 
+      def apply(a1: A1, a2: A2, a3: A3, a4: A4): Unit = apply(a1, a2, a3, a4, 60*1024, 128)
       def apply(a1: A1, a2: A2, a3: A3, a4: A4, globalWkSize: Int, localWkSize: Int): Unit = { 
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
         val bufA2: ByteBuffer = transA2.toBuffer(a2).head
