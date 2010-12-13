@@ -13,7 +13,7 @@ import firepile.util.Math.{sqrt,log,exp,fabs}
 object TestBlackScholes {
   def main(args: Array[String]) = {
     val optionCount = if (args.length > 0) args(0).toInt else 4000000
-    val n = if (args.length > 1) args(1).toInt else 10
+    // val n = if (args.length > 1) args(1).toInt else 10
 
     implicit val gpu: Device = firepile.gpu
 
@@ -24,14 +24,14 @@ object TestBlackScholes {
       (min + r * (max - min)).toFloat
     }
 
-    println("BS x " + n + " " + optionCount)
+    println("BS x "  + optionCount)
 
 
     // val h_Call    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
     // val h_Put     = BBArray.tabulate[Float](optionCount)(i => -1.0f)
-    val h_S       = Array.tabulate[Float](optionCount)(i => randFloat(5.0f, 30.0f))
-    val h_X       = Array.tabulate[Float](optionCount)(i => randFloat(1.0f, 100.0f))
-    val h_T       = Array.tabulate[Float](optionCount)(i => randFloat(0.25f, 10.0f))
+    val h_S       = Array.fill[Float](optionCount)(randFloat(5.0f, 30.0f))
+    val h_X       = Array.fill[Float](optionCount)(randFloat(1.0f, 100.0f))
+    val h_T       = Array.fill[Float](optionCount)(randFloat(0.25f, 10.0f))
 
 
 
@@ -71,14 +71,21 @@ object TestBlackScholes {
         blackScholesK(S, X, T, CP)
       }
 
-    val CPOut = Array[Float](S.length*2)
+    val CPOut = new Array[Float](S.length*2)
 
     // hardcoded globalWorkSize and localWorkSize similar to nvidia example
     // bs.setWorkSizes(...)
     bs(S, X, T, CPOut)
 
     // Puts are stored at even index numbers, calls are stored at odd index numbers
-    (CPOut.sliding(1, 2).toArray.flatten.sum, CPOut.drop(1).sliding(1, 2).toArray.flatten.sum)
+    var put = 0.f
+    var call = 0.f
+
+    for (n <- 0 until CPOut.length)
+      if (n % 2 == 0) put += CPOut(n).abs
+      else call += CPOut(n).abs
+
+    (call, put)
   } 
 
   def blackScholesK(S: Array[Float], X: Array[Float], T: Array[Float], Out: Array[Float]) = (id: Id1, ldata: Array[Float]) => {
@@ -91,6 +98,7 @@ object TestBlackScholes {
       Out(i*2 + 1) = BlackScholesBodyC(S(i), X(i), T(i), R, V)
       i += id.config.globalSize
     }
+    
   }
 
 

@@ -17,6 +17,8 @@ import java.nio.ByteBuffer
 
 // TODO: remove most of this.
 object Compiler {
+  val TIMING = true
+
   val Header = ("\n" +
     "struct Point1 {                                                                               \n" +
     "  int x;                                                                                      \n" +
@@ -373,6 +375,9 @@ object Compiler {
         
         val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
 
+        if (TIMING) {
+          time ({
+            for (i <- 0 to 16) {
         kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
         kernBin.setArg(1, numItemsA1)
         kernBin.setArg(2, bufA2CLBuf)
@@ -382,11 +387,11 @@ object Compiler {
         kernBin.setArg(6, bufA4CLBuf)
         kernBin.setArg(7, numItemsA4)
 
-        println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
 
         if (dev.memConfig == null) {
           kernBin.setLocalArg(8, threads * sizeA1)
           kernBin.setArg(9, threads)
+          println("Executing with global work size = " + (numItemsA2 * threads) + " and local work size = " + threads)
           kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
         }
         else {
@@ -397,6 +402,34 @@ object Compiler {
         }
 
         dev.queue.finish
+            } 
+          }, 16)
+        } else {
+        kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
+        kernBin.setArg(1, numItemsA1)
+        kernBin.setArg(2, bufA2CLBuf)
+        kernBin.setArg(3, numItemsA2)
+        kernBin.setArg(4, bufA3CLBuf)
+        kernBin.setArg(5, numItemsA3)
+        kernBin.setArg(6, bufA4CLBuf)
+        kernBin.setArg(7, numItemsA4)
+
+
+        if (dev.memConfig == null) {
+          kernBin.setLocalArg(8, threads * sizeA1)
+          kernBin.setArg(9, threads)
+          println("Executing with global work size = " + (numItemsA2 * threads) + " and local work size = " + threads)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
+        }
+        else {
+          // We don't really know if the local item types are the same as the global item types
+          kernBin.setLocalArg(8, dev.memConfig.localSize * sizeA1)
+          kernBin.setArg(9, dev.memConfig.localSize)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+        }
+
+        dev.queue.finish
+        }
 
         val bufOut = allocDirectBuffer(bufA4.capacity)
         bufA4CLBuf.read(dev.queue, bufOut, true)

@@ -104,14 +104,14 @@ package object firepile {
 
   // Should copies to/from device be explicit?
 
-  def time[A](body: => A): A = {
+  def time[A](body: => A, iterations: Int = 1): A = {
     val t0 = System.currentTimeMillis
     try {
       body
     }
     finally {
       val t1 = System.currentTimeMillis
-      println("time " + (t1 - t0) / 1000.)
+      println("time " + ((t1 - t0) / 1000.) / iterations)
     }
   }
 
