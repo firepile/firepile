@@ -228,9 +228,7 @@ object Compiler {
   trait Kernel1[A] extends Function1[A,Unit] with Kernel
   trait Kernel2[A1,A2] extends Function2[A1,A2,Unit] with Kernel
   trait Kernel3[A1,A2,A3] extends Function3[A1,A2,A3,Unit] with Kernel
-  trait Kernel4[A1,A2,A3,A4] extends Function4[A1,A2,A3,A4,Unit] with Kernel {
-    // def setWorkSizes(gs: Int, ls: Int)
-  }
+  trait Kernel4[A1,A2,A3,A4] extends Function4[A1,A2,A3,A4,Unit] with Kernel
 
 
   def compile[A](f: A => Unit)(implicit ma: Marshal[A], dev: Device): Kernel1[A] = throw new RuntimeException("unimplemented")
@@ -294,8 +292,7 @@ object Compiler {
     val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
 
     new Kernel2[A1,A2] {
-      def apply(a1: A1, a2: A2): Unit = apply(a1, a2, -1, -1) 
-      def apply(a1: A1, a2: A2, globalWkSize: Int, localWkSize: Int): Unit = { 
+      def apply(a1: A1, a2: A2): Unit = { 
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
         val bufA2: ByteBuffer = transA2.toBuffer(a2).head
         
@@ -313,15 +310,15 @@ object Compiler {
         kernBin.setArg(2, bufA2CLBuf)
         kernBin.setArg(3, numItemsA2)
 
-        if (globalWkSize == -1 && localWkSize == -1) {
+        if (dev.memConfig == null) {
           kernBin.setLocalArg(4, threads * sizeA1)
           kernBin.setArg(5, threads)
           kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
         }
         else {
-          kernBin.setLocalArg(4, localWkSize * sizeA1)
-          kernBin.setArg(5, localWkSize)
-          kernBin.enqueueNDRange(dev.queue, Array[Int](globalWkSize), Array[Int](localWkSize))
+          kernBin.setLocalArg(4, dev.memConfig.localSize * sizeA1)
+          kernBin.setArg(5, dev.memConfig.localSize)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
         }
 
         dev.queue.finish
@@ -358,8 +355,7 @@ object Compiler {
     val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
 
     new Kernel4[A1,A2,A3,A4] {
-      def apply(a1: A1, a2: A2, a3: A3, a4: A4): Unit = apply(a1, a2, a3, a4, 60*1024, 128)
-      def apply(a1: A1, a2: A2, a3: A3, a4: A4, globalWkSize: Int, localWkSize: Int): Unit = { 
+      def apply(a1: A1, a2: A2, a3: A3, a4: A4): Unit = { 
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
         val bufA2: ByteBuffer = transA2.toBuffer(a2).head
         val bufA3: ByteBuffer = transA3.toBuffer(a3).head
@@ -386,16 +382,18 @@ object Compiler {
         kernBin.setArg(6, bufA4CLBuf)
         kernBin.setArg(7, numItemsA4)
 
-        if (globalWkSize == -1 && localWkSize == -1) {
+        println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
+
+        if (dev.memConfig == null) {
           kernBin.setLocalArg(8, threads * sizeA1)
           kernBin.setArg(9, threads)
           kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
         }
         else {
           // We don't really know if the local item types are the same as the global item types
-          kernBin.setLocalArg(8, localWkSize * sizeA1)
-          kernBin.setArg(9, localWkSize)
-          kernBin.enqueueNDRange(dev.queue, Array[Int](globalWkSize), Array[Int](localWkSize))
+          kernBin.setLocalArg(8, dev.memConfig.localSize * sizeA1)
+          kernBin.setArg(9, dev.memConfig.localSize)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
         }
 
         dev.queue.finish

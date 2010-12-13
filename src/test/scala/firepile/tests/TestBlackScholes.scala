@@ -64,6 +64,7 @@ object TestBlackScholes {
     
   def BlackScholes(S: Array[Float], X: Array[Float], T: Array[Float]): (Float, Float) = {
     implicit val gpu: Device = firepile.gpu
+    gpu.setWorkSizes(60 * 1024, 128)
 
     val bs: (Array[Float], Array[Float], Array[Float], Array[Float]) => Unit = firepile.Compiler.compile {
       (S: Array[Float], X: Array[Float], T: Array[Float], CP: Array[Float]) =>

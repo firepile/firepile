@@ -43,6 +43,11 @@ object Device {
 class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld) {
   var program: CLProgram = null
 
+  case class MemConfig(globalSize: Int, localSize: Int)
+  var memConfig: MemConfig = null
+
+  def setWorkSizes(gs: Int, ls: Int) = memConfig = MemConfig(gs, ls)
+
   def buildProgramSrc(name: String, src: String): CLKernel = {
     try {
       program = context.createProgram(src).build
