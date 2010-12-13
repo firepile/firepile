@@ -1421,6 +1421,7 @@ object JVM2CL {
                       idStructPops += Assign(Select(Id(name), Id("groupId")), Call(Id("get_group_id"), IntLit(0)))
                       idStructPops += Assign(Select(Id(name), Id("globalId")), Call(Id("get_global_id"), IntLit(0)))
                       idStructPops += Assign(Select(Id(name), Id("localSize")), Call(Id("get_local_size"), IntLit(0)))
+                      idStructPops += Assign(Select(Id(name), Id("globalSize")), Call(Id("get_global_size"), IntLit(0)))
                     }
                     case StructType("firepile_Spaces_Id2") => {
                       idStructPops += VarDef(StructType(Id("firepile_Spaces_Id2")), Id(name))
@@ -1428,6 +1429,7 @@ object JVM2CL {
                       idStructPops += Assign(Select(Id(name), Id("groupId")), Call(Id("get_group_id"), IntLit(1)))
                       idStructPops += Assign(Select(Id(name), Id("globalId")), Call(Id("get_global_id"), IntLit(1)))
                       idStructPops += Assign(Select(Id(name), Id("localSize")), Call(Id("get_local_size"), IntLit(1)))
+                      idStructPops += Assign(Select(Id(name), Id("globalSize")), Call(Id("get_global_size"), IntLit(0)))
                     }
                     case StructType("firepile_Spaces_Id3") => {
                       idStructPops += VarDef(StructType(Id("firepile_Spaces_Id3")), Id(name))
@@ -1435,6 +1437,7 @@ object JVM2CL {
                       idStructPops += Assign(Select(Id(name), Id("groupId")), Call(Id("get_group_id"), IntLit(2)))
                       idStructPops += Assign(Select(Id(name), Id("globalId")), Call(Id("get_global_id"), IntLit(2)))
                       idStructPops += Assign(Select(Id(name), Id("localSize")), Call(Id("get_local_size"), IntLit(2)))
+                      idStructPops += Assign(Select(Id(name), Id("globalSize")), Call(Id("get_global_size"), IntLit(0)))
                     }
                     case _ => { }
                   }
@@ -1564,14 +1567,17 @@ object JVM2CL {
         case GVirtualInvoke(GLocal(baseName, _), SMethodRef(classname, "config", _, _, _), _) => classname match {
           case SClassName("firepile.Spaces$Id1") => method match {
             case SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _) => ids(0) = true; return Select(Id(baseName), Id("localSize"))
+            case SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _) => ids(0) = true; return Select(Id(baseName), Id("globalSize"))
             case _ => Id("unsupported:" + v.getClass.getName)
           }
           case SClassName("firepile.Spaces$Id2") => method match {
             case SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _) => ids(1) = true; return Select(Id(baseName), Id("localSize"))
+            case SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _) => ids(1) = true; return Select(Id(baseName), Id("globalSize"))
             case _ => Id("unsupported:" + v.getClass.getName)
           }
           case SClassName("firepile.Spaces$Id3") => method match {
             case SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _) => ids(2) = true; return Select(Id(baseName), Id("localSize"))
+            case SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _) => ids(2) = true; return Select(Id(baseName), Id("globalSize"))
             case _ => Id("unsupported:" + v.getClass.getName)
           }
           case _ => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v)
@@ -1674,6 +1680,13 @@ object JVM2CL {
       case SType("firepile.Spaces$Id3") => ids(2) = true; return Some(Select(Id(baseName), Id("localSize")))
       case _ => None
     }
+    case GVirtualInvoke(GVirtualInvoke(GLocal(baseName, stype), SMethodRef(SClassName("firepile.Spaces$Config"), "config", _, _, _), _), SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _), _) => stype match {
+          case SType("firepile.Spaces$Id1") => ids(0) = true; return Some(Select(Id(baseName), Id("globalSize")))
+          case SType("firepile.Spaces$Id2") => ids(1) = true; return Some(Select(Id(baseName), Id("globalSize")))
+          case SType("firepile.Spaces$Id3") => ids(2) = true; return Some(Select(Id(baseName), Id("globalSize")))
+          case _ => None
+        }
+    
      case _ => ;
     }
     
@@ -1701,6 +1714,12 @@ object JVM2CL {
       case SType("firepile.Spaces$Id2") => ids(1) = true; return Some(Select(Id(baseName), Id("localSize")))
       case SType("firepile.Spaces$Id3") => ids(2) = true; return Some(Select(Id(baseName), Id("localSize")))
       case _ => None
+      }
+     case GInterfaceInvoke(GVirtualInvoke(GLocal(baseName, stype), SMethodRef(_, "config", _, _, _), _), SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _), _) => stype match {
+          case SType("firepile.Spaces$Id1") => ids(0) = true; return Some(Select(Id(baseName), Id("globalSize")))
+          case SType("firepile.Spaces$Id2") => ids(1) = true; return Some(Select(Id(baseName), Id("globalSize")))
+          case SType("firepile.Spaces$Id3") => ids(2) = true; return Some(Select(Id(baseName), Id("globalSize")))
+          case _ => None
       }
     case _ => None 
   }
