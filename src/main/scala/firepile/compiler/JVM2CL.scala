@@ -1408,6 +1408,7 @@ object JVM2CL {
               case "firepile_util_Unsigned_R_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
               case "firepile_util_Unsigned_R_minus" => return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
               case "firepile_util_Unsigned_UInt_bar" => return( Bin ( translateExp(base,symtab,anonFuns), "|", translateExp(args(0),symtab,anonFuns)) )
+              case "firepile_util_Unsigned_UIntunary__tilde" => return Un("~", translateExp(base,symtab,anonFuns))
               case _ => ;
               }
              // if(methodName(method).startsWith("firepile_util_Unsigned_UInttoFloat"))
