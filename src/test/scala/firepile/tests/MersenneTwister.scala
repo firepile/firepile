@@ -16,7 +16,7 @@ import scala.util.Random
 import scala.math.{ceil, pow, log}
 import firepile.util.Unsigned._
 
-object MarsenneTwister {
+object MersenneTwister {
 
 val MT_RNG_COUNT=4096
 val MT_MM=9
