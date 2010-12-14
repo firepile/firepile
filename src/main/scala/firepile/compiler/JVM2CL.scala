@@ -1076,7 +1076,7 @@ object JVM2CL {
       case GLongConstant(value) => LongLit(value)
       case GFloatConstant(value) => FloatLit(value)
       case GDoubleConstant(value) => DoubleLit(value)
-
+      case GUIntConstant(value) => UIntLit(value)
       case GArrayLength(op) => Select(op, "length")
       
       //case GCast(op, castTyp) => Cast(translateType(castTyp), translateExp(op, symtab, anonFuns))
@@ -1384,15 +1384,39 @@ object JVM2CL {
               // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
               println("Monomorphic call to " + methodName(method))
               if(methodName(method).startsWith("firepile_Spaces_Point1_plus"))
-              return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
-              
-              if(methodName(method).startsWith("firepile_Spaces_Point1_minus"))
-              return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
-              
-              if(methodName(method).startsWith("firepile_Spaces_Point1_times"))
+	      return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
+
+	      if(methodName(method).startsWith("firepile_Spaces_Point1_minus"))
+	      return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
+
+	      if(methodName(method).startsWith("firepile_Spaces_Point1_times"))
               return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
+                           
+              if(methodName(method).startsWith("firepile_util_Unsigned_UInt_greater_greater"))
+              return( Bin ( translateExp(base,symtab,anonFuns), ">>", translateExp(args(0),symtab,anonFuns)) )
               
+              if(methodName(method).startsWith("firepile_util_Unsigned_UInt_amp"))
+              return( Bin ( translateExp(base,symtab,anonFuns), "&", translateExp(args(0),symtab,anonFuns)) )
               
+              if(methodName(method).startsWith("firepile_util_Unsigned_UInt_less_less"))
+              return( Bin ( translateExp(base,symtab,anonFuns), "<<", translateExp(args(0),symtab,anonFuns)) )
+              
+              if(methodName(method).startsWith("firepile_util_Unsigned_UInt_up"))
+              return( Un("^", translateExp(base,symtab,anonFuns) ) )
+              
+              if(methodName(method).startsWith("firepile_util_Unsigned_RtoUInt"))
+              return( translateExp(base,symtab,anonFuns))
+              
+             //if(methodName(method).startsWith("firepile_util_Unsigned_RtoUInt"))
+             // return( UIntLit ( base ) )
+                           
+              if(methodName(method).startsWith("firepile_util_Unsigned_UInt_bar"))
+              return( Bin ( translateExp(base,symtab,anonFuns), "|", translateExp(args(0),symtab,anonFuns)) )
+              
+             // if(methodName(method).startsWith("firepile_util_Unsigned_UInttoFloat"))
+             // return( FloatLit ( base) )
+              
+                   
               if (methodName(method).startsWith("firepile_Spaces_Point") || methodName(method).startsWith("firepile_Spaces_point")) {
                 if (args.length == 1) 
                   handleIdsVirtualInvoke(args(0)) match {

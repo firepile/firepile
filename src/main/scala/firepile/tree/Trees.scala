@@ -104,6 +104,11 @@ object Trees {
     case class IntLit(value: Int) extends Tree {
         def toCL = value.toString
     }
+    
+    case class UIntLit(value: Int) extends Tree {
+            def toCL = value.toString
+    }
+    
     case class LongLit(value: Long) extends Tree {
         def toCL = value.toString
     }

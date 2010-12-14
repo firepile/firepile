@@ -71,6 +71,13 @@ object GrimpUnapply {
     }
   }
 
+  object GUIntConstant {
+     def unapply(v: Value) = v match {
+       case x: IntConstant => Some(x.value)
+       case _ => None
+     }
+  }
+  
   object GLongConstant {
     def unapply(v: Value) = v match {
       case x: LongConstant => Some(x.value)
