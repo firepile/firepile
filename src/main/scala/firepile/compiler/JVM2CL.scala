@@ -210,7 +210,10 @@ object JVM2CL {
 
   case class CompileMethodTree(t: Tree) extends Task {
     def run = {
-      List(compileMethod(t))
+      t match {
+        case FunDef(_, name, _, _) if name.startsWith("firepile_util_Unsigned") => Nil
+        case _ => List(compileMethod(t))
+      }
     }
 
     def method = null
@@ -241,13 +244,15 @@ object JVM2CL {
 
       println("TASK RUN ON METHOD NAME: " + m.name)
 
-      if (m.declaringClass.getName.startsWith("java.lang") || m.declaringClass.getName.startsWith("firepile.Spaces") || m.declaringClass.getName.startsWith("scala.runtime") || m.declaringClass.getName.startsWith("scala.Product") || m.name.equals("<init>"))
+      if (m.declaringClass.getName.startsWith("java.lang") || m.declaringClass.getName.startsWith("firepile.Spaces") || m.declaringClass.getName.startsWith("scala.runtime") || m.declaringClass.getName.startsWith("scala.Product") || m.declaringClass.getName.startsWith("firepile.util.Unsigned") || m.name.equals("<init>"))
         Nil
-      else
+      else {
+        println("RETURNING BODY FOR METHOD NAME: " + m.name)
         compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
           case null => Nil
           case t => t :: Nil
         }
+      }
     }
   }
 
@@ -1778,7 +1783,7 @@ object JVM2CL {
               }))
 
               // Add closure function to worklist that takes ENV struct
-              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_f")), Id("this")) :: fd.formals.map(f =>
+              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_EnvX")), Id("this")) :: fd.formals.map(f =>
                 f match {
                   case Formal(StructType(s), name) if s.endsWith("Array") => Formal(StructType("l" + s.substring(1)), name)
                   case x => x

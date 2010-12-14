@@ -78,20 +78,32 @@ val maxBlocks = 64
    
     // val add: (Float, Float) => Float = _+_
 
-    val RandomNumberGenerator : (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Int, Array[Float]) => Unit = firepile.Compiler.compile {
-      (A: Array[UInt], B: Array[UInt], C: Array[UInt], D: Array[UInt], nPerRng: Int,E: Array[Float]) => MersenneTwister(A, B, C,D, nPerRng,E)
+    val RandomNumberGenerator : (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[Int], Array[Float]) => Unit = firepile.Compiler.compile {
+      (A: Array[UInt], B: Array[UInt], C: Array[UInt], D: Array[UInt], n: Array[Int], E: Array[Float]) => MersenneTwister(A, B, C, D, n,E)
     }
     val d_Rand : Array[Float] = new Array[Float](blocks)
     //val F: Array[UInt] = new Array[UInt](MT_NN)
-    RandomNumberGenerator(matrix_a, mask_a, mask_b,seed, nPerRng,d_Rand)
+    RandomNumberGenerator(matrix_a, mask_a, mask_b, seed, Array[Int](n), d_Rand)
     d_Rand
  }
   
 ////////////////////////////////////////////////////////////////////////////////
 // OpenCL Kernel for Mersenne Twister RNG
 ////////////////////////////////////////////////////////////////////////////////
-def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UInt],seed: Array[UInt], nPerRng: Int,d_Rand: Array[Float]) = 
+def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UInt],seed: Array[UInt], n: Array[Int],d_Rand: Array[Float]) = 
  (id: Id1, mt: Array[UInt]) => {
+    val MT_RNG_COUNT=4096
+    val MT_MM=9
+    val MT_NN=19
+    val MT_WMASK: Short =0xFFFFFFFF
+    val MT_UMASK: Short =0xFFFFFFFE
+    val MT_LMASK: Short =0x1
+    val MT_SHIFT0=12
+    val MT_SHIFTB=7
+    val MT_SHIFTC=15
+    val MT_SHIFT1=18
+    val PI=3.14159265358979f
+    val nPerRng = n(0)
     
     val i = id.group
     var iState: Int = 0
