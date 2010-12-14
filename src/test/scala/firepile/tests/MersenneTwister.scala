@@ -114,16 +114,16 @@ def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UI
     var iState1: Int = 0
     var iStateM: Int = 0
     var iOut: Int = 0
-    var mti: UInt = 0.toUInt
-    var mti1: UInt = 0.toUInt
-    var mtiM: UInt = 0.toUInt
-    var x : UInt = 0.toUInt
+    var mti: UInt = iOut.toUInt
+    var mti1: UInt = mti
+    var mtiM: UInt = mti
+    var x : UInt = mti
     //var mt =new Array[UInt](MT_NN)
-    var m_a: UInt = 0.toUInt
-    var m_b: UInt = 0.toUInt
-    var m_c: UInt = 0.toUInt
-    var cond: UInt =0.toUInt
-
+    var m_a: UInt = mti
+    var m_b: UInt = mti
+    var m_c: UInt = mti
+    var cond: UInt =mti
+   
     //Load bit-vector Mersenne Twister parameters
     m_a   = matrix_a(i)
     m_b   = mask_b(i)
