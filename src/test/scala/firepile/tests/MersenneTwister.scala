@@ -19,29 +19,29 @@ import firepile.util.Unsigned._
 object MersenneTwister {
 
 //val MT_RNG_COUNT=4096
-val MT_RNG_COUNT=16384
-val MT_MM=9
-val MT_NN=19
+val MT_RNG_COUNT: Int=16384
+val MT_MM:Int =9
+val MT_NN: Int=19
 val MT_WMASK: Short =0xFFFFFFFF
 val MT_UMASK: Short =0xFFFFFFFE
 val MT_LMASK: Short =0x1
-val MT_SHIFT0=12
-val MT_SHIFTB=7
-val MT_SHIFTC=15
-val MT_SHIFT1=18
+val MT_SHIFT0: Int=12
+val MT_SHIFTB: Int =7
+val MT_SHIFTC: Int=15
+val MT_SHIFT1: Int=18
 val PI=3.14159265358979f
 
 //val globalWorkSize= MT_RNG_COUNT      // 1D var for Total # of work items
 //val localWorkSize =  128                // 1D var for # of work items in the work group	
-val localWorkSize =  64
-val seed = 777
-val nPerRng = 5860                      // # of recurrence steps, must be even if do Box-Muller transformation
+val localWorkSize: Int =  64
+val seed: Int = 777
+val nPerRng: Int = 5860                      // # of recurrence steps, must be even if do Box-Muller transformation
 val nRand = MT_RNG_COUNT * nPerRng  
 
 //val NUM_ITEMS = 16384 // 1048576
-val globalWorkSize = 16384
-val maxThreads = 512 
-val maxBlocks = 64
+val globalWorkSize: Int = 16384
+val maxThreads: Int = 512 
+val maxBlocks: Int = 64
 
   def main(args: Array[String]) = run
   
@@ -85,28 +85,29 @@ val maxBlocks = 64
       (A: Array[UInt], B: Array[UInt], C: Array[UInt], D: Array[UInt], n: Array[Int], E: Array[Float]) => MersenneTwister(A, B, C, D, n,E)
     }
     val d_Rand : Array[Float] = new Array[Float](globalWorkSize)
+    val nn = new Array[Int](globalWorkSize) 
     //val F: Array[UInt] = new Array[UInt](MT_NN)
-    RandomNumberGenerator(matrix_a, mask_a, mask_b, seed, Array[Int](n), d_Rand)
+    RandomNumberGenerator(matrix_a, mask_a, mask_b, seed, nn, d_Rand)
     d_Rand
  }
   
 ////////////////////////////////////////////////////////////////////////////////
 // OpenCL Kernel for Mersenne Twister RNG
 ////////////////////////////////////////////////////////////////////////////////
-def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UInt],seed: Array[UInt], n: Array[Int],d_Rand: Array[Float]) = 
+def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UInt],seed: Array[UInt], n: Array[Int] ,d_Rand: Array[Float]) = 
  (id: Id1, mt: Array[UInt]) => {
-    val MT_RNG_COUNT=4096
-    val MT_MM=9
-    val MT_NN=19
+    val MT_RNG_COUNT: Int=4096
+    val MT_MM: Int=9
+    val MT_NN: Int=19
     val MT_WMASK: Short =0xFFFFFFFF
     val MT_UMASK: Short =0xFFFFFFFE
     val MT_LMASK: Short =0x1
-    val MT_SHIFT0=12
-    val MT_SHIFTB=7
-    val MT_SHIFTC=15
-    val MT_SHIFT1=18
+    val MT_SHIFT0: Int=12
+    val MT_SHIFTB: Int=7
+    val MT_SHIFTC: Int=15
+    val MT_SHIFT1: Int =18
     val PI=3.14159265358979f
-    val nPerRng = n(0)
+    val nPerRng:Int = 5860 
     
     val i = id.group
     var iState: Int = 0
