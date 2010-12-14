@@ -175,7 +175,7 @@ object JVM2CL {
   def methodName(m: SootMethod): String = mangleName(m.getDeclaringClass.getName + m.getName)
   def methodName(m: java.lang.reflect.Method): String = mangleName(m.getDeclaringClass.getName + m.getName)
   def methodName(m: SootMethodRef): String = mangleName(m.declaringClass.getName + m.name)
-  def mangleName(name: String) ={ println(" before::"+name); println(" after::"+ name.replace(' ', '_').replace('$', '_').replace('.', '_'));name.replace(' ', '_').replace('$', '_').replace('.', '_') }
+  def mangleName(name: String) = name.replace(' ','_').replace('$','_').replace('.','_')
 
   private implicit def v2tree(v: Value)(implicit iv: (SymbolTable, HashMap[String, Value]) = null): Tree = translateExp(v, iv._1, iv._2)
 
@@ -285,7 +285,8 @@ object JVM2CL {
               case _ => true
             }).flatMap(f => f match {
               case Formal(StructType(typ), name) if typ.endsWith("Array") => {
-                val rawTypeName = typ.substring(typ.indexOf('_')+1, typ.lastIndexOf("Array"))
+                var rawTypeName = typ.substring(typ.indexOf('_')+1, typ.lastIndexOf("Array"))
+                if (rawTypeName.contains("unsigned_int")) rawTypeName="unsigned int"
                 typ match {
                   case x if x.startsWith("g") => { // handle the global arrays
                     popArrayStructs += VarDef(StructType(typ), Id(name))
@@ -712,13 +713,13 @@ object JVM2CL {
         case _ => throw new RuntimeException("Unknown array type: " + typ)
       }
       if (!structs.contains(typ)) {
-        structs += typ -> List(StructDef("g_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(arrayTyp)), Id("data")))),
-          StructDef("l_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(arrayTyp)), Id("data")))),
-          StructDef("c_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(arrayTyp)), Id("data")))),
-          StructDef("p_" + arrayTyp.name + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
+        structs += typ -> List(StructDef("g_" + arrayTyp.name.replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(arrayTyp)), Id("data")))),
+          StructDef("l_" + arrayTyp.name.replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(arrayTyp)), Id("data")))),
+          StructDef("c_" + arrayTyp.name.replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(arrayTyp)), Id("data")))),
+          StructDef("p_" + arrayTyp.name.replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
       }
 
-      StructType("g_" + arrayTyp.name + "Array")
+      StructType("g_" + arrayTyp.name.replaceAll(" ","_") + "Array")
     }
 
     def dumpEnvStructs = {
@@ -1395,19 +1396,8 @@ object JVM2CL {
               case "firepile_util_Unsigned_UInt_less" => return( Bin ( translateExp(base,symtab,anonFuns), "<", translateExp(args(0),symtab,anonFuns)) )
               case "firepile_util_Unsigned_UInt_less_less" => return( Bin ( translateExp(base,symtab,anonFuns), "<<", translateExp(args(0),symtab,anonFuns)) )
               case "firepile_util_Unsigned_UInt_up" => return( Bin ( translateExp(base,symtab,anonFuns), "^", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_RtoUInt" =>{
-                  println(" base::"+base)
-                  println(" args::")
-                  for(i <- args) println("arg::"+i)
-              
-                  return( translateExp(base,symtab,anonFuns))
-                  }
-              case "firepile_util_Unsigned_s2r" => {
-              println(" base::"+base)
-	                        println(" args::")
-                  for(i <- args) println("arg::"+i)
-              return(translateExp(args(0),symtab,anonFuns))
-              }
+              case "firepile_util_Unsigned_RtoUInt" => return( translateExp(base,symtab,anonFuns))
+              case "firepile_util_Unsigned_s2r" => return(translateExp(args(0),symtab,anonFuns))
               case "firepile_util_Unsigned_UInttoFloat" => return( translateExp(base,symtab,anonFuns))
               case "firepile_util_Unsigned_R_times" => return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
               case "firepile_util_Unsigned_R_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
