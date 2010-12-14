@@ -18,7 +18,8 @@ import firepile.util.Unsigned._
 
 object MersenneTwister {
 
-val MT_RNG_COUNT=4096
+//val MT_RNG_COUNT=4096
+val MT_RNG_COUNT=16384
 val MT_MM=9
 val MT_NN=19
 val MT_WMASK: Short =0xFFFFFFFF
@@ -30,13 +31,15 @@ val MT_SHIFTC=15
 val MT_SHIFT1=18
 val PI=3.14159265358979f
 
-val globalWorkSize= MT_RNG_COUNT      // 1D var for Total # of work items
-val localWorkSize =  128                // 1D var for # of work items in the work group	
+//val globalWorkSize= MT_RNG_COUNT      // 1D var for Total # of work items
+//val localWorkSize =  128                // 1D var for # of work items in the work group	
+val localWorkSize =  64
 val seed = 777
 val nPerRng = 5860                      // # of recurrence steps, must be even if do Box-Muller transformation
 val nRand = MT_RNG_COUNT * nPerRng  
 
 //val NUM_ITEMS = 16384 // 1048576
+val globalWorkSize = 16384
 val maxThreads = 512 
 val maxBlocks = 64
 
@@ -44,10 +47,10 @@ val maxBlocks = 64
   
   def run = {
       val random = new Random(0)
-      val randInput1 = (Array.fill(globalWorkSize)(random.nextLong.toUInt))
-      val randInput2 = (Array.fill(globalWorkSize)(random.nextLong.toUInt))
-      val randInput3 = (Array.fill(globalWorkSize)(random.nextLong.toUInt))
-      val randInput4 = (Array.fill(globalWorkSize)(random.nextLong.toUInt))
+      val randInput1 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
+      val randInput2 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
+      val randInput3 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
+      val randInput4 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
       
       val output= RandomNumGen(randInput1,randInput2,randInput3,randInput4,nPerRng)
       
@@ -81,7 +84,7 @@ val maxBlocks = 64
     val RandomNumberGenerator : (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[Int], Array[Float]) => Unit = firepile.Compiler.compile {
       (A: Array[UInt], B: Array[UInt], C: Array[UInt], D: Array[UInt], n: Array[Int], E: Array[Float]) => MersenneTwister(A, B, C, D, n,E)
     }
-    val d_Rand : Array[Float] = new Array[Float](blocks)
+    val d_Rand : Array[Float] = new Array[Float](globalWorkSize)
     //val F: Array[UInt] = new Array[UInt](MT_NN)
     RandomNumberGenerator(matrix_a, mask_a, mask_b, seed, Array[Int](n), d_Rand)
     d_Rand
