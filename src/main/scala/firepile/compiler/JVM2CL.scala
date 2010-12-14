@@ -175,7 +175,7 @@ object JVM2CL {
   def methodName(m: SootMethod): String = mangleName(m.getDeclaringClass.getName + m.getName)
   def methodName(m: java.lang.reflect.Method): String = mangleName(m.getDeclaringClass.getName + m.getName)
   def methodName(m: SootMethodRef): String = mangleName(m.declaringClass.getName + m.name)
-  def mangleName(name: String) = name.replace('$', '_').replace('.', '_').replace(' ', '_')
+  def mangleName(name: String) ={ println(" before::"+name); println(" after::"+ name.replace(' ', '_').replace('$', '_').replace('.', '_'));name.replace(' ', '_').replace('$', '_').replace('.', '_') }
 
   private implicit def v2tree(v: Value)(implicit iv: (SymbolTable, HashMap[String, Value]) = null): Tree = translateExp(v, iv._1, iv._2)
 
@@ -684,13 +684,13 @@ object JVM2CL {
         case _ => throw new RuntimeException("Unknown array type: " + typ)
       }
       if (!structs.contains(typ)) {
-        structs += typ -> List(StructDef("g_" + mangleName(arrayTyp.name) + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(arrayTyp)), Id("data")))),
-          StructDef("l_" + mangleName(arrayTyp.name) + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(arrayTyp)), Id("data")))),
-          StructDef("c_" + mangleName(arrayTyp.name) + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(arrayTyp)), Id("data")))),
-          StructDef("p_" + mangleName(arrayTyp.name) + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
+        structs += typ -> List(StructDef("g_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(arrayTyp)), Id("data")))),
+          StructDef("l_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(arrayTyp)), Id("data")))),
+          StructDef("c_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(arrayTyp)), Id("data")))),
+          StructDef("p_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
       }
 
-      StructType("g_" + arrayTyp.name + "Array")
+      StructType("g_" + arrayTyp.name.replaceAll(" ","_") + "Array")
     }
 
     def dumpArrayStructs = {
@@ -1788,7 +1788,7 @@ object JVM2CL {
               }))
 
               // Add closure function to worklist that takes ENV struct
-              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_EnvX")), Id("this")) :: fd.formals.map(f =>
+              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_f")), Id("this")) :: fd.formals.map(f =>
                 f match {
                   case Formal(StructType(s), name) if s.endsWith("Array") => Formal(StructType("l" + s.substring(1)), name)
                   case x => x
