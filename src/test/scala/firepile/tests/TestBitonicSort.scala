@@ -29,10 +29,15 @@ object TestBitonicSort {
     implicit val gpu: Device = firepile.gpu
     gpu.setWorkSizes(60 * 1024, 128)
 
-    val bs: (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
+    val bsSort: (Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
+      (srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) => bitonicSortSort(srcKey, srcVal, dstKeyVal)
+    }
+
+    val bsMerge: (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
       (srcKey: Array[UInt], srcVal: Array[UInt], arrayLen: Array[UInt], size: Array[UInt], stride: Array[UInt], sortDir: Array[UInt], dstKeyVal: Array[UInt]) =>
-        bitonicSortK(srcKey, srcVal, arrayLen, size, stride, sortDir, dstKeyVal)
+        bitonicSortMerge(srcKey, srcVal, arrayLen, size, stride, sortDir, dstKeyVal)
       }
+
 
     val outKeyVal = new Array[UInt](srcKey.length*2)
 
@@ -52,7 +57,84 @@ object TestBitonicSort {
     (dstKey.toArray, dstVal.toArray)
   } 
 
-  def bitonicSortK(srcKey: Array[UInt], srcVal: Array[UInt], arrayLenA: Array[UInt], sizeA: Array[UInt], strideA: Array[UInt], sortDirA: Array[UInt], dstKeyVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
+  def bitonicSortSort(srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
+    val LOCAL_SIZE_LIMIT = 512.toUInt
+    // Offset to beginning of subbatch and load data
+    val groupIdUInt = (id.group.toInt).toUInt
+    val localIdUInt = (id.group.toInt).toUInt
+
+    val startPos = groupIdUInt * LOCAL_SIZE_LIMIT + localIdUInt 
+
+    // local data stored as alternating key/value
+    ldata((id.local + 0) * 2) = srcKey(startPos + 0)
+    ldata((id.local + 0) * 2 + 1) = srcVal(startPos + 0)
+    ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2) = srcKey(startPos + (LOCAL_SIZE_LIMIT / 2))
+    ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1) = srcVal(startPos + (LOCAL_SIZE_LIMIT / 2))
+
+    val comparatorI: UInt = (id.global & ((LOCAL_SIZE_LIMIT / 2) - 1)).toUInt
+
+    var size: UInt = 2.toUInt
+    while (size < LOCAL_SIZE_LIMIT) {
+      val dirCond: UInt = if ( (comparatorI & (size / 2.toUInt).toUInt).toInt != 0 ) 1.toUInt else 0.toUInt
+      var stride: UInt = (size / 2.toUInt).toUInt
+      while (stride > 0.toUInt) {
+        localMem.barrier
+        val pos: UInt = (2.toUInt * localIdUInt - (localIdUInt & (stride - 1.toUInt).toUInt)).toUInt
+
+        // ComparatorLocal inlined
+        var keyA: UInt = ldata(pos * 2)
+        var valA: UInt = ldata(pos * 2 + 1)
+        var keyB: UInt = ldata((pos + stride) * 2)
+        var valB: UInt = ldata((pos + stride) * 2 + 1)
+
+        if ((keyA > keyB) == dirCond.toBoolean) {
+          var t: UInt = keyA
+          keyA = keyB
+          keyB = t
+          t = valA
+          valA = valB
+          valB = t
+        }
+
+        stride = stride >> 1
+      }
+      size = size << 1
+    }
+
+    // Odd/even arrys of LOCAL_SIZE_LIMIT elements sorted in opposite directions
+    val dirCond: UInt = (groupIdUInt & 1.toUInt)
+    var stride: UInt = (LOCAL_SIZE_LIMIT / 2.toUInt).toUInt
+    while (stride > 0.toUInt) {
+      localMem.barrier
+      val pos: UInt = (2.toUInt * localIdUInt - (localIdUInt & (stride - 1.toUInt).toUInt)).toUInt
+
+      // ComparatorLocal inlined
+      var keyA: UInt = ldata(pos * 2)
+      var valA: UInt = ldata(pos * 2 + 1)
+      var keyB: UInt = ldata((pos + stride) * 2)
+      var valB: UInt = ldata((pos + stride) * 2 + 1)
+
+      if ((keyA > keyB) == dirCond.toBoolean) {
+        var t: UInt = keyA
+        keyA = keyB
+        keyB = t
+        t = valA
+        valA = valB
+        valB = t
+      }
+
+      stride = stride >> 1
+    }
+
+    localMem.barrier
+    dstKeyVal(startPos * 2) = ldata(id.local * 2)
+    dstKeyVal(startPos * 2 + 1) = ldata(id.local * 2 + 1)
+    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2) = ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2)
+    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1) = ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1)
+  }
+
+
+  def bitonicSortMerge(srcKey: Array[UInt], srcVal: Array[UInt], arrayLenA: Array[UInt], sizeA: Array[UInt], strideA: Array[UInt], sortDirA: Array[UInt], dstKeyVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
     val arrayLength: UInt = arrayLenA(0)
     val size = sizeA(0)
     val stride = strideA(0)
@@ -63,7 +145,7 @@ object TestBitonicSort {
 
     // Bitonic merge
     
-    val dirCond = if ( (comparatorI & (size / 2.toUInt).toUInt) != 0.toUInt ) 1.toUInt else 0.toUInt
+    val dirCond: UInt = if ( (comparatorI & (size / 2.toUInt).toUInt).toInt != 0 ) 1.toUInt else 0.toUInt
 
     val dir: UInt = sortDir ^ dirCond
     val pos: UInt = 2.toUInt * (global_comparatorI - (global_comparatorI & (stride - 1.toUInt).toUInt)).toUInt
@@ -75,8 +157,7 @@ object TestBitonicSort {
 
     // Comparator private
     if ((keyA > keyB) == dir.toBoolean) {
-      var t: UInt = 0.toUInt
-      t = keyA
+      var t: UInt = keyA
       keyA = keyB
       keyB = t
 
@@ -86,7 +167,7 @@ object TestBitonicSort {
     }
 
     dstKeyVal(pos * 2) = keyA
-    dstKeyVal(pos * 2) = valA
+    dstKeyVal(pos * 2 + 1) = valA
     dstKeyVal((pos + stride) * 2) = keyB
     dstKeyVal((pos + stride) * 2 + 2) = valB
   }

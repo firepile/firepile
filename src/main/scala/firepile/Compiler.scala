@@ -378,7 +378,105 @@ object Compiler {
     }
   }
 
-  def compile[A1,A2,A3](f: (A1,A2,A3) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device) = throw new RuntimeException("compile3 unimplmented")
+  def compile[A1,A2,A3](f: (A1,A2,A3) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device): Kernel3[A1,A2,A3] = memoize(f) {
+    val transA1 = implicitly[Marshal[A1]]
+    val transA2 = implicitly[Marshal[A2]]
+    val transA3 = implicitly[Marshal[A3]]
+    val sizeA1 = transA1.sizes(1).head
+    val sizeA2 = transA2.sizes(1).head
+    val sizeA3 = transA3.sizes(1).head
+    val kernStr = new StringBuffer()
+
+    val (kernName: String, tree: List[Tree]) = firepile.Compose.compileToTreeName(f, 3)
+        
+    for (t: Tree <- tree.reverse)
+      kernStr.append(t.toCL)
+
+    val kernBin = dev.buildProgramSrc(kernName, kernStr.toString)
+/*
+    class Arg[A](val value: A, val marshal: Marshal[A]) {
+        def toBuffers = marshal.toBuffer(value)
+    }
+    def applyKernel(args: Array[Arg[_]], output: Arg[_]): Unit = ...
+*/
+
+    new Kernel3[A1,A2,A3] {
+      def apply(a1: A1, a2: A2, a3: A3): Unit = { 
+        val bufA1: ByteBuffer = transA1.toBuffer(a1).head
+        val bufA2: ByteBuffer = transA2.toBuffer(a2).head
+        val bufA3: ByteBuffer = transA3.toBuffer(a3).head
+        
+        val numItemsA1 = bufA1.capacity / sizeA1 
+        val numItemsA2 = bufA2.capacity / sizeA2 
+        val numItemsA3 = bufA3.capacity / sizeA3 
+
+        val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
+        val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
+        val bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA3.capacity)
+        
+        val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
+
+        if (TIMING) {
+          time ({
+            for (i <- 0 to 16) {
+        kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
+        kernBin.setArg(1, numItemsA1)
+        kernBin.setArg(2, bufA2CLBuf)
+        kernBin.setArg(3, numItemsA2)
+        kernBin.setArg(4, bufA3CLBuf)
+        kernBin.setArg(5, numItemsA3)
+
+        if (dev.memConfig == null) {
+          kernBin.setLocalArg(6, threads * sizeA1)
+          kernBin.setArg(7, threads)
+          println("Executing with global work size = " + (numItemsA3 * threads) + " and local work size = " + threads)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA3 * threads), Array[Int](threads))
+        }
+        else {
+          // We don't really know if the local item types are the same as the global item types
+          kernBin.setLocalArg(6, dev.memConfig.localSize * sizeA1)
+          kernBin.setArg(7, dev.memConfig.localSize)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+        }
+
+        dev.queue.finish
+            } 
+          }, 16)
+        } else {
+        kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
+        kernBin.setArg(1, numItemsA1)
+        kernBin.setArg(2, bufA2CLBuf)
+        kernBin.setArg(3, numItemsA2)
+        kernBin.setArg(4, bufA3CLBuf)
+        kernBin.setArg(5, numItemsA3)
+
+        if (dev.memConfig == null) {
+          kernBin.setLocalArg(6, threads * sizeA1)
+          kernBin.setArg(7, threads)
+          println("Executing with global work size = " + (numItemsA3 * threads) + " and local work size = " + threads)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA3 * threads), Array[Int](threads))
+        }
+        else {
+          // We don't really know if the local item types are the same as the global item types
+          kernBin.setLocalArg(6, dev.memConfig.localSize * sizeA1)
+          kernBin.setArg(7, dev.memConfig.localSize)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+        }
+
+        dev.queue.finish
+        }
+
+        val bufOut = allocDirectBuffer(bufA3.capacity)
+        bufA3CLBuf.read(dev.queue, bufOut, true)
+
+        bufOut.rewind
+
+        // [NN] maybe need to copy?  but, probably not
+        Array.copy(transA3.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a3.asInstanceOf[AnyRef], 0, numItemsA3)
+      }
+    }
+  }
+
 
   def compile[A1,A2,A3,A4](f: (A1,A2,A3,A4) => Unit)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], dev: Device): Kernel4[A1,A2,A3,A4] = memoize(f) {
     val transA1 = implicitly[Marshal[A1]]

@@ -10,7 +10,7 @@ import firepile.Marshaling._
 // import scala.math.exp
 import firepile.util.Math.{sqrt,log,exp,fabs}
 
-object TestBlackScholes {
+object TestBlackScholes4 {
   def main(args: Array[String]) = {
     val optionCount = if (args.length > 0) args(0).toInt else 4000000
     // val n = if (args.length > 1) args(1).toInt else 10
@@ -95,8 +95,22 @@ object TestBlackScholes {
     var i = id.global
 
     while ( i < S.length) {
-      Out(i*2) =  BlackScholesBodyP(S(i), X(i), T(i), R, V)
-      Out(i*2 + 1) = BlackScholesBodyC(S(i), X(i), T(i), R, V)
+      val   sqrtT: Float = sqrt(T(i)).toFloat
+      val      d1: Float = (log(S(i) / X(i)).toFloat + (R + 0.5f * V * V) * T(i)) / (V * sqrtT)
+      val      d2: Float = d1 - V * sqrtT
+      val   CNDD1: Float = CND(d1)
+      val   CNDD2: Float = CND(d2)
+
+      val   expRT: Float = exp(- R * T(i)).toFloat
+
+                         //Put option price
+      val put: Float  = (X(i) * expRT * (1.0f - CNDD2) - S(i) * (1.0f - CNDD1))
+                          //Call option price
+      val call: Float = (S(i) * CNDD1 - X(i) * expRT * CNDD2)
+
+
+      Out(i*2) = put
+      Out(i*2 + 1) = call 
       i += id.config.globalSize
     }
     
@@ -124,50 +138,5 @@ def CND(d: Float): Float = {
         cnd
 }
 
-
-///////////////////////////////////////////////////////////////////////////////
-// Black-Scholes formula for both call and put
-///////////////////////////////////////////////////////////////////////////////
-def BlackScholesBodyP(
-    S: Float, //Current stock price
-    X: Float, //Option strike price
-    T: Float, //Option years
-    R: Float, //Riskless rate of return
-    V: Float  //Stock volatility
-)  = {
-    val   sqrtT: Float = sqrt(T).toFloat
-    val      d1: Float = (log(S / X).toFloat + (R + 0.5f * V * V) * T) / (V * sqrtT)
-    val      d2: Float = d1 - V * sqrtT
-    val   CNDD1: Float = CND(d1)
-    val   CNDD2: Float = CND(d2)
-
-    //Calculate Call and Put simultaneously
-    val   expRT: Float = exp(- R * T).toFloat
-
-                         //Put option price
-    val put: Float  = (X * expRT * (1.0f - CNDD2) - S * (1.0f - CNDD1))
-    put
-}
-
-def BlackScholesBodyC(
-    S: Float, //Current stock price
-    X: Float, //Option strike price
-    T: Float, //Option years
-    R: Float, //Riskless rate of return
-    V: Float  //Stock volatility
-)  = {
-    val   sqrtT: Float = sqrt(T).toFloat
-    val      d1: Float = (log(S / X).toFloat + (R + 0.5f * V * V) * T) / (V * sqrtT)
-    val      d2: Float = d1 - V * sqrtT
-    val   CNDD1: Float = CND(d1)
-    val   CNDD2: Float = CND(d2)
-
-    //Calculate Call and Put simultaneously
-    val   expRT: Float = exp(- R * T).toFloat
-
-                          //Call option price
-    val call: Float = (S * CNDD1 - X * expRT * CNDD2)
-    call
-}
 
 }
