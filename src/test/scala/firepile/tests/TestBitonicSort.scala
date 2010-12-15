@@ -10,28 +10,45 @@ import firepile.util.Unsigned._
 import scala.collection.mutable.ArrayBuffer
 
 object TestBitonicSort {
+  val LOCAL_SIZE_LIMIT = 512
+  val dir = 1.toUInt
+  var arrayLength = 0.toUInt
+  val numValues = 65536.toUInt
+
   def main(args: Array[String]) = {
-    val arrayLength = if (args.length > 0) scala.math.pow(2, args(0).toInt).toInt else scala.math.pow(2, 10).toInt 
+    arrayLength = if (args.length > 0) scala.math.pow(2, args(0).toInt).toInt.toUInt else scala.math.pow(2, 20).toInt.toUInt 
+
+    println("arrayLength = " + arrayLength)
 
     val rand = new scala.util.Random(2009)
 
-    val srcKey: Array[UInt]       = Array.fill(arrayLength)((rand.nextInt).toUInt)
-    val srcVal: Array[UInt]       = Array.fill(arrayLength)((rand.nextInt).toUInt)
+    val srcKey: Array[UInt]       = Array.fill(arrayLength.toInt)((rand.nextInt(numValues.toInt)).toUInt)
+    val srcVal: Array[UInt]       = new Array[UInt](arrayLength.toInt)
 
+    for (i <- 0 until arrayLength.toInt) srcVal(i) = i.toUInt
 
+    val size = (2 * LOCAL_SIZE_LIMIT).toUInt
+    val stride = (size / 2).toUInt
 
-    BitonicSort(srcKey, srcVal, srcKey.length.toUInt, 4.toUInt, 16.toUInt, 0.toUInt)
+    val (keys, vals) = BitonicSort(srcKey, srcVal, arrayLength, size, stride, 1.toUInt)
+
+    for (i <- 0 until 100)
+      println("("+keys(i)+", "+vals(i)+")")
+
       
     println("done")
   }
     
   def BitonicSort(srcKey: Array[UInt], srcVal: Array[UInt], arrayLen: UInt, size: UInt, stride: UInt, sortDir: UInt): (Array[UInt], Array[UInt]) = {
     implicit val gpu: Device = firepile.gpu
-    gpu.setWorkSizes(60 * 1024, 128)
 
-    val bsSort: (Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
-      (srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) => bitonicSortSort(srcKey, srcVal, dstKeyVal)
-    }
+    val batch = arrayLength / 64
+
+    gpu.setWorkSizes(LOCAL_SIZE_LIMIT / 2, batch * arrayLength / 2)
+
+//    val bsSort: (Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
+//      (srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) => bitonicSortSort(srcKey, srcVal, dstKeyVal)
+//    }
 
     val bsMerge: (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
       (srcKey: Array[UInt], srcVal: Array[UInt], arrayLen: Array[UInt], size: Array[UInt], stride: Array[UInt], sortDir: Array[UInt], dstKeyVal: Array[UInt]) =>
@@ -43,7 +60,7 @@ object TestBitonicSort {
 
     // hardcoded globalWorkSize and localWorkSize similar to nvidia example
     
-    //bs(srcKey, srcVal, Array[UInt](arrayLen), Array[UInt](size), Array[UInt](stride), Array[UInt](sortDir), outKeyVal)
+    bsMerge(srcKey, srcVal, Array[UInt](arrayLen), Array[UInt](size), Array[UInt](stride), Array[UInt](sortDir), outKeyVal)
 
     // Puts are stored at even index numbers, calls are stored at odd index numbers
    
@@ -169,7 +186,7 @@ object TestBitonicSort {
     dstKeyVal(pos * 2) = keyA
     dstKeyVal(pos * 2 + 1) = valA
     dstKeyVal((pos + stride) * 2) = keyB
-    dstKeyVal((pos + stride) * 2 + 2) = valB
+    dstKeyVal((pos + stride) * 2 + 1) = valB
   }
 
 }
