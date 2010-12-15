@@ -1406,6 +1406,7 @@ object JVM2CL {
 		case "firepile_util_Unsigned_s2r" => return(translateExp(args(0),symtab,anonFuns))
 		case "firepile_util_Unsigned_UInttoFloat" => return( translateExp(base,symtab,anonFuns))
 		case "firepile_util_Unsigned_UInttoInt" => return( translateExp(base,symtab,anonFuns))
+		case "firepile_util_Unsigned_UInttoBoolean" => return( translateExp(base,symtab,anonFuns))
 		case "firepile_util_Unsigned_R_times" => return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
 		case "firepile_util_Unsigned_R_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
 		case "firepile_util_Unsigned_R_minus" => return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
