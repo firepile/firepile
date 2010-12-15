@@ -111,8 +111,8 @@ object Marshaling {
  implicit object UM extends FixedSizeMarshal[UInt] {
     val size = 4
     val align = 4
-    def put(buf:ByteBuffer, i: Int, x: UInt) = buf.put(i, x.toByte)
-    def get(buf:ByteBuffer, i: Int) = (buf.get(i)).toUInt
+    def put(buf:ByteBuffer, i: Int, x: UInt) = buf.putInt(i, x.toInt) 
+    def get(buf:ByteBuffer, i: Int) = (buf.getInt(i)).toUInt
     val manifest = Predef.manifest[UInt]
   }
   

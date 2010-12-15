@@ -16,7 +16,7 @@ object TestBitonicSort {
   val numValues = 65536.toUInt
 
   def main(args: Array[String]) = {
-    arrayLength = if (args.length > 0) scala.math.pow(2, args(0).toInt).toInt.toUInt else scala.math.pow(2, 20).toInt.toUInt 
+    arrayLength = if (args.length > 0) (1 << args(0).toInt).toUInt else (1 << 20).toUInt
 
     println("arrayLength = " + arrayLength)
 
@@ -30,25 +30,54 @@ object TestBitonicSort {
     val size = (2 * LOCAL_SIZE_LIMIT).toUInt
     val stride = (size / 2).toUInt
 
-    val (keys, vals) = BitonicSort(srcKey, srcVal, arrayLength, size, stride, 1.toUInt)
+    val (keys_S, vals_S) = BitonicSort_S(srcKey, srcVal)
+    println("sort completed")
+   
+    // val (keys_M, vals_M) = BitonicSort_M(keys_S, vals_S, arrayLength, size, stride, 1.toUInt)
 
     for (i <- 0 until 100)
-      println("("+keys(i)+", "+vals(i)+")")
-
+      println("("+keys_S(i)+", "+vals_S(i)+")")
       
     println("done")
   }
     
-  def BitonicSort(srcKey: Array[UInt], srcVal: Array[UInt], arrayLen: UInt, size: UInt, stride: UInt, sortDir: UInt): (Array[UInt], Array[UInt]) = {
+  def BitonicSort_S(srcKey: Array[UInt], srcVal: Array[UInt]): (Array[UInt], Array[UInt]) = {
     implicit val gpu: Device = firepile.gpu
 
     val batch = arrayLength / 64
 
-    gpu.setWorkSizes(LOCAL_SIZE_LIMIT / 2, batch * arrayLength / 2)
+    gpu.setWorkSizes(batch * 64 / 2, LOCAL_SIZE_LIMIT / 2)
+    gpu.setLocalMemSize(LOCAL_SIZE_LIMIT * 2)
 
-//    val bsSort: (Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
-//      (srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) => bitonicSortSort(srcKey, srcVal, dstKeyVal)
-//    }
+    val bsSort: (Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
+      (srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) => bitonicSortSort(srcKey, srcVal, dstKeyVal)
+    }
+
+
+    val outKeyVal: Array[UInt] = new Array[UInt](arrayLength.toInt * 2)
+
+    // hardcoded globalWorkSize and localWorkSize similar to nvidia example
+    
+    bsSort(srcKey, srcVal, outKeyVal)
+
+    // Puts are stored at even index numbers, calls are stored at odd index numbers
+   
+    val dstKey = new ArrayBuffer[UInt]()
+    val dstVal = new ArrayBuffer[UInt]()
+
+    for (n <- 0 until outKeyVal.length)
+      if (n % 2 == 0) dstKey += outKeyVal(n)
+      else dstVal += outKeyVal(n)
+
+    (dstKey.toArray, dstVal.toArray)
+  } 
+
+  def BitonicSort_M(srcKey: Array[UInt], srcVal: Array[UInt], arrayLen: UInt, size: UInt, stride: UInt, sortDir: UInt): (Array[UInt], Array[UInt]) = {
+    implicit val gpu: Device = firepile.gpu
+
+    val batch = arrayLength / 64
+
+    gpu.setWorkSizes(batch * 64 / 2, LOCAL_SIZE_LIMIT / 2)
 
     val bsMerge: (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[UInt]) => Unit = firepile.Compiler.compile {
       (srcKey: Array[UInt], srcVal: Array[UInt], arrayLen: Array[UInt], size: Array[UInt], stride: Array[UInt], sortDir: Array[UInt], dstKeyVal: Array[UInt]) =>
@@ -56,7 +85,7 @@ object TestBitonicSort {
       }
 
 
-    val outKeyVal = new Array[UInt](srcKey.length*2)
+    val outKeyVal: Array[UInt] = new Array[UInt](arrayLength.toInt * 2)
 
     // hardcoded globalWorkSize and localWorkSize similar to nvidia example
     
@@ -75,10 +104,16 @@ object TestBitonicSort {
   } 
 
   def bitonicSortSort(srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
+    dstKeyVal(0) = srcVal(0)
+    dstKeyVal(1) = srcVal(1)
+    dstKeyVal(2) = srcVal(1002)
+   
+    val i = id.local
+    /*
     val LOCAL_SIZE_LIMIT = 512.toUInt
     // Offset to beginning of subbatch and load data
     val groupIdUInt = (id.group.toInt).toUInt
-    val localIdUInt = (id.group.toInt).toUInt
+    val localIdUInt = (id.local.toInt).toUInt
 
     val startPos = groupIdUInt * LOCAL_SIZE_LIMIT + localIdUInt 
 
@@ -90,6 +125,7 @@ object TestBitonicSort {
 
     val comparatorI: UInt = (id.global & ((LOCAL_SIZE_LIMIT / 2) - 1)).toUInt
 
+    
     var size: UInt = 2.toUInt
     while (size < LOCAL_SIZE_LIMIT) {
       val dirCond: UInt = if ( (comparatorI & (size / 2.toUInt).toUInt).toInt != 0 ) 1.toUInt else 0.toUInt
@@ -117,6 +153,7 @@ object TestBitonicSort {
       }
       size = size << 1
     }
+    
 
     // Odd/even arrys of LOCAL_SIZE_LIMIT elements sorted in opposite directions
     val dirCond: UInt = (groupIdUInt & 1.toUInt)
@@ -142,12 +179,19 @@ object TestBitonicSort {
 
       stride = stride >> 1
     }
+    
 
     localMem.barrier
-    dstKeyVal(startPos * 2) = ldata(id.local * 2)
-    dstKeyVal(startPos * 2 + 1) = ldata(id.local * 2 + 1)
-    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2) = ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2)
-    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1) = ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1)
+  
+    
+    dstKeyVal(startPos * 2) = 1.toUInt // ldata(id.local * 2)
+    dstKeyVal(startPos * 2 + 1) = 1.toUInt // ldata(id.local * 2 + 1)
+    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2) = 1.toUInt // ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2)
+    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1) = 1.toUInt // ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1)
+ 
+    */
+
+
   }
 
 
