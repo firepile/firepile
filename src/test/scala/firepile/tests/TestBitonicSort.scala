@@ -104,12 +104,6 @@ object TestBitonicSort {
   } 
 
   def bitonicSortSort(srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
-    dstKeyVal(0) = srcVal(0)
-    dstKeyVal(1) = srcVal(1)
-    dstKeyVal(2) = srcVal(1002)
-   
-    val i = id.local
-    /*
     val LOCAL_SIZE_LIMIT = 512.toUInt
     // Offset to beginning of subbatch and load data
     val groupIdUInt = (id.group.toInt).toUInt
@@ -189,9 +183,6 @@ object TestBitonicSort {
     dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2) = 1.toUInt // ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2)
     dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1) = 1.toUInt // ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1)
  
-    */
-
-
   }
 
 

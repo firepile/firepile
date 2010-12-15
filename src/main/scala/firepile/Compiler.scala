@@ -17,7 +17,7 @@ import java.nio.ByteBuffer
 
 // TODO: remove most of this.
 object Compiler {
-  val TIMING = true
+  val TIMING = false
 
   val Header = ("\n" +
     "struct Point1 {                                                                               \n" +
@@ -338,14 +338,14 @@ object Compiler {
     new Kernel2[A1,A2] {
       def apply(a1: A1, a2: A2): Unit = { 
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
-        val bufA2: ByteBuffer = transA2.toBuffer(a2).head
-        
-        val numItemsA1 = bufA1.capacity / sizeA1 
-        val numItemsA2 = bufA2.capacity / sizeA2 
+        // val bufA2: ByteBuffer = transA2.toBuffer(a2).head
+        val numItemsA1 = transA1.sizes(a1).head / sizeA1
+        val numItemsA2 = transA2.sizes(a2).head / sizeA2
+        val bufA2capacity = transA2.sizes(a2).head
 
         val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
         // val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1.capacity)
-        val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA2.capacity)
+        val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA2capacity)
         
         val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
 
@@ -367,7 +367,7 @@ object Compiler {
 
         dev.queue.finish
 
-        val bufOut = allocDirectBuffer(bufA2.capacity)
+        val bufOut = allocDirectBuffer(bufA2capacity)
         bufA2CLBuf.read(dev.queue, bufOut, true)
 
         bufOut.rewind
@@ -404,15 +404,18 @@ object Compiler {
       def apply(a1: A1, a2: A2, a3: A3): Unit = { 
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
         val bufA2: ByteBuffer = transA2.toBuffer(a2).head
-        val bufA3: ByteBuffer = transA3.toBuffer(a3).head
+        // val bufA3: ByteBuffer = transA3.toBuffer(a3).head
+       
+        val numItemsA1 = transA1.sizes(a1).head / sizeA1
+        val numItemsA2 = transA2.sizes(a2).head / sizeA2
+        val numItemsA3 = transA3.sizes(a3).head / sizeA3
+        val bufA3capacity = transA3.sizes(a3).head
         
-        val numItemsA1 = bufA1.capacity / sizeA1 
-        val numItemsA2 = bufA2.capacity / sizeA2 
-        val numItemsA3 = bufA3.capacity / sizeA3 
+        println("Output buffer capacity: " + bufA3capacity)
 
         val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
         val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
-        val bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA3.capacity)
+        val bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA3capacity)
         
         val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
 
@@ -434,8 +437,10 @@ object Compiler {
         }
         else {
           // We don't really know if the local item types are the same as the global item types
-          kernBin.setLocalArg(6, dev.memConfig.localSize * sizeA1)
-          kernBin.setArg(7, dev.memConfig.localSize)
+
+           println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
+          kernBin.setLocalArg(6, dev.memConfig.localMemSize * sizeA1)
+          kernBin.setArg(7, dev.memConfig.localMemSize)
           kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
         }
 
@@ -458,15 +463,16 @@ object Compiler {
         }
         else {
           // We don't really know if the local item types are the same as the global item types
-          kernBin.setLocalArg(6, dev.memConfig.localSize * sizeA1)
-          kernBin.setArg(7, dev.memConfig.localSize)
+           println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
+          kernBin.setLocalArg(6, dev.memConfig.localMemSize * sizeA1)
+          kernBin.setArg(7, dev.memConfig.localMemSize)
           kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
         }
 
         dev.queue.finish
         }
 
-        val bufOut = allocDirectBuffer(bufA3.capacity)
+        val bufOut = allocDirectBuffer(bufA3capacity)
         bufA3CLBuf.read(dev.queue, bufOut, true)
 
         bufOut.rewind
@@ -507,17 +513,18 @@ object Compiler {
         val bufA1: ByteBuffer = transA1.toBuffer(a1).head
         val bufA2: ByteBuffer = transA2.toBuffer(a2).head
         val bufA3: ByteBuffer = transA3.toBuffer(a3).head
-        val bufA4: ByteBuffer = transA4.toBuffer(a4).head
+        // val bufA4: ByteBuffer = transA4.toBuffer(a4).head
         
-        val numItemsA1 = bufA1.capacity / sizeA1 
-        val numItemsA2 = bufA2.capacity / sizeA2 
-        val numItemsA3 = bufA3.capacity / sizeA3 
-        val numItemsA4 = bufA4.capacity / sizeA4 
+        val numItemsA1 = transA1.sizes(a1).head / sizeA1
+        val numItemsA2 = transA2.sizes(a2).head / sizeA2
+        val numItemsA3 = transA3.sizes(a3).head / sizeA3
+        val numItemsA4 = transA4.sizes(a4).head / sizeA4
+        val bufA4capacity = transA4.sizes(a4).head        
 
         val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
         val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
         val bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
-        val bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA4.capacity)
+        val bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA4capacity)
         
         val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
 
@@ -577,7 +584,7 @@ object Compiler {
         dev.queue.finish
         }
 
-        val bufOut = allocDirectBuffer(bufA4.capacity)
+        val bufOut = allocDirectBuffer(bufA4capacity)
         bufA4CLBuf.read(dev.queue, bufOut, true)
 
         bufOut.rewind
@@ -613,19 +620,20 @@ object Compiler {
          val bufA2: ByteBuffer = transA2.toBuffer(a2).head
          val bufA3: ByteBuffer = transA3.toBuffer(a3).head
          val bufA4: ByteBuffer = transA4.toBuffer(a4).head
-         val bufA5: ByteBuffer = transA5.toBuffer(a5).head
+         // val bufA5: ByteBuffer = transA5.toBuffer(a5).head
          
-         val numItemsA1 = bufA1.capacity / sizeA1 
-         val numItemsA2 = bufA2.capacity / sizeA2 
-         val numItemsA3 = bufA3.capacity / sizeA3 
-         val numItemsA4 = bufA4.capacity / sizeA4 
-         val numItemsA5 = bufA5.capacity / sizeA5
+         val numItemsA1 = transA1.sizes(a1).head / sizeA1
+         val numItemsA2 = transA2.sizes(a2).head / sizeA2
+         val numItemsA3 = transA3.sizes(a3).head / sizeA3
+         val numItemsA4 = transA4.sizes(a4).head / sizeA4
+         val numItemsA5 = transA5.sizes(a5).head / sizeA5
+         val bufA5capacity = transA5.sizes(a5).head
  
          val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
          val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
          val bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
          val bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA4, true)
-         val bufA5CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA5.capacity)
+         val bufA5CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA5capacity)
          
          val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
  
@@ -656,7 +664,7 @@ object Compiler {
  
          dev.queue.finish
  
-         val bufOut = allocDirectBuffer(bufA5.capacity)
+         val bufOut = allocDirectBuffer(bufA5capacity)
          bufA5CLBuf.read(dev.queue, bufOut, true)
  
          bufOut.rewind
@@ -697,21 +705,22 @@ object Compiler {
          val bufA3: ByteBuffer = transA3.toBuffer(a3).head
          val bufA4: ByteBuffer = transA4.toBuffer(a4).head
          val bufA5: ByteBuffer = transA5.toBuffer(a5).head
-         val bufA6: ByteBuffer = transA6.toBuffer(a6).head
+         // val bufA6: ByteBuffer = transA6.toBuffer(a6).head
          
-         val numItemsA1 = bufA1.capacity / sizeA1 
-         val numItemsA2 = bufA2.capacity / sizeA2 
-         val numItemsA3 = bufA3.capacity / sizeA3 
-         val numItemsA4 = bufA4.capacity / sizeA4 
-         val numItemsA5 = bufA5.capacity / sizeA5
-         val numItemsA6 = bufA6.capacity / sizeA6
- 
+         val numItemsA1 = transA1.sizes(a1).head / sizeA1
+         val numItemsA2 = transA2.sizes(a2).head / sizeA2
+         val numItemsA3 = transA3.sizes(a3).head / sizeA3
+         val numItemsA4 = transA4.sizes(a4).head / sizeA4
+         val numItemsA5 = transA5.sizes(a5).head / sizeA5
+         val numItemsA6 = transA6.sizes(a6).head / sizeA6
+         val bufA6capacity = transA6.sizes(a6).head
+
          val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
          val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
          val bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
          val bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA4, true)
          val bufA5CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA5, true)
-         val bufA6CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA6.capacity)
+         val bufA6CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA6capacity)
          
          val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
  
@@ -744,7 +753,7 @@ object Compiler {
  
          dev.queue.finish
  
-         val bufOut = allocDirectBuffer(bufA6.capacity)
+         val bufOut = allocDirectBuffer(bufA6capacity)
          bufA6CLBuf.read(dev.queue, bufOut, true)
  
          bufOut.rewind
@@ -788,8 +797,18 @@ object Compiler {
          val bufA4: ByteBuffer = transA4.toBuffer(a4).head
          val bufA5: ByteBuffer = transA5.toBuffer(a5).head
          val bufA6: ByteBuffer = transA6.toBuffer(a6).head
-         val bufA7: ByteBuffer = transA7.toBuffer(a7).head
+         // val bufA7: ByteBuffer = transA7.toBuffer(a7).head
+
+         val numItemsA1 = transA1.sizes(a1).head / sizeA1
+         val numItemsA2 = transA2.sizes(a2).head / sizeA2
+         val numItemsA3 = transA3.sizes(a3).head / sizeA3
+         val numItemsA4 = transA4.sizes(a4).head / sizeA4
+         val numItemsA5 = transA5.sizes(a5).head / sizeA5
+         val numItemsA6 = transA6.sizes(a6).head / sizeA6
+         val numItemsA7 = transA7.sizes(a7).head / sizeA7
+         val bufA7capacity = transA7.sizes(a7).head
          
+         /*
          val numItemsA1 = bufA1.capacity / sizeA1 
          val numItemsA2 = bufA2.capacity / sizeA2 
          val numItemsA3 = bufA3.capacity / sizeA3 
@@ -797,6 +816,7 @@ object Compiler {
          val numItemsA5 = bufA5.capacity / sizeA5
          val numItemsA6 = bufA6.capacity / sizeA6
          val numItemsA7 = bufA7.capacity / sizeA7
+         */
 
  
          val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
@@ -805,7 +825,7 @@ object Compiler {
          val bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA4, true)
          val bufA5CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA5, true)
          val bufA6CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA6, true)
-         val bufA7CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA7.capacity)
+         val bufA7CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA7capacity)
          
          val threads = (if (numItemsA1 < dev.maxThreads*2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt 
  
@@ -821,8 +841,8 @@ object Compiler {
 	 kernBin.setArg(9, numItemsA5)
 	 kernBin.setArg(10, bufA6CLBuf)
 	 kernBin.setArg(11, numItemsA6)
-	 kernBin.setArg(12, bufA6CLBuf)
-	 kernBin.setArg(13, numItemsA6)
+	 kernBin.setArg(12, bufA7CLBuf)
+	 kernBin.setArg(13, numItemsA7)
  
          println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
  
@@ -840,7 +860,7 @@ object Compiler {
  
          dev.queue.finish
  
-         val bufOut = allocDirectBuffer(bufA7.capacity)
+         val bufOut = allocDirectBuffer(bufA7capacity)
          bufA7CLBuf.read(dev.queue, bufOut, true)
  
          bufOut.rewind
