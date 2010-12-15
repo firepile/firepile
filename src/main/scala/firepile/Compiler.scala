@@ -360,8 +360,8 @@ object Compiler {
           kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA2 * threads), Array[Int](threads))
         }
         else {
-          kernBin.setLocalArg(4, dev.memConfig.localSize * sizeA1)
-          kernBin.setArg(5, dev.memConfig.localSize)
+          kernBin.setLocalArg(4, dev.memConfig.localMemSize * sizeA1)
+          kernBin.setArg(5, dev.memConfig.localMemSize)
           kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
         }
 
@@ -576,8 +576,8 @@ object Compiler {
         }
         else {
           // We don't really know if the local item types are the same as the global item types
-          kernBin.setLocalArg(8, dev.memConfig.localSize * sizeA1)
-          kernBin.setArg(9, dev.memConfig.localSize)
+          kernBin.setLocalArg(8, dev.memConfig.localMemSize * sizeA1)
+          kernBin.setArg(9, dev.memConfig.localMemSize)
           kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
         }
 
@@ -657,8 +657,8 @@ object Compiler {
          }
          else {
            // We don't really know if the local item types are the same as the global item types
-           kernBin.setLocalArg(10, dev.memConfig.localSize * sizeA5)
-           kernBin.setArg(11, dev.memConfig.localSize)
+           kernBin.setLocalArg(10, dev.memConfig.localMemSize * sizeA5)
+           kernBin.setArg(11, dev.memConfig.localMemSize)
            kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
          }
  
@@ -746,8 +746,8 @@ object Compiler {
          }
          else {
            // We don't really know if the local item types are the same as the global item types
-           kernBin.setLocalArg(12, dev.memConfig.localSize * sizeA1)
-           kernBin.setArg(13, dev.memConfig.localSize)
+           kernBin.setLocalArg(12, dev.memConfig.localMemSize * sizeA1)
+           kernBin.setArg(13, dev.memConfig.localMemSize)
            kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
          }
  
@@ -853,8 +853,8 @@ object Compiler {
          }
          else {
            // We don't really know if the local item types are the same as the global item types
-           kernBin.setLocalArg(14, dev.memConfig.localSize * sizeA1)
-           kernBin.setArg(15, dev.memConfig.localSize)
+           kernBin.setLocalArg(14, dev.memConfig.localMemSize * sizeA1)
+           kernBin.setArg(15, dev.memConfig.localMemSize)
            kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
          }
  
