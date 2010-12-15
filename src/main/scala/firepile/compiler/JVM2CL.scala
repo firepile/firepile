@@ -1393,29 +1393,34 @@ object JVM2CL {
               
               methodName(method) match {
               
-              case "firepile_Spaces_Point1_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
-	      case "firepile_Spaces_Point1_minus" => return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
-	      case "firepile_Spaces_Point1_times" => return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UInt_greater_greater" => return( Bin ( translateExp(base,symtab,anonFuns), ">>", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UInt_greater" => return( Bin ( translateExp(base,symtab,anonFuns), ">", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UInt_amp" => return( Bin ( translateExp(base,symtab,anonFuns), "&", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UInt_less" => return( Bin ( translateExp(base,symtab,anonFuns), "<", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UInt_less_less" => return( Bin ( translateExp(base,symtab,anonFuns), "<<", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UInt_up" => return( Bin ( translateExp(base,symtab,anonFuns), "^", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_RtoUInt" => return( translateExp(base,symtab,anonFuns))
-              case "firepile_util_Unsigned_s2r" => return(translateExp(args(0),symtab,anonFuns))
-              case "firepile_util_Unsigned_UInttoFloat" => return( translateExp(base,symtab,anonFuns))
-              case "firepile_util_Unsigned_R_times" => return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_R_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_R_minus" => return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UInt_bar" => return( Bin ( translateExp(base,symtab,anonFuns), "|", translateExp(args(0),symtab,anonFuns)) )
-              case "firepile_util_Unsigned_UIntunary__tilde" => return Un("~", translateExp(base,symtab,anonFuns))
-              case _ => ;
-              }
+                case "firepile_Spaces_Point1_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_Spaces_Point1_minus" => return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_Spaces_Point1_times" => return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_greater_greater" => return( Bin ( translateExp(base,symtab,anonFuns), ">>", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_greater" => return( Bin ( translateExp(base,symtab,anonFuns), ">", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_amp" => return( Bin ( translateExp(base,symtab,anonFuns), "&", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_less" => return( Bin ( translateExp(base,symtab,anonFuns), "<", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_less_less" => return( Bin ( translateExp(base,symtab,anonFuns), "<<", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_up" => return( Bin ( translateExp(base,symtab,anonFuns), "^", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_RtoUInt" => return( translateExp(base,symtab,anonFuns))
+		case "firepile_util_Unsigned_s2r" => return(translateExp(args(0),symtab,anonFuns))
+		case "firepile_util_Unsigned_UInttoFloat" => return( translateExp(base,symtab,anonFuns))
+		case "firepile_util_Unsigned_UInttoInt" => return( translateExp(base,symtab,anonFuns))
+		case "firepile_util_Unsigned_R_times" => return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_R_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_R_minus" => return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_times" => return( Bin ( translateExp(base,symtab,anonFuns), "*", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UIntequals" => return( Bin ( translateExp(base,symtab,anonFuns), "==", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_plus" => return( Bin ( translateExp(base,symtab,anonFuns), "+", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_minus" => return( Bin ( translateExp(base,symtab,anonFuns), "-", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_div" => return( Bin ( translateExp(base,symtab,anonFuns), "/", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UInt_bar" => return( Bin ( translateExp(base,symtab,anonFuns), "|", translateExp(args(0),symtab,anonFuns)) )
+		case "firepile_util_Unsigned_UIntunary__tilde" => return Un("~", translateExp(base,symtab,anonFuns))
+                case _ => ;
              // if(methodName(method).startsWith("firepile_util_Unsigned_UInttoFloat"))
              // return( FloatLit ( base) )
+              }
               
-                   
               if (methodName(method).startsWith("firepile_Spaces_Point") || methodName(method).startsWith("firepile_Spaces_point")) {
                 if (args.length == 1) 
                   handleIdsVirtualInvoke(args(0)) match {
