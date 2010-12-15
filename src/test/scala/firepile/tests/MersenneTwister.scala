@@ -51,21 +51,21 @@ val maxBlocks: Int = 128
   
   def run = {
   
-      val (a,b,c,d) = readData("MersenneTwister.dat")
+      val (a,b,c,d) = readData(".\\data\\MersenneTwister.dat")
       
       val output= RandomNumGen(a,b,c,d,nPerRng)
       
       println(" Sample random numbers ")
       
       for(i <- 0 until MT_RNG_COUNT)
-          for( j <- 0 until nPerRng) {
+          //for( j <- 0 until nPerRng) {
       	        //double rCPU = h_RandCPU[iDevice][i * nPerRng + j];
       	        //double rGPU = h_RandGPU[iDevice][i + j * MT_RNG_COUNT];
-      	        println(" number:"+ output(i+j * MT_RNG_COUNT))
+      	        println(" number:"+ output(i * MT_RNG_COUNT))
       	        //double delta = fabs(rCPU - rGPU);
       	        //sum_delta += delta;
       	        //sum_ref   += fabs(rCPU);
-      	        }
+      	     //   }
      // for(i <-0 until MT_RNG_COUNT)
      // println(":"+output(i)+":")
     
@@ -97,16 +97,9 @@ val maxBlocks: Int = 128
       (A: Array[UInt], B: Array[UInt], C: Array[UInt], D: Array[UInt], n: Array[Int], E: Array[Float]) => MersenneTwister(A, B, C, D, n,E)
     }
     
-    for(j <- 0 until matrix_a.length){
-    
-    println("After index:"+j+" byte1: "+ matrix_a(j)+" byte2: "+mask_a(j)+" byte3: "+ mask_b(j)+" byte4: "+seed(j))
-    
-    }
-   
-   
+     
     val d_Rand : Array[Float] = new Array[Float](nRand)
     val nn = new Array[Int](globalWorkSize) 
-    //val F: Array[UInt] = new Array[UInt](MT_NN)
     RandomNumberGenerator(matrix_a, mask_a, mask_b, seed, nn, d_Rand)
     d_Rand
  }
