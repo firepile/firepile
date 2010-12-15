@@ -82,6 +82,7 @@ case class UInt(rep: Int) {
   def toByte = rep.toByte
   def toShort = rep.toShort
   def toChar = rep.toChar
+  def toBoolean = (rep > 0)
   def toLong = (rep & 0xffffffffL)
   def toFloat = (rep & 0xffffffffL).toFloat
   def toDouble = (rep & 0xffffffffL).toDouble

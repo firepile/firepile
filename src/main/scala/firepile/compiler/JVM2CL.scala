@@ -685,18 +685,19 @@ object JVM2CL {
 
     def addStruct(typ: Tree): Tree = {
       val arrayTyp = typ match {
-        case v: ValueType => v
-        case PtrType(v: ValueType) => v
+        case v: ValueType => v.name
+        case v: StructType => v.name
+        case PtrType(v: ValueType) => v.name
         case _ => throw new RuntimeException("Unknown array type: " + typ)
       }
       if (!structs.contains(typ)) {
-        structs += typ -> List(StructDef("g_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(arrayTyp)), Id("data")))),
-          StructDef("l_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(arrayTyp)), Id("data")))),
-          StructDef("c_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(arrayTyp)), Id("data")))),
-          StructDef("p_" + mangleName(arrayTyp.name).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
+        structs += typ -> List(StructDef("g_" + mangleName(arrayTyp).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(typ)), Id("data")))),
+          StructDef("l_" + mangleName(arrayTyp).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(typ)), Id("data")))),
+          StructDef("c_" + mangleName(arrayTyp).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(typ)), Id("data")))),
+          StructDef("p_" + mangleName(arrayTyp).replaceAll(" ","_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(typ)), Id("data")))))
       }
 
-      StructType("g_" + arrayTyp.name.replaceAll(" ","_") + "Array")
+      StructType("g_" + arrayTyp.replaceAll(" ","_") + "Array")
     }
 
     def dumpArrayStructs = {
@@ -771,7 +772,7 @@ object JVM2CL {
     case t: SootDoubleType => ValueType("double")
     case t: SootRefType => {
       t.getSootClass.getName match {
-        case "scala.Tuple2" => StructType("Tuple2")
+        case "scala.Tuple2" => StructType("Tuple2") 
         case "scala.Tuple3" => StructType("Tuple3")
         case "scala.Tuple4" => StructType("Tuple4")
         case "scala.Tuple5" => StructType("Tuple5")
@@ -782,7 +783,7 @@ object JVM2CL {
         case _ => PtrType(StructType(mangleName(t.toString)))
       }
     }
-    case t: SootArrayType => arraystructs.addStruct(translateType(t.getArrayElementType))
+    case t: SootArrayType => { println("SootArrayType " + t.getArrayElementType.toString); arraystructs.addStruct(translateType(t.getArrayElementType)) }
     case t: SootNullType => PtrType(ValueType("void"))
     // TODO: array types
     case _ => ValueType(t.toString)
