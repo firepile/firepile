@@ -12,14 +12,17 @@ import java.nio.FloatBuffer
 import java.nio.ByteOrder
 import scala.collection.JavaConversions._
 import firepile.Marshaling._
+import java.io._
 import scala.util.Random
 import scala.math.{ceil, pow, log}
 import firepile.util.Unsigned._
+import firepile.tests.MersenneTwisterDataReader._
 
 object MersenneTwister {
 
-//val MT_RNG_COUNT=4096
-val MT_RNG_COUNT: Int=16384
+val MT_RNG_COUNT=4096
+
+//val MT_RNG_COUNT: Int=1024
 val MT_MM:Int =9
 val MT_NN: Int=19
 val MT_WMASK: Short =0xFFFFFFFF
@@ -32,30 +35,39 @@ val MT_SHIFT1: Int=18
 val PI=3.14159265358979f
 
 //val globalWorkSize= MT_RNG_COUNT      // 1D var for Total # of work items
-//val localWorkSize =  128                // 1D var for # of work items in the work group	
-val localWorkSize: Int =  64
-val seed: Int = 777
+val localWorkSize =  128                // 1D var for # of work items in the work group	
+//val localWorkSize: Int =  64
+val seed: UInt = 777.toUInt
 val nPerRng: Int = 5860                      // # of recurrence steps, must be even if do Box-Muller transformation
 val nRand = MT_RNG_COUNT * nPerRng  
 
 //val NUM_ITEMS = 16384 // 1048576
-val globalWorkSize: Int = 16384
+//val globalWorkSize: Int = 16384
+val globalWorkSize: Int = MT_RNG_COUNT	
 val maxThreads: Int = 512 
-val maxBlocks: Int = 64
+val maxBlocks: Int = 128
 
   def main(args: Array[String]) = run
   
   def run = {
-      val random = new Random(0)
-      val randInput1 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
-      val randInput2 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
-      val randInput3 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
-      val randInput4 = (Array.fill(globalWorkSize)(random.nextInt.toUInt))
+  
+      val (a,b,c,d) = readData("MersenneTwister.dat")
       
-      val output= RandomNumGen(randInput1,randInput2,randInput3,randInput4,nPerRng)
+      val output= RandomNumGen(a,b,c,d,nPerRng)
       
-      for(i <- output)
-      println(":"+i+":")
+      println(" Sample random numbers ")
+      
+      for(i <- 0 until MT_RNG_COUNT)
+          for( j <- 0 until nPerRng) {
+      	        //double rCPU = h_RandCPU[iDevice][i * nPerRng + j];
+      	        //double rGPU = h_RandGPU[iDevice][i + j * MT_RNG_COUNT];
+      	        println(" number:"+ output(i+j * MT_RNG_COUNT))
+      	        //double delta = fabs(rCPU - rGPU);
+      	        //sum_delta += delta;
+      	        //sum_ref   += fabs(rCPU);
+      	        }
+     // for(i <-0 until MT_RNG_COUNT)
+     // println(":"+output(i)+":")
     
   }
   
@@ -84,7 +96,15 @@ val maxBlocks: Int = 64
     val RandomNumberGenerator : (Array[UInt], Array[UInt], Array[UInt], Array[UInt], Array[Int], Array[Float]) => Unit = firepile.Compiler.compile {
       (A: Array[UInt], B: Array[UInt], C: Array[UInt], D: Array[UInt], n: Array[Int], E: Array[Float]) => MersenneTwister(A, B, C, D, n,E)
     }
-    val d_Rand : Array[Float] = new Array[Float](globalWorkSize)
+    
+    for(j <- 0 until matrix_a.length){
+    
+    println("After index:"+j+" byte1: "+ matrix_a(j)+" byte2: "+mask_a(j)+" byte3: "+ mask_b(j)+" byte4: "+seed(j))
+    
+    }
+   
+   
+    val d_Rand : Array[Float] = new Array[Float](nRand)
     val nn = new Array[Int](globalWorkSize) 
     //val F: Array[UInt] = new Array[UInt](MT_NN)
     RandomNumberGenerator(matrix_a, mask_a, mask_b, seed, nn, d_Rand)
@@ -108,6 +128,7 @@ def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UI
     val MT_SHIFT1: Int =18
     val PI=3.14159265358979f
     val nPerRng:Int = 5860 
+    val localSeed: UInt = 777.toUInt
     
     val i = id.group
     var iState: Int = 0
@@ -124,13 +145,15 @@ def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UI
     var m_c: UInt = mti
     var cond: UInt =mti
    
+    var something: UInt = ((mti & ( mti1 / 2.toUInt ).toUInt) - 1.toUInt).toUInt
     //Load bit-vector Mersenne Twister parameters
     m_a   = matrix_a(i)
     m_b   = mask_b(i)
     m_c   = mask_c(i)
         
     //Initialize current state
-    mt(0) = seed(i)
+    
+    mt(0) = localSeed
         iState = 1
         while(iState < MT_NN) {
         mt(iState) = ((1812433253.toShort * (mt(iState - 1) ^ (mt(iState - 1) >> 30)) + iState) & MT_WMASK).toUInt;
@@ -142,6 +165,7 @@ def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UI
 
     iOut = 0
     while(iOut < nPerRng) {
+    
         iState1 = iState + 1
         iStateM = iState + MT_MM
         if(iState1 >= MT_NN) iState1 -= MT_NN
@@ -171,6 +195,9 @@ def MersenneTwister(matrix_a: Array[UInt], mask_b: Array[UInt], mask_c: Array[UI
         d_Rand(i + iOut * MT_RNG_COUNT) = (x.toFloat + 1.0f) / 4294967296.0f;
         iOut+=1
     }
+    
+    
+    //d_Rand(i + iOut * MT_RNG_COUNT) = (x.toFloat + 1.0f) / 4294967296.0f;
   }
   
   
