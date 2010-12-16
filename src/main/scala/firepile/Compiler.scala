@@ -18,7 +18,6 @@ import java.nio.ByteBuffer
 
 // TODO: remove most of this.
 object Compiler {
-  val TIMING = true
   var numIterations = 16
 
   val Header = ("\n" +

@@ -115,7 +115,7 @@ package object firepile {
       }
       finally {
         val t1 = System.currentTimeMillis
-        println(label + " time " + ((t1 - t0) / 1000.) / iterations)
+        println(label + " time = " + ((t1 - t0) / 1000.) / iterations)
       }
     }
     else
