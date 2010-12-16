@@ -14,9 +14,10 @@ import scala.collection.JavaConversions._
 import firepile.Marshaling._
 import java.io._
 import scala.util.Random
-import scala.math.{ceil, pow, log}
+import scala.math.{ceil, pow, log, abs}
 import firepile.util.Unsigned._
 import firepile.tests.MersenneTwisterDataReader._
+import firepile.tests.CPUMersenneTwister._
 
 object MersenneTwister {
 
@@ -53,38 +54,45 @@ val maxBlocks: Int = 128
   
       val (a,b,c,d) = readData(".\\data\\MersenneTwister.dat")
       
-      val output= RandomNumGen(a,b,c,d,nPerRng)
+      val h_RandGPU= RandomNumGen(a,b,c,d,nPerRng)
       
-      println(" Sample random numbers ")
+      /*
+      val h_RandCPU = cpuMersenneTwister(a,b,c)
       
+      //println(" Sample random numbers ")
+      var sum_delta= 0d
+      var sum_ref = 0d
       for(i <- 0 until MT_RNG_COUNT)
-          //for( j <- 0 until nPerRng) {
-      	        //double rCPU = h_RandCPU[iDevice][i * nPerRng + j];
-      	        //double rGPU = h_RandGPU[iDevice][i + j * MT_RNG_COUNT];
-      	        println(" number:"+ output(i * MT_RNG_COUNT))
-      	        //double delta = fabs(rCPU - rGPU);
-      	        //sum_delta += delta;
-      	        //sum_ref   += fabs(rCPU);
-      	     //   }
-     // for(i <-0 until MT_RNG_COUNT)
-     // println(":"+output(i)+":")
+          for( j <- 0 until nPerRng) {
+      	        var rCPU = h_RandCPU(i * nPerRng + j)
+      	        var rGPU = h_RandGPU(i + j * MT_RNG_COUNT)
+      	        var delta = abs(rCPU - rGPU)
+      	        sum_delta += delta
+      	        sum_ref   += abs(rCPU)
+      	        }
+      val norm = sum_delta / sum_ref
+      val datasize = nPerRng * MT_RNG_COUNT * 
+      var data = new Array[Byte](numberBytes)
+                  String file = ".\\data\\MersenneTwisterResults.dat"
+                  FileOutputStream fileoutputstream = new FileOutputStream(file)
+      
+                  for (i <- data.length)
+                    fileoutputstream.write(data(i))
+                  
+      
+      fileoutputstream.close();
+      
+      println("Difference:::"+ sum_delta )
+      if( norm < 1E-6) println("PASSED") else println("FAILED")
+      
+      */
+      
+      for( i <-0 until h_RandGPU.length) 
+      println(" Number::"+ h_RandGPU(i*MT_RNG_COUNT))
     
   }
   
-  /*
-  void loadMTGPU(const char *fname, const unsigned int seed, mt_struct_stripped *h_MT, const size_t size)
-  {
-      FILE* fd = 0;
-         
-      for (unsigned int i = 0; i < size; i++)
-          fread(&h_MT[i], sizeof(mt_struct_stripped), 1, fd);
-      fclose(fd);
-  
-      for(unsigned int i = 0; i < size; i++)
-          h_MT[i].seed = seed;
-}
-  */
-  
+ 
   def RandomNumGen(matrix_a : Array[UInt], mask_a: Array[UInt], mask_b: Array[UInt], seed : Array[UInt], n: Int): Array[Float] = {
     implicit val gpu: Device = firepile.gpu
     gpu.setWorkSizes(globalWorkSize, localWorkSize)
