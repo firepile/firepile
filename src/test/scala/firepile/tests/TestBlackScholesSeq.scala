@@ -45,13 +45,13 @@ object TestBlackScholesSeq {
           (a,b)
     }
 
-      val result = time {
+      val result = time ({
         for (i <- 0 until n) {
           for (j <- 0 until optionCount) {
             BlackScholesK( h_S(j), h_X(j), h_T(j))
           }
         }
-      }
+      }, "TestBlackShcoesSeq")
 
       // val (h_Call, h_Put) = result.unzip
 

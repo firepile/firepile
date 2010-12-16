@@ -18,12 +18,12 @@ object TestTimeMap1b {
 
     {
       println(n + " array sequential map x2");
-      time {
+      time ( {
         for (i <- 0 until n) {
           val result = a.map(floatX2)
           result
         }
-      }
+      }, "TestTimeMap1b")
     }
   }
 }

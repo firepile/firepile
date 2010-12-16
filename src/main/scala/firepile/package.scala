@@ -15,6 +15,8 @@ package object firepile {
   import Spaces._
   import Marshaling._
 
+  val MEASURE_TIME = true
+
   private lazy val defaultGPUPlatform: Option[Platform] = {
     platforms.flatMap {
       (p:Platform) => p.listGPUs(true).map { (d:Device) => p }
@@ -104,15 +106,20 @@ package object firepile {
 
   // Should copies to/from device be explicit?
 
-  def time[A](body: => A, iterations: Int = 1): A = {
-    val t0 = System.currentTimeMillis
-    try {
+  def time[A](body: => A, label: String, iterations: Int = 1): A = {
+    if (MEASURE_TIME) {
+      val t0 = System.currentTimeMillis
+      try {
+        for (i<- 0 until iterations -1 ) body
+        body
+      }
+      finally {
+        val t1 = System.currentTimeMillis
+        println(label + " time " + ((t1 - t0) / 1000.) / iterations)
+      }
+    }
+    else
       body
-    }
-    finally {
-      val t1 = System.currentTimeMillis
-      println("time " + ((t1 - t0) / 1000.) / iterations)
-    }
   }
 
   def platforms: List[Platform] = {

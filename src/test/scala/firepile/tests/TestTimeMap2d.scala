@@ -29,12 +29,12 @@ object TestTimeMap2d {
       val bx: BBArray[Int] = a
       val b: BBArray[Int] = bx.directCopy
       println(n + " bbarray sequential map x2");
-      time {
+      time ({
         for (i <- 0 until n) {
           val result = b.map(bits)
           result
         }
-      }
+      }, "TimeMap2d")
     }
   }
 }

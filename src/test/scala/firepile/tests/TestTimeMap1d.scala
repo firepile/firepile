@@ -21,12 +21,12 @@ object TestTimeMap1d {
       val b: BBArray[Float] = bx.directCopy
 
       println(n + " bbarray sequential map x2");
-      time {
+      time ({
         for (i <- 0 until n) {
           val result = b.map(floatX2)
           result
         }
-      }
+      }, "TestTimeMap1d")
     }
   }
 }

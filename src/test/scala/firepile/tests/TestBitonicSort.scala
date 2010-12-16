@@ -27,15 +27,16 @@ object TestBitonicSort {
 
     for (i <- 0 until arrayLength.toInt) srcVal(i) = i.toUInt
 
-    val size = (2 * LOCAL_SIZE_LIMIT).toUInt
+    // val size = (2 * LOCAL_SIZE_LIMIT).toUInt
+    val size = arrayLength
     val stride = (size / 2).toUInt
 
     val (keys_S, vals_S) = BitonicSort_S(srcKey, srcVal)
     println("sort completed")
    
-    // val (keys_M, vals_M) = BitonicSort_M(keys_S, vals_S, arrayLength, size, stride, 1.toUInt)
+    val (keys_M, vals_M) = BitonicSort_M(keys_S, vals_S, arrayLength, size, stride, 1.toUInt)
 
-    for (i <- 0 until 100)
+    for (i <- 0 until arrayLength.toInt)
       println("("+keys_S(i)+", "+vals_S(i)+")")
       
     println("done")
