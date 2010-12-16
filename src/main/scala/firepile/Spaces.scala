@@ -255,4 +255,12 @@ object Spaces {
     }
     val manifest = classManifest[Point3]
   }
+
+  object  Id11 { 
+    def group0 = ( )
+    def group1 = ( )
+    def local0 = ( )
+    def local1 = ( ) 
+  }
+  
 }
