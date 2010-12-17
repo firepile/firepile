@@ -12,7 +12,7 @@ import firepile.util.Math.{sqrt,log,exp,fabs}
 
 object TestBlackScholes4 {
   def main(args: Array[String]) = {
-    val optionCount = if (args.length > 0) args(0).toInt else 4000000
+    val optionCount = if (args.length > 0) args(0).toInt * 1000000 else 4000000
     // val n = if (args.length > 1) args(1).toInt else 10
 
     implicit val gpu: Device = firepile.gpu
