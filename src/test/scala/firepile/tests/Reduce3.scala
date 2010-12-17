@@ -41,12 +41,16 @@ object Reduce3 {
   }
 */
   
-  val NUM_ITEMS = 16384 // 1048576
+  var NUM_ITEMS = 16384 // 1048576
   val maxThreads = 512 
   val maxBlocks = 64
 
-  def main(args: Array[String]) = run
+  def main(args: Array[String]) = {
 
+  if (args.length > 0) NUM_ITEMS= args(0).toInt
+  run
+  	
+  }
   /*
   def compile[T:FixedSizeMarshal](f: Function2[Array[T],Array[T],Unit]): (Array[T],Array[T]) => Unit = {
     new Function2[Array[T],Array[T],Unit] {
