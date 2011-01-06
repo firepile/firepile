@@ -7,16 +7,20 @@ import firepile.util.BufferBackedArray._
 import firepile.Marshaling._
 import firepile.util.Unsigned._
 
+import com.nativelibs4java.opencl.CLByteBuffer
+import com.nativelibs4java.opencl.CLMem
+
 import scala.collection.mutable.ArrayBuffer
 
 object TestBitonicSort {
-  val LOCAL_SIZE_LIMIT = 512
+  val LOCAL_SIZE_LIMIT = 1024
   val dir = 1.toUInt
   var arrayLength = 0.toUInt
   val numValues = 65536.toUInt
 
   def main(args: Array[String]) = {
     arrayLength = if (args.length > 0) (1 << args(0).toInt).toUInt else (1 << 20).toUInt
+    implicit val gpu: Device = firepile.gpu
 
     println("arrayLength = " + arrayLength)
 
@@ -27,21 +31,158 @@ object TestBitonicSort {
 
     for (i <- 0 until arrayLength.toInt) srcVal(i) = i.toUInt
 
-    // val size = (2 * LOCAL_SIZE_LIMIT).toUInt
-    val size = arrayLength
-    val stride = (size / 2).toUInt
+    val (keys_S, vals_S) = runBitonic(srcKey, srcVal)
 
-    val (keys_S, vals_S) = BitonicSort_S(srcKey, srcVal)
-    println("sort completed")
-   
-    val (keys_M, vals_M) = BitonicSort_M(keys_S, vals_S, arrayLength, size, stride, 1.toUInt)
+    println("Sort completed")
+
 
     for (i <- 0 until arrayLength.toInt)
       println("("+keys_S(i)+", "+vals_S(i)+")")
       
     println("done")
   }
+
+  def runBitonic[A1,A2](a1: A1, a2: A2)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device): (Array[UInt], Array[UInt]) = {
+    val transA1 = implicitly[Marshal[A1]]
+    val transA2 = implicitly[Marshal[A2]]
+    val sizeA1 = transA1.sizes(1).head
+    val sizeA2 = transA2.sizes(1).head
+    val arrayLen = transA1.sizes(a1).head / sizeA1
+    val kernStrSort = new StringBuffer()
+    val kernStrMerge = new StringBuffer()
+
+    val dstKeyOut: Array[UInt] = Array.fill(arrayLen)(new UInt(0))
+    val dstValOut: Array[UInt] = Array.fill(arrayLen)(new UInt(0))
+    val bufKeyOut = dev.context.createByteBuffer(CLMem.Usage.Output, arrayLen * sizeA1)
+    val bufValOut = dev.context.createByteBuffer(CLMem.Usage.Output, arrayLen * sizeA2)
+
+    val (kernNameSort, treeSort) = firepile.Compose.compileToTreeName({
+        (srcKey: Array[UInt], srcVal: Array[UInt], dstKey: Array[UInt], dstVal: Array[UInt]) => bitonicSortSort(srcKey, srcVal, dstKey, dstVal)}, 4)
     
+    val (kernNameMerge, treeMerge) = firepile.Compose.compileToTreeName({
+        (srcKey: Array[UInt], srcVal: Array[UInt], arrayLen: Array[UInt], size: Array[UInt], stride: Array[UInt], sortDir: Array[UInt], dstKey: Array[UInt], dstVal: Array[UInt]) =>
+          bitonicSortMerge(srcKey, srcVal, arrayLen, size, stride, sortDir, dstKey, dstVal)
+        }, 8)
+
+    for (t <- treeSort.reverse)
+      kernStrSort.append(t.toCL)
+
+    for (t <- treeMerge.reverse)
+      kernStrMerge.append(t.toCL)
+
+    val kernBinSort = dev.buildProgramSrc(kernNameSort, kernStrSort.toString)
+
+    val kernBinMerge = dev.buildProgramSrc(kernNameMerge, kernStrMerge.toString)
+    
+    val bsSort: (CLByteBuffer, CLByteBuffer, CLByteBuffer, CLByteBuffer) => Unit = {
+      new Function4[CLByteBuffer, CLByteBuffer, CLByteBuffer, CLByteBuffer, Unit] {
+        def apply(srcKey: CLByteBuffer, srcVal: CLByteBuffer, dstKey: CLByteBuffer, dstVal: CLByteBuffer): Unit = {
+          kernBinSort.setArg(0, srcKey) 
+          kernBinSort.setArg(1, arrayLen)
+          kernBinSort.setArg(2, srcVal)
+          kernBinSort.setArg(3, arrayLen)
+          kernBinSort.setArg(4, dstKey)
+          kernBinSort.setArg(5, arrayLen)
+          kernBinSort.setArg(6, dstVal)
+          kernBinSort.setArg(7, arrayLen)
+
+          kernBinSort.setLocalArg(8, dev.memConfig.localMemSize * sizeA1)
+          kernBinSort.setArg(9, dev.memConfig.localMemSize)
+          kernBinSort.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+
+        }
+      }
+
+    }
+    
+    val bsMerge: (CLByteBuffer, CLByteBuffer, CLByteBuffer, CLByteBuffer, CLByteBuffer, CLByteBuffer, CLByteBuffer, CLByteBuffer) => Unit = {
+      new Function8[CLByteBuffer,CLByteBuffer,CLByteBuffer,CLByteBuffer,CLByteBuffer,CLByteBuffer,CLByteBuffer,CLByteBuffer,Unit] {
+        def apply(srcKey: CLByteBuffer, srcVal: CLByteBuffer, arrayLength: CLByteBuffer, size: CLByteBuffer, stride: CLByteBuffer, sortDir: CLByteBuffer, dstKey: CLByteBuffer, dstVal: CLByteBuffer): Unit = {
+          kernBinSort.setArg(0, srcKey) 
+          kernBinSort.setArg(1, arrayLen)
+          kernBinSort.setArg(2, srcVal)
+          kernBinSort.setArg(3, arrayLen)
+          kernBinSort.setArg(4, arrayLength)
+          kernBinSort.setArg(5, arrayLength.getElementCount / sizeA1)
+          kernBinSort.setArg(6, size)
+          kernBinSort.setArg(7, size.getElementCount / sizeA1)
+          kernBinSort.setArg(8, stride)
+          kernBinSort.setArg(9, stride.getElementCount / sizeA1)
+          kernBinSort.setArg(10, sortDir)
+          kernBinSort.setArg(11, sortDir.getElementCount / sizeA1)
+          kernBinSort.setArg(12, dstKey)
+          kernBinSort.setArg(13, arrayLen)
+          kernBinSort.setArg(14, dstVal)
+          kernBinSort.setArg(15, arrayLen)
+          
+          kernBinSort.setLocalArg(16, dev.memConfig.localMemSize * sizeA1)
+          kernBinSort.setArg(17, dev.memConfig.localMemSize)
+          kernBinSort.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+
+        }
+      }
+        
+    }
+
+    val bufA1 = transA1.toBuffer(a1).head
+    val bufA2 = transA2.toBuffer(a2).head
+         
+    val bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
+    val bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
+
+    val arrayLenU = Array[UInt](arrayLen.toUInt)
+    val sizeU = Array[UInt](0.toUInt)
+    val strideU = Array[UInt](0.toUInt)
+    val sortDirU = Array[UInt](1.toUInt)
+
+    // not sure about being able to reuse a trans here
+    val bufArrayLen = transA1.toBuffer(arrayLenU.asInstanceOf[A1]).head
+    val bufSortDir = transA1.toBuffer(sortDirU.asInstanceOf[A1]).head
+    val bufArrayLenCL = dev.context.createByteBuffer(CLMem.Usage.Input, bufArrayLen, true)
+    val bufSortDirCL = dev.context.createByteBuffer(CLMem.Usage.Input, bufSortDir, true)
+
+    dev.setWorkSizes(arrayLen / 2, LOCAL_SIZE_LIMIT / 2)
+    dev.setLocalMemSize(LOCAL_SIZE_LIMIT)
+
+    bsSort(bufA1CLBuf, bufA2CLBuf, bufKeyOut, bufValOut)
+
+    dev.setWorkSizes(arrayLen / 2, 0)
+    dev.setLocalMemSize(1)     // can't be zero
+    
+    sizeU(0) = (2 * LOCAL_SIZE_LIMIT).toUInt
+    while (sizeU(0) <= arrayLen.toUInt) {
+      val bufSizeU = transA1.toBuffer(sizeU.asInstanceOf[A1]).head
+      val bufSizeUCL = dev.context.createByteBuffer(CLMem.Usage.Input, bufSizeU, true)
+      
+      strideU(0) = (sizeU(0) / 2).toUInt
+      while (strideU(0) > 0.toUInt) {
+        val bufStrideU = transA1.toBuffer(strideU.asInstanceOf[A1]).head
+        val bufStrideUCL = dev.context.createByteBuffer(CLMem.Usage.Input, bufStrideU, true)
+        bsMerge(bufKeyOut, bufValOut, bufArrayLenCL, bufSizeUCL, bufStrideUCL, bufSortDirCL, bufKeyOut, bufValOut)
+        
+        strideU(0) = strideU(0) >> 1
+      }
+      sizeU(0) = sizeU(0) << 1
+    }
+
+    val bufOutKey = allocDirectBuffer(arrayLen * sizeA1)
+    val bufOutVal = allocDirectBuffer(arrayLen * sizeA1)
+    bufKeyOut.read(dev.queue, bufOutKey, true)
+    bufValOut.read(dev.queue, bufOutVal, true)
+
+    dev.queue.finish
+
+    bufOutKey.rewind
+    bufOutVal.rewind
+
+    Array.copy(transA1.fromBuffer(List(bufOutKey)).asInstanceOf[AnyRef], 0, dstKeyOut.asInstanceOf[AnyRef], 0, arrayLen)
+    Array.copy(transA1.fromBuffer(List(bufOutVal)).asInstanceOf[AnyRef], 0, dstValOut.asInstanceOf[AnyRef], 0, arrayLen)
+
+   (dstKeyOut, dstValOut)
+ }
+
+
+/*    
   def BitonicSort_S(srcKey: Array[UInt], srcVal: Array[UInt]): (Array[UInt], Array[UInt]) = {
     implicit val gpu: Device = firepile.gpu
 
@@ -103,9 +244,10 @@ object TestBitonicSort {
 
     (dstKey.toArray, dstVal.toArray)
   } 
+*/
 
-  def bitonicSortSort(srcKey: Array[UInt], srcVal: Array[UInt], dstKeyVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
-    val LOCAL_SIZE_LIMIT = 512.toUInt
+  def bitonicSortSort(srcKey: Array[UInt], srcVal: Array[UInt], dstKey: Array[UInt], dstVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
+    val LOCAL_SIZE_LIMIT = 1024.toUInt
     // Offset to beginning of subbatch and load data
     val groupIdUInt = (id.group.toInt).toUInt
     val localIdUInt = (id.local.toInt).toUInt
@@ -179,15 +321,15 @@ object TestBitonicSort {
     localMem.barrier
   
     
-    dstKeyVal(startPos * 2) = 1.toUInt // ldata(id.local * 2)
-    dstKeyVal(startPos * 2 + 1) = 1.toUInt // ldata(id.local * 2 + 1)
-    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2) = 1.toUInt // ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2)
-    dstKeyVal((startPos + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1) = 1.toUInt // ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1)
+    dstKey(startPos.toInt) = ldata(id.local * 2)
+    dstVal(startPos.toInt) = ldata(id.local * 2 + 1)
+    dstKey(startPos + (LOCAL_SIZE_LIMIT / 2)) = ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2)
+    dstVal(startPos + (LOCAL_SIZE_LIMIT / 2)) = ldata((id.local + (LOCAL_SIZE_LIMIT / 2)) * 2 + 1)
  
   }
 
 
-  def bitonicSortMerge(srcKey: Array[UInt], srcVal: Array[UInt], arrayLenA: Array[UInt], sizeA: Array[UInt], strideA: Array[UInt], sortDirA: Array[UInt], dstKeyVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
+  def bitonicSortMerge(srcKey: Array[UInt], srcVal: Array[UInt], arrayLenA: Array[UInt], sizeA: Array[UInt], strideA: Array[UInt], sortDirA: Array[UInt], dstKey: Array[UInt], dstVal: Array[UInt]) = (id: Id1, ldata: Array[UInt]) => {
     val arrayLength: UInt = arrayLenA(0)
     val size = sizeA(0)
     val stride = strideA(0)
@@ -219,10 +361,10 @@ object TestBitonicSort {
       valB = t
     }
 
-    dstKeyVal(pos * 2) = keyA
-    dstKeyVal(pos * 2 + 1) = valA
-    dstKeyVal((pos + stride) * 2) = keyB
-    dstKeyVal((pos + stride) * 2 + 1) = valB
+    dstKey(pos.toInt) = keyA
+    dstVal(pos.toInt) = valA
+    dstKey(pos + stride.toInt) = keyB
+    dstVal(pos + stride.toInt) = valB
   }
 
 }
