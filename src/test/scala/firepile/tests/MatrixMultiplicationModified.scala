@@ -20,23 +20,28 @@ object MatrixMultiplicationModified {
 
 
 val width  = 1100
-val height = 100
+var height = 100
 val localWorkSize = 256
 val globalWorkSize = localWorkSize * height
 
-def main(args: Array[String]) = run
-  
+def main(args: Array[String]) = {
+ 
+if (args.length > 0) 
+height= if (args.length > 0) (args(0).toInt) else 100
+
+ run
+}  
   def run = {
       
       
       val random = new Random(0)
       val idata1 = Array.fill( width * height) (random.nextFloat)
       val idata2 = Array.fill( width ) (random.nextFloat)
-      val odata= transpose(idata1,idata2)(firepile.gpu)
+      val odata= transpose(idata1,idata2,width,height)(firepile.gpu)
       
-      println("output")
-      for ( i <- 0 until odata.length)
-       println(" " +odata(i)) 
+      //println("output")
+      //for ( i <- 0 until odata.length)
+       //println(" " +odata(i)) 
       
     
   }
@@ -49,13 +54,13 @@ def main(args: Array[String]) = run
   //    V = (float*)malloc(mem_size_V);
   //  unsigned int mem_size_W = height * sizeof(float);
   
-  def transpose(idata1 : Array[Float], idata2 : Array[Float])(implicit dev: Device): Array[Float] = {
+  def transpose(idata1 : Array[Float], idata2 : Array[Float], width: Int, height: Int)(implicit dev: Device): Array[Float] = {
   
       val space=dev.defaultPaddedPartition(idata1.length)
       //dev.setWorkSizes(localWorkSize, globalWorkSize)
       
-      val width  = 1100
-      val height = 100
+      //val width  = 1100
+      //val height = 100
       val n = idata1.length
       val odata = new Array[Float](height)
       
