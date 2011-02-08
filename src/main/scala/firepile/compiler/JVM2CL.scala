@@ -142,8 +142,8 @@ object JVM2CL {
         + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
-        + ":/Users/dwhite/svn/firepile/target/scala_2.8.0-local/classes"
-        + ":/Users/dwhite/svn/firepile/target/scala_2.8.0-local/test-classes"
+        + ":/Users/dwhite/git2/firepile/target/scala_2.8.0-local/classes"
+        + ":/Users/dwhite/git2/firepile/target/scala_2.8.0-local/test-classes"
         + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
         + ":.:tests:examples:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
 
@@ -1395,6 +1395,8 @@ object JVM2CL {
               // Handle accessing captured variables.  Assumes captured variable 'x' is 'this.x$1'
               // TODO: eliminate (if possible) the assumptions here about the naming conventions of variables.
               if (fieldRef.`type`.toString.startsWith("scala.Function")) {
+                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
+                anonFuns.keys.foreach(k => print(k + " "))
                 anonFuns(fieldRef.name.takeWhile(_ != '$')) match {
                   // matched 'this.x$1.apply(args)' where 'x$1' is a captured variable 'x'
                   // and 'x' is 'new anonfun$1(closureArgs)'
@@ -1467,13 +1469,12 @@ object JVM2CL {
           case GStaticFieldRef(fieldRef) => { /* classtab.addClass(new SootClass(fieldRef.`type`.toString));*/ Id("unimplemented:staticfield") }
 
           case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
-                     
             Select(Deref(base), mangleName(fieldRef.name))
           }
           
           case GInstanceFieldRef(base, fieldRef) => { println(" base ::"+base+":::"+fieldRef); Id(fieldRef.name) }
         
-          case GArrayRef(base, index) => ArrayAccess(Select(base, "data"), index)
+          case GArrayRef(base, index) => ArrayAccess(Select(translateExp(base, symtab, anonFuns), "data"), index)
 
           case v => Id("translateExp:unsupported:" + v.getClass.getName)
 
@@ -1535,6 +1536,7 @@ object JVM2CL {
             }
            Eval(Assign(left, right))
           }
+          case GAssignStmt(left, right) => Eval(Assign(left, right))
 
           case GGoto(target) => GoTo(translateLabel(target, symtab))
           case GNop() => Nop
@@ -1658,7 +1660,7 @@ object JVM2CL {
   
           case GStaticInvoke(method, args) => { println("GstaticInvoke::"+method+"::"+args); args.map(a => translateExp(a, symtab, anonFuns)).head }
           
-          case _ => { println("huh " + u); Id("unsupported") }
+          case _ => { println("huh " + u); Id("unsupported: " + u) }
         }
 
         translateUnits(us, result ::: List[Tree](tree), symtab, anonFuns)
