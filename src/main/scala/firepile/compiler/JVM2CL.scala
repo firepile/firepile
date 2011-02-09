@@ -1377,7 +1377,8 @@ object JVM2CL {
                   worklist += CompileMethodTask(applyMethods.head)
                   ClosureCall(Id(mangleName(closureTyp.toString) + method.name), closureArgs.map(ca => translateExp(ca, symtab, anonFuns)) ::: args.map(a => translateExp(a, symtab, anonFuns)))
 
-                case _ => Call(Select(b, method.name), args.map(a => translateExp(a, symtab, anonFuns)))
+               // case _ => Call(Select(b, method.name), args.map(a => translateExp(a, symtab, anonFuns)))
+                case _ => Call(Id(method.name), args.map(a => translateExp(a, symtab, anonFuns)))
               }
 
               /*
@@ -1418,12 +1419,13 @@ object JVM2CL {
                     ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
                   }
                   //case _ => Select(base, mangleName(fieldRef.name)) // TODO: punt
-                  case _ => Id(mangleName(fieldRef.name))
+                  case _ => println(" mangled name::"+mangleName(fieldRef.name)); Id(mangleName(fieldRef.name))
                 }
               //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
-              } else  Id(mangleName(fieldRef.name))
+              } else  { println(" mangled name::"+mangleName(fieldRef.name)); Id(mangleName(fieldRef.name))}
 
-            }
+             }
+                        
             case GStaticInvoke(method, args) => Id("STATICINVOKE inside INTERFACE INVOKE")
 
             case GVirtualInvoke(GLocal(baseName, _), SMethodRef(classname, "config", _, _, _), _) => classname match {
@@ -1465,17 +1467,32 @@ object JVM2CL {
             }
           }
           case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
+         //case GThisRef(typ) => { Id(typ) }
           case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
           case GStaticFieldRef(fieldRef) => { /* classtab.addClass(new SootClass(fieldRef.`type`.toString));*/ Id("unimplemented:staticfield") }
 
           case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
-            Select(Deref(base), mangleName(fieldRef.name))
+            //Select(Deref(base), mangleName(fieldRef.name))
+            println(" mangled Name::"+mangleName(fieldRef.name)+"  original::"+fieldRef.name)
+            Id(mangleName(fieldRef.name))
           }
           
-          case GInstanceFieldRef(base, fieldRef) => { println(" base ::"+base+":::"+fieldRef); Id(fieldRef.name) }
+          case GInstanceFieldRef(base, fieldRef) => { println(" base ::"+base+":::"+fieldRef); Id(mangleName(fieldRef.name)) }
         
-          case GArrayRef(base, index) => ArrayAccess(Select(translateExp(base, symtab, anonFuns), "data"), index)
+         // case GArrayRef(base, index) => ArrayAccess((translateExp(base, symtab, anonFuns), "data"), index)
 
+          case GArrayRef(base, index) => {
+          println(" Array Access::"+ base+"::"+index); 
+         
+          base match {
+          
+          case GInstanceFieldRef(instBase, fieldRef) => { println("Different Inside Array Access::"+ instBase+"::"+fieldRef.name); Id(mangleName(fieldRef.name) +"[" + (translateExp(index, symtab, anonFuns)).toCL + "]") }
+          
+          case _ =>  ArrayAccess(translateExp(base, symtab, anonFuns), index)
+            }
+          
+          }
+          
           case v => Id("translateExp:unsupported:" + v.getClass.getName)
 
         }
