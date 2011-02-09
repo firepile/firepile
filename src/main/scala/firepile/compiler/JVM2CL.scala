@@ -473,10 +473,6 @@ object JVM2CL {
     println("Grimp method body:")
     println(units.mkString("\n"))
 
-    for (i <- 0 until ids.length)
-      if (ids(i))
-        arraystructs.structs += ValueType("firepile_Spaces_Id" + (i + 1)) -> List(StructDef("firepile_Spaces_Id" + (i + 1), List(VarDef(IntType, Id("localId")), VarDef(IntType, Id("groupId")), VarDef(IntType, Id("globalId")), VarDef(IntType, Id("localSize")), VarDef(IntType, Id("globalSize")))))
-
     val body = translateUnits(units, Nil, symtab, anonFuns)
 
     if (Kernel.level == 2)
@@ -554,6 +550,7 @@ object JVM2CL {
   class SymbolTable(val methodName: String) {
     val labels = new HashMap[SootUnit, String]()
     val params = new HashMap[Int, (Id, Tree)]()
+    val mparams = new HashMap[Int, (String, Tree)]()
     val locals = new HashMap[Id, Tree]()
     val arrays = new HashMap[Id, (Tree /*type*/ , Tree /*size*/ )]()
     var thisParam: (Id, Tree) = null
@@ -571,6 +568,10 @@ object JVM2CL {
 
     def addParamVar(typ: SootType, index: Int, id: Id) = {
       params += index -> (id, translateType(typ))
+    }
+    
+     def addParamVar(typ: String, index: Int, name: String) = {
+          params += index -> (Id(name), ValueType(typ))
     }
 
     def addLocalVar(typ: SootType, id: Id) = {
@@ -758,11 +759,31 @@ object JVM2CL {
         case _ => PtrType(StructType(mangleName(t.toString)))
       }
     }
-    case t: SootArrayType => { arraystructs.addStruct(translateType(t.getArrayElementType)) }
+    //case t: SootArrayType => { arraystructs.addStruct(translateType(t.getArrayElementType)) }
+   
+    case t: SootArrayType => PtrType(translateType(t.getArrayElementType))
     case t: SootNullType => PtrType(ValueType("void"))
     // TODO: array types
     case _ => ValueType(t.toString)
   }
+  
+    private def translateType(memType: String, typ: String, name: String): ( Tree, String )= typ match {
+     
+        case "java.lang.String" => (MemType(memType, ValueType("char")), "*"+mangleName(name))
+        case "firepile.util.Unsigned.UInt" => (ValueType("unsigned int"), mangleName(name))
+        case "int" => (ValueType("int"), mangleName(name))
+        case "float" => (ValueType("float"), mangleName(name))
+        case "long" => (ValueType("long"), mangleName(name))
+        case "double" => (MemType(memType, ValueType("double")), mangleName(name))
+        case "float[]" => (MemType(memType, ValueType("float")), "*"+mangleName(name))
+        case "int[]" =>  (MemType(memType, ValueType("int")), "*"+mangleName(name))
+        case "long[]" => (MemType(memType, ValueType("long")), "*"+mangleName(name))
+        case "double[]" => (MemType(memType, ValueType("double")), "*"+mangleName(name))
+        
+        case x => (MemType(memType, ValueType(typ)), mangleName(name))
+      }
+     
+
 
   private def translateType(t: ScalaVarDef): Tree = t.fieldScalaType match {
     case NamedTyp(s: String) => s match {
@@ -778,6 +799,12 @@ object JVM2CL {
       case "java.lang.String" => PtrType(ValueType("char"))
       case "firepile.util.Unsigned.UInt" => ValueType("unsigned int")
       case "firepile.Spaces$Id1" => StructType(mangleName(t.toString))
+      case "int" => ValueType("int")
+      case "float[]" => PtrType(ValueType("float"))
+      case "int[]" => PtrType(ValueType("int"))
+      case "long[]" => PtrType(ValueType("long"))
+      case "double[]" => PtrType(ValueType("double"))
+      
       case x => PtrType(ValueType(x))
     }
     case _ => PtrType(ValueType(t.fieldTypeAsString))
@@ -1066,7 +1093,7 @@ object JVM2CL {
           case GUIntConstant(value) => UIntLit(value)
           case GArrayLength(op) => Select(op, "length")
 
-          //case GCast(op, castTyp) => Cast(translateType(castTyp), translateExp(op, symtab, anonFuns))
+          case GCast(op, castTyp) => Cast(translateType(castTyp), translateExp(op, symtab, anonFuns))
 
           // IGNORE
           case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
@@ -1428,26 +1455,7 @@ object JVM2CL {
                         
             case GStaticInvoke(method, args) => Id("STATICINVOKE inside INTERFACE INVOKE")
 
-            case GVirtualInvoke(GLocal(baseName, _), SMethodRef(classname, "config", _, _, _), _) => classname match {
-              case SClassName("firepile.Spaces$Id1") => method match {
-                case SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _) => ids(0) = true; return Select(Id(baseName), Id("localSize"))
-                case SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _) => ids(0) = true; return Select(Id(baseName), Id("globalSize"))
-                case _ => Id("unsupported:" + v.getClass.getName)
-              }
-              case SClassName("firepile.Spaces$Id2") => method match {
-                case SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _) => ids(1) = true; return Select(Id(baseName), Id("localSize"))
-                case SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _) => ids(1) = true; return Select(Id(baseName), Id("globalSize"))
-                case _ => Id("unsupported:" + v.getClass.getName)
-              }
-              case SClassName("firepile.Spaces$Id3") => method match {
-                case SMethodRef(SClassName("firepile.Spaces$Config"), "localSize", _, _, _) => ids(2) = true; return Select(Id(baseName), Id("localSize"))
-                case SMethodRef(SClassName("firepile.Spaces$Config"), "globalSize", _, _, _) => ids(2) = true; return Select(Id(baseName), Id("globalSize"))
-                case _ => Id("unsupported:" + v.getClass.getName)
-              }
-              case _ => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v)
-            }
-
-            //Changes here
+             //Changes here
             case _ => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v)
           }
 
@@ -1467,8 +1475,9 @@ object JVM2CL {
             }
           }
           case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
-         //case GThisRef(typ) => { Id(typ) }
-          case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
+         //case GThisRef(typ) => { Id("_this") }
+         //case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
+          case GParameterRef(typ, index) => { Id("_this") }
           case GStaticFieldRef(fieldRef) => { /* classtab.addClass(new SootClass(fieldRef.`type`.toString));*/ Id("unimplemented:staticfield") }
 
           case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
@@ -1482,13 +1491,14 @@ object JVM2CL {
          // case GArrayRef(base, index) => ArrayAccess((translateExp(base, symtab, anonFuns), "data"), index)
 
           case GArrayRef(base, index) => {
-          println(" Array Access::"+ base+"::"+index); 
+          //println(" Array Access::"+ base+"::"+index); 
          
           base match {
           
           case GInstanceFieldRef(instBase, fieldRef) => { println("Different Inside Array Access::"+ instBase+"::"+fieldRef.name); Id(mangleName(fieldRef.name) +"[" + (translateExp(index, symtab, anonFuns)).toCL + "]") }
           
-          case _ =>  ArrayAccess(translateExp(base, symtab, anonFuns), index)
+          case _ => Id(mangleName((translateExp(base, symtab, anonFuns)).toCL) +"[" + (translateExp(index, symtab, anonFuns)).toCL + "]")
+          //case _ =>  ArrayAccess(translateExp(base, symtab, anonFuns), index)
             }
           
           }
@@ -1506,12 +1516,6 @@ object JVM2CL {
       // turn these into field accesses on the struct Id1 passed into the kernel
       // don't assume the local is named "id"
       // handle Id2, Id3, ...r1.
-
-     // case GVirtualInvoke(GLocal(baseName, SType("firepile.Item")), SMethodRef(_, "id", _, _, _), _) => { println(" Got local Id"); return Some(Select(Id(baseName), Id("localId"))) }
-
-     // case GVirtualInvoke(GLocal(baseName, SType("firepile.Group")), SMethodRef(_, "id", _, _, _), _) => { println(" Got Group Id"); return Some(Select(Id(baseName), Id("groupId"))) }
-
-     // case GVirtualInvoke(GLocal(baseName, SType("firepile.Group")), SMethodRef(_, "barrier", _, _, _), _) => { println(" Got Barrier"); return Some(Select(Id(baseName), Id("groupId"))) }
 
       case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => { println(" Got barrier here::"); return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))) }
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), _) => { println(" Got Item here::"); return Some(Call(Id("get_local_id"), IntLit(0))) }
@@ -1542,7 +1546,7 @@ object JVM2CL {
                   args.head match {
                     case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
                       println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
-                      Kernel.localArgs += (left.getName -> (typ.toString, Kernel.blocks))
+                      Kernel.localArgs.add((left.getName, typ.toString, Kernel.blocks))
                      }
                     case _ => { } 
                   }
@@ -1578,11 +1582,11 @@ object JVM2CL {
 
                   i match {
 
-                    case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs += (fieldRef.name -> fieldRef.`type`.toString) }
+                    case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`.toString)) }
                     case GStaticInvoke(SMethodRef(SClassName(_), name, _, _, _), args) => {
                       for (i <- args) {
                         i match {
-                          case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs += (fieldRef.name -> fieldRef.`type`.toString) }
+                          case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name,fieldRef.`type`.toString)) }
                           case _ => {}
                         }
                       }
@@ -1764,7 +1768,22 @@ object JVM2CL {
         case None => throw new RuntimeException("crap")
       }
     }
+    
+  for( i <- Kernel.globalArgs){
 
+      val (t: Tree, s: String) = translateType("global",i._2, i._1)
+      paramTree+= Formal( t, s )
+
+   }
+     
+    for( i <-  Kernel.localArgs){
+    
+     val (t: Tree, s: String) = translateType("local",i._2, i._1)
+      paramTree+= Formal( t, s )
+      
+      }
+  
+    
     for ((id: Id, typ: Tree) <- symtab.locals)
       varTree += VarDef(typ, id)
 

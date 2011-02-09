@@ -2,6 +2,7 @@ package firepile
 
 import firepile.util.BufferBackedArray._
 import firepile.Marshaling._
+ import firepile.Device
 import firepile.Spaces._
 import firepile.tree.Trees._
 import firepile.Implicits._
@@ -216,28 +217,29 @@ object Compiler {
     None
   }
 
-  def compileNew[A1, A2, A3](a: A1, b: A2, c: A3 , kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device): Kernel3[A1, A2, A3] =  {
+  def compileNew[A1, A2, A3](a: A1, b: A2, c: A3 , kernName: String, tree: String): Unit =  {
+  /*
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
     val transA3 = implicitly[Marshal[A3]]
     val sizeA1 = transA1.sizes(1).head
     val sizeA2 = transA2.sizes(1).head
     val sizeA3 = transA3.sizes(1).head
-    val kernStr = new StringBuffer()
-
+    //val kernStr = new StringBuffer()
+*/
    // val (kernName: String, tree: List[Tree]) = time({ firepile.Compose.compileToTreeName(f, 3) }, "Compile")
 
    // for (t: Tree <- tree.reverse)
    //   kernStr.append(t.toCL)
 
-    val kernBin = dev.buildProgramSrc(kernName, tree)
+    val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
     /*
     class Arg[A](val value: A, val marshal: Marshal[A]) {
         def toBuffers = marshal.toBuffer(value)
     }
     def applyKernel(args: Array[Arg[_]], output: Arg[_]): Unit = ...
 */
-
+/*
     new Kernel3[A1, A2, A3] {
       def apply(a1: A1, a2: A2, a3: A3): Unit = {
         var bufA1: ByteBuffer = null
@@ -306,6 +308,7 @@ object Compiler {
         }, "From GPU")
       }
     }
+    */
   }
 
 

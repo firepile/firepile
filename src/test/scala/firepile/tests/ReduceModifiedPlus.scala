@@ -63,10 +63,12 @@ def reduceModified(idata: Array[Float])
            item=> { 
            
            val j = g.id * (g.items.size * 2) + item.id  
-           sdata(item.id) = if (j < n) idata(j) else 0f
+           
+           if (j < n) sdata(item.id)= idata(j) 
+           else sdata(item.id) =0f
  
            if (j + g.items.size < n)
-             sdata(item.id) = sdata(item.id) + idata(j + g.items.size)
+             sdata(item.id) += idata(j + g.items.size)
  
            g.barrier
  
@@ -74,7 +76,7 @@ def reduceModified(idata: Array[Float])
         
         while ( k > 0 ) {
        	     if (item.id < k)
-	        sdata(item.id) = sdata(item.id) + sdata(item.id + k)
+	        sdata(item.id) += sdata(item.id + k)
              g.barrier
              k>>=1
           }

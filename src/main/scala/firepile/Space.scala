@@ -61,14 +61,16 @@ blockReducer(A, B, C)
     kernArgs match {
     
     case Some((kernName: String, treeList: List[Tree])) => {
-						    val kernStr = new StringBuffer()
+						       val kernStr = new StringBuffer()
 						       println(" name ::" + kernName + "::\n")
-						      for (t: Tree <- treeList.reverse)
+						       for (t: Tree <- treeList.reverse)
 							kernStr.append(t.toCL)
+							
+						        firepile.Compiler.compileNew(fvals._1,fvals._2,fvals._3,kernName,kernStr.toString)
 					               }
                                                   
     case None => { println(" Something went wrong while creating Kernel!!!") }
-	//compileNew(f._1,f._2,f._3,kernName,kernStr.toString)
+	//
 
      }
  }
