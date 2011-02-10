@@ -224,93 +224,56 @@ object Compiler {
     val sizeA1 = transA1.sizes(1).head
     val sizeA2 = transA2.sizes(1).head
     val sizeA3 = transA3.sizes(1).head
-    //val kernStr = new StringBuffer()
-
-   // val (kernName: String, tree: List[Tree]) = time({ firepile.Compose.compileToTreeName(f, 3) }, "Compile")
-
-   // for (t: Tree <- tree.reverse)
-   //   kernStr.append(t.toCL)
 
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
-    /*
-    class Arg[A](val value: A, val marshal: Marshal[A]) {
-        def toBuffers = marshal.toBuffer(value)
-    }
-    def applyKernel(args: Array[Arg[_]], output: Arg[_]): Unit = ...
-*/
-
-   val result = new Kernel3[A1, A2, A3] {
-      def apply(a1: A1, a2: A2, a3: A3): Unit = {
-        var bufA1: ByteBuffer = null
+ 
+        var bufA1: ByteBuffer = transA1.toBuffer(a).head
         var bufA2: ByteBuffer = null
-        // val bufA3: ByteBuffer = transA3.toBuffer(a3).head
+        var bufA3: ByteBuffer = null
         var bufA1CLBuf: CLByteBuffer = null
         var bufA2CLBuf: CLByteBuffer = null
         var bufA3CLBuf: CLByteBuffer = null
 
         time({
-          bufA1 = transA1.toBuffer(a1).head
-          bufA2 = transA2.toBuffer(a2).head
-          // val bufA3: ByteBuffer = transA3.toBuffer(a3).head
-
-          bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
+          bufA2 = transA2.toBuffer(b).head
+          bufA3 = transA3.toBuffer(c).head
+  
           bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
+          bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
         }, "Copy to GPU")
 
-        val numItemsA1 = transA1.sizes(a1).head / sizeA1
-        val numItemsA2 = transA2.sizes(a2).head / sizeA2
-        val numItemsA3 = transA3.sizes(a3).head / sizeA3
-        val bufA3capacity = transA3.sizes(a3).head
+        val numItemsA1 = transA1.sizes(a).head / sizeA1
+        val numItemsA2 = transA2.sizes(b).head / sizeA2
+        val numItemsA3 = transA3.sizes(c).head / sizeA3
+        val bufA1capacity = transA1.sizes(a).head
 
-        bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA3capacity)
+        bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA1capacity)
 
-        println("Output buffer capacity: " + bufA3capacity)
-
-        //	val threads = (if (numItemsA1 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt
+        println("Output buffer capacity: " + bufA1capacity)
 
         // START TIMING CODE
 
         time({
           kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
-          kernBin.setArg(1, numItemsA1)
-          kernBin.setArg(2, bufA2CLBuf)
-          kernBin.setArg(3, numItemsA2)
-          kernBin.setArg(4, bufA3CLBuf)
-          kernBin.setArg(5, numItemsA3)
+          kernBin.setArg(1, bufA2CLBuf)
+          kernBin.setArg(2, numItemsA2)
 
-        /*
-          if (dev.memConfig == null) {
-            kernBin.setLocalArg(6, threads * sizeA1)
-            kernBin.setArg(7, threads)
-            println("Executing with global work size = " + (numItemsA3 * threads) + " and local work size = " + threads)
-            kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA3 * threads), Array[Int](threads))
-          } else {
-            // We don't really know if the local item types are the same as the global item types
-         */
-           // println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
-            kernBin.setLocalArg(6, Kernel.localArgs.get(0)._3 * sizeA1)
-            kernBin.setArg(7, Kernel.localArgs.get(0)._3)
-            kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
-          //}
-
+          kernBin.setLocalArg(3, Kernel.localArgs.get(0)._3 * sizeA1)
+          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
           dev.queue.finish
         }, "GPU", numIterations)
 
-        val bufOut = allocDirectBuffer(bufA3capacity)
+        val bufOut = allocDirectBuffer(bufA1capacity)
 
         time({
-          bufA3CLBuf.read(dev.queue, bufOut, true)
+          bufA1CLBuf.read(dev.queue, bufOut, true)
 
           bufOut.rewind
 
           // [NN] maybe need to copy?  but, probably not
-          Array.copy(transA3.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a3.asInstanceOf[AnyRef], 0, numItemsA3)
+          Array.copy(transA1.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a.asInstanceOf[AnyRef], 0, numItemsA1)
         }, "From GPU")
-      }
-    }
-    result(a,b,c)
-    
-    c
+     a
   }
 
 
