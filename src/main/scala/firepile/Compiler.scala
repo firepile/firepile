@@ -2,7 +2,6 @@ package firepile
 
 import firepile.util.BufferBackedArray._
 import firepile.Marshaling._
- import firepile.Device
 import firepile.Spaces._
 import firepile.tree.Trees._
 import firepile.Implicits._
@@ -217,8 +216,8 @@ object Compiler {
     None
   }
 
-  def compileNew[A1, A2, A3](a: A1, b: A2, c: A3 , kernName: String, tree: String): Unit =  {
-  /*
+  def compileNew[A1, A2, A3](a: A1, b: A2, c: A3 , kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device) =  {
+  
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
     val transA3 = implicitly[Marshal[A3]]
@@ -226,7 +225,7 @@ object Compiler {
     val sizeA2 = transA2.sizes(1).head
     val sizeA3 = transA3.sizes(1).head
     //val kernStr = new StringBuffer()
-*/
+
    // val (kernName: String, tree: List[Tree]) = time({ firepile.Compose.compileToTreeName(f, 3) }, "Compile")
 
    // for (t: Tree <- tree.reverse)
@@ -239,8 +238,8 @@ object Compiler {
     }
     def applyKernel(args: Array[Arg[_]], output: Arg[_]): Unit = ...
 */
-/*
-    new Kernel3[A1, A2, A3] {
+
+   val result = new Kernel3[A1, A2, A3] {
       def apply(a1: A1, a2: A2, a3: A3): Unit = {
         var bufA1: ByteBuffer = null
         var bufA2: ByteBuffer = null
@@ -267,7 +266,7 @@ object Compiler {
 
         println("Output buffer capacity: " + bufA3capacity)
 
-        val threads = (if (numItemsA1 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt
+        //	val threads = (if (numItemsA1 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA1) / scala.math.log(2))) else dev.maxThreads).toInt
 
         // START TIMING CODE
 
@@ -279,6 +278,7 @@ object Compiler {
           kernBin.setArg(4, bufA3CLBuf)
           kernBin.setArg(5, numItemsA3)
 
+        /*
           if (dev.memConfig == null) {
             kernBin.setLocalArg(6, threads * sizeA1)
             kernBin.setArg(7, threads)
@@ -286,12 +286,12 @@ object Compiler {
             kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA3 * threads), Array[Int](threads))
           } else {
             // We don't really know if the local item types are the same as the global item types
-
-            println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
-            kernBin.setLocalArg(6, dev.memConfig.localMemSize * sizeA1)
-            kernBin.setArg(7, dev.memConfig.localMemSize)
+         */
+           // println("Executing with global work size = " + dev.memConfig.globalSize + " and local work size = " + dev.memConfig.localSize)
+            kernBin.setLocalArg(6, Kernel.localArgs.get(0)._3 * sizeA1)
+            kernBin.setArg(7, Kernel.localArgs.get(0)._3)
             kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
-          }
+          //}
 
           dev.queue.finish
         }, "GPU", numIterations)
@@ -308,7 +308,9 @@ object Compiler {
         }, "From GPU")
       }
     }
-    */
+    result(a,b,c)
+    
+    c
   }
 
 
