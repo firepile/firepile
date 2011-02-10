@@ -35,7 +35,6 @@ object ReduceModifiedPlus {
   def run = {
     val random = new Random(0)
     val randInput = Array.fill(NUM_ITEMS)(random.nextFloat)
-  
     val cpuSum = randInput.sum
     val gpuSum = reduceModified(randInput)(firepile.gpu)
 
@@ -47,10 +46,11 @@ object ReduceModifiedPlus {
 def reduceModified(idata: Array[Float])
  (implicit dev: Device): Float = {
  
+  
   val space=dev.defaultPaddedPartition(idata.length)
   dev.setWorkSizes(NUM_ITEMS, space.blocks)
   
-  val odata = Array.ofDim[Float](space.blocks)
+  val odata = new Array[Float](space.blocks)
   val n = idata.length
   
  space.spawn { 

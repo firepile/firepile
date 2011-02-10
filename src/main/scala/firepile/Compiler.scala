@@ -216,7 +216,7 @@ object Compiler {
     None
   }
 
-  def compileNew[A1, A2, A3](a: A1, b: A2, c: A3 , kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device) =  {
+ def compileNew[A1, A2, A3](a: A1, b: A2, c: A3 , kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device) =  {
   
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
@@ -251,6 +251,8 @@ object Compiler {
 
         println("Output buffer capacity: " + bufA1capacity)
 
+       val threads = (if (numItemsA2 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA2) / scala.math.log(2))) else dev.maxThreads).toInt
+       
         // START TIMING CODE
 
         time({
@@ -258,13 +260,9 @@ object Compiler {
           kernBin.setArg(1, bufA2CLBuf)
           kernBin.setArg(2, numItemsA2)
 
-          kernBin.setLocalArg(3, Kernel.localArgs.get(0)._3 * sizeA1)
+          kernBin.setLocalArg(3, threads * sizeA1)
           
-          println(" ::"+dev.memConfig.globalSize +"::")
-          println("::"+dev.memConfig.localSize+":::")
-          println("::"+ numItemsA2)
-          
-          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+          kernBin.enqueueNDRange(dev.queue, Array[Int](threads * numItemsA1 ), Array[Int](threads))
           dev.queue.finish
         }, "GPU", numIterations)
 
