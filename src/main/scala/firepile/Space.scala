@@ -19,6 +19,8 @@ class Group {
   var local: Int = 0
   def local(i: Int): Int = { local = i; 0 }
   def barrier = ()
+  var size: Int = 0
+  def size(i: Int): Int = { size =i ; 0}
 
 }
 

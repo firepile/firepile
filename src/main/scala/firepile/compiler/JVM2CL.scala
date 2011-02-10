@@ -1515,6 +1515,7 @@ object JVM2CL {
       case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => { println(" Got barrier here::"); return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))) }
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => { println(" Got Item here::"); if (args.size > 0) return Some(Call(Id("get_local_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Call(Id("get_local_id"), IntLit(0))) }
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { println(" Got Group here::"); if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Call(Id("get_group_id"), IntLit(0))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { println(" Got Global Size here::"); if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Call(Id("get_global_size"), IntLit(0))) }
 
       case GVirtualInvoke(a, method, args) => { println("Generic Virtual Invoke:::" + a + "::" + method + ":::" + args) }
       case _ => ;
