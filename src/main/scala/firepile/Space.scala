@@ -67,6 +67,32 @@ val sizeA2 = transA2.sizes(1).head
      }
  }
 
+   def spawn[A, B, C, D, E](block: => (A, B, C, D, E))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], m5: Marshal[E], dev: Device) = {
+    //println("in Spawn")
+    val fvals = block
+    val f = () => block
+
+    //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
+
+    val kernArgs = time(firepile.Compiler.findAllMethods(f, 5), "Compile")
+    
+    kernArgs match {
+    
+    case Some((kernName: String, treeList: List[Tree])) => {
+						       val kernStr = new StringBuffer()
+						       println(" name ::" + kernName + "::\n")
+						       for (t: Tree <- treeList.reverse)
+							kernStr.append(t.toCL)
+							
+						        firepile.Compiler.compileNew(fvals._1,fvals._2,fvals._3,fvals._4,fvals._5,kernName,kernStr.toString)(m1,m2,m3,m4,m5,dev) 
+						      }
+                                                  
+    case None => { println(" Something went wrong while creating Kernel!!!") }
+	//
+
+     }
+ }
+
   val groups: List[Group] = List(new Group)
 
 }
