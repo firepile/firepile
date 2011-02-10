@@ -169,7 +169,7 @@ object Compiler {
   }
 
   def findGlobalMethod(cname1: String, arity: Int): Option[java.lang.reflect.Method] = {
-
+    println("findGlobalMethod start")
     val k1 = Class.forName(cname1)
     for (m <- k1.getDeclaredMethods) {
       //println(" m.getName::" + m.getName + "  :: arity::" + m.getParameterTypes.length)
@@ -178,11 +178,12 @@ object Compiler {
         return Some(m)
       }
     }
+    println("findGlobalMethod end")
     None
   }
 
   def findLocalMethod(c1: String): Option[(java.lang.reflect.Method, String)] = {
-
+    println("findLocalMethod start")
     val cname2 = c1 + "$$anonfun$apply$1"
     val k2 = Class.forName(cname2)
 
@@ -196,11 +197,12 @@ object Compiler {
       //treeList.add(compileRoot(k2.getName, Compiler.signature(m)).reverse)
       //methods.add(methodName(m))
     }
+    println("findLocalMethod end")
     None
   }
 
   def findKernelMethod(c2: String): Option[(java.lang.reflect.Method, String)] = {
-
+    println("findKernelMethod start")
     val cname3 = c2 + "$$anonfun$apply$2"
     val k3 = Class.forName(cname3)
 
@@ -213,6 +215,7 @@ object Compiler {
         if (pars(0).getName.startsWith("firepile.Item"))
           return Some((m, cname3))
     }
+    println("findKernelMethod end")
     None
   }
 

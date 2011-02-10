@@ -68,13 +68,16 @@ val sizeA2 = transA2.sizes(1).head
  }
 
    def spawn[A, B, C, D, E](block: => (A, B, C, D, E))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], m5: Marshal[E], dev: Device) = {
-    //println("in Spawn")
+    println("in Spawn")
     val fvals = block
+    println("fvals = block")
     val f = () => block
+    println("f = () => block")
 
     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
 
     val kernArgs = time(firepile.Compiler.findAllMethods(f, 5), "Compile")
+    println("findAllmethods done")
     
     kernArgs match {
     
@@ -92,6 +95,18 @@ val sizeA2 = transA2.sizes(1).head
 
      }
  }
+
+ /*
+  class GroupIterator extends Iterator[Group] {
+    def hasNext = false
+    def next = null
+  }
+
+  class GroupIterable extends Iterable[Group] {
+    def iterator = new GroupIterator
+    override def foreach[Unit](f: (Group) => Unit) = { } 
+  }
+  */
 
   val groups: List[Group] = List(new Group)
 
