@@ -48,6 +48,7 @@ def reduceModified(idata: Array[Float])
  (implicit dev: Device): Float = {
  
   val space=dev.defaultPaddedPartition(idata.length)
+  dev.setWorkSizes(NUM_ITEMS, space.blocks)
   
   val odata = Array.ofDim[Float](space.blocks)
   val n = idata.length
@@ -88,7 +89,7 @@ def reduceModified(idata: Array[Float])
        }
       }
      // odata escapes -- so need to pass in to the generated kernel 
-      (odata,idata,n) 
+      (odata,idata,n)
     }
    
    odata.reduceLeft(_+_)

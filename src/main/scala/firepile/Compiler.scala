@@ -259,6 +259,11 @@ object Compiler {
           kernBin.setArg(2, numItemsA2)
 
           kernBin.setLocalArg(3, Kernel.localArgs.get(0)._3 * sizeA1)
+          
+          println(" ::"+dev.memConfig.globalSize +"::")
+          println("::"+dev.memConfig.localSize+":::")
+          println("::"+ numItemsA2)
+          
           kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
           dev.queue.finish
         }, "GPU", numIterations)
