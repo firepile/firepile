@@ -20,7 +20,7 @@ object MatrixMultiplicationModified {
 
 
 val width  = 1100
-val height = 100000
+val height = 10
 val localWorkSize = 256
 val globalWorkSize = localWorkSize * height
 
@@ -40,25 +40,36 @@ def main(args: Array[String]) = run
       
     
   }
-
+  //LocalworkSize = 256
+  //GlobalWorkSize = LocalWorkSize * Height
+  //unsigned int size = width * height;
+  //    unsigned int mem_size_M = size * sizeof(float);
+  //    M = (float*)malloc(mem_size_M);
+  //    unsigned int mem_size_V = width * sizeof(float);
+  //    V = (float*)malloc(mem_size_V);
+  //  unsigned int mem_size_W = height * sizeof(float);
+  
   def transpose(idata1 : Array[Float], idata2 : Array[Float])(implicit dev: Device): Array[Float] = {
   
       val space=dev.defaultPaddedPartition(idata1.length)
-      dev.setWorkSizes(localWorkSize, globalWorkSize)
-      val odata = new Array[Float](height)
-            
+      //dev.setWorkSizes(localWorkSize, globalWorkSize)
+      
+      val width  = 1100
+      val height = 10
       val n = idata1.length
+      val odata = new Array[Float](height)
       
      space.spawn { 
         
         space.groups.foreach {
           g => {
           
+        
+          
            g.items.foreach {
 	     item=> { 
          
-                val width  = 1100
-                val height = 100000
+           
                 val y = g.id
                   if( y < height ) {
                 var dotProduct = 0f
@@ -76,32 +87,8 @@ def main(args: Array[String]) = run
 	    }
             
            }
-          (odata,idata1,idata2)
+          (odata,idata1,idata2,width,height)
           }
       odata
    }
 } 
-
-
-__kernel void MatVecMulUncoalesced0(const __global float* M,
-                                    const __global float* V,
-                                    uint width, uint height,
-                                    __global float* W)
-{
-    // Row index
-    uint y = get_global_id(0);
-    if (y < height) {
-    
-        // Row pointer
-        const __global float* row = M + y * width;
-
-        // Compute dot product  
-        float dotProduct = 0;
-        for (int x = 0; x < width; ++x)
-            dotProduct += row[x] * V[x];
-
-        // Write result to global memory
-        W[y] = dotProduct;
-    }
-}
-*/
