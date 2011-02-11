@@ -17,25 +17,21 @@ import scala.util.Random
 
 object TransposeTestModifiedNaive {
 
-val globalWorkSize = 2048
-val localWorkSize =  128
+var globalWorkSize = 2048
+var localWorkSize =  128
 
-//szGlobalWorkSize[0] = sizePerGPU;
-//szGlobalWorkSize[1] = shrRoundUp(BLOCK_DIM, size_y);
 
-//szGlobalWorkSize[0] = sizePerGPU;
-//szGlobalWorkSize[1] = shrRoundUp(BLOCK_DIM, size_y);
+def main(args: Array[String]) = { 
 
-def main(args: Array[String]) = run
+if (args.length > 0) 
+   globalWorkSize = if (args.length > 0) (1 << args(0).toInt) else ( 1 << 20)
+run
+}
   
   def run = {
-      
-      
+  
       val random = new Random(0)
-      val idata = Array.fill( globalWorkSize * globalWorkSize) (random.nextFloat)
-      //println("input")
-      //for (i <- idata)
-      //println(" " +i) 
+      val idata = Array.fill( globalWorkSize ) (random.nextFloat)
       val odata= transpose(idata)(firepile.gpu)
       
       println("output")
@@ -48,22 +44,22 @@ def main(args: Array[String]) = run
   def transpose(idata : Array[Float])(implicit dev: Device): Array[Float] = {
   
       val space=dev.defaultPaddedPartition(idata.length)
-      dev.setWorkSizes(globalWorkSize * globalWorkSize, localWorkSize)
+      //dev.setWorkSizes(globalWorkSize, localWorkSize)
       val odata = new Array[Float](idata.length)
+      val width = globalWorkSize
+      val height = globalWorkSize
       
-      val n = idata.length
+      //val n = idata.length
       
      space.spawn { 
+        
         
         space.groups.foreach {
           g => {
            g.items.foreach {
 	     item=> { 
          
-         
-                val width= 2048
-	        val height= 2048
-      	       	        
+            	       	        
                 var xIndex = g.id(0)
 	        var yIndex = g.id(1)
 	      
@@ -79,7 +75,7 @@ def main(args: Array[String]) = run
 	    }
             
            }
-          (odata,idata,n)
+          (odata,idata,height,width)
           }
       odata
    }

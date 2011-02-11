@@ -40,15 +40,7 @@ def main(args: Array[String]) = run
       
     
   }
-  //LocalworkSize = 256
-  //GlobalWorkSize = LocalWorkSize * Height
-  //unsigned int size = width * height;
-  //    unsigned int mem_size_M = size * sizeof(float);
-  //    M = (float*)malloc(mem_size_M);
-  //    unsigned int mem_size_V = width * sizeof(float);
-  //    V = (float*)malloc(mem_size_V);
-  //  unsigned int mem_size_W = height * sizeof(float);
-  
+
   def transpose(idata1 : Array[Float], idata2 : Array[Float])(implicit dev: Device): Array[Float] = {
   
       val space=dev.defaultPaddedPartition(idata1.length)
@@ -84,12 +76,12 @@ def main(args: Array[String]) = run
 	    }
             
            }
-          
-          }(odata,idata1,idata2,dev)
+          (odata,idata1,idata2)
+          }
       odata
    }
 } 
-/*
+
 
 __kernel void MatVecMulUncoalesced0(const __global float* M,
                                     const __global float* V,

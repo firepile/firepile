@@ -293,6 +293,97 @@ object Compiler {
         }, "From GPU")
      a
   }
+  
+   def compileNew[A1, A2, A3, A4](a: A1, b: A2, c: A3, d: A4, kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], dev: Device) =  {
+    
+      val transA1 = implicitly[Marshal[A1]]
+      val transA2 = implicitly[Marshal[A2]]
+      val transA3 = implicitly[Marshal[A3]]
+      val transA4 = implicitly[Marshal[A4]]
+      val sizeA1 = transA1.sizes(1).head
+      val sizeA2 = transA2.sizes(1).head
+      val sizeA3 = transA3.sizes(1).head
+      val sizeA4 = transA4.sizes(1).head
+
+  
+      val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
+   
+          var bufA1: ByteBuffer = transA1.toBuffer(a).head
+          var bufA2: ByteBuffer = null
+          var bufA3: ByteBuffer = null
+          var bufA4: ByteBuffer = null
+ 
+          var bufA1CLBuf: CLByteBuffer = null
+          var bufA2CLBuf: CLByteBuffer = null
+          var bufA3CLBuf: CLByteBuffer = null
+          var bufA4CLBuf: CLByteBuffer = null
+
+  
+          time({
+            bufA2 = transA2.toBuffer(b).head
+            bufA3 = transA3.toBuffer(c).head
+            bufA4 = transA4.toBuffer(d).head
+   
+    
+            bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
+            bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
+            bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA4, true)
+     
+          }, "Copy to GPU")
+  
+          val numItemsA1 = transA1.sizes(a).head / sizeA1
+          val numItemsA2 = transA2.sizes(b).head / sizeA2
+          val numItemsA3 = transA3.sizes(c).head / sizeA3
+          val numItemsA4 = transA4.sizes(d).head / sizeA4
+     
+          val bufA1capacity = transA1.sizes(a).head
+  
+          bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA1capacity)
+  
+          // println("Output buffer capacity: " + bufA1capacity)
+  
+         val threads = (if (numItemsA2 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA2) / scala.math.log(2))) else dev.maxThreads).toInt
+         
+          // START TIMING CODE
+  
+          time({
+            kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
+            kernBin.setArg(1, bufA2CLBuf)
+            kernBin.setArg(2, c.asInstanceOf[Int])
+            kernBin.setArg(3, d.asInstanceOf[Int])
+    
+            //kernBin.setLocalArg(3, threads * sizeA1)
+            
+             if (dev.memConfig == null) {
+             
+                println(" Dev memConfig is null")
+  	      // kernBin.setLocalArg(3, threads * sizeA1)
+  	      kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA1 * threads), Array[Int](threads))
+  	    } else {
+  	      
+  	      // println(" Setting default arguments ")
+  	      // kernBin.setLocalArg(3, dev.memConfig.localMemSize * sizeA2)
+  	      kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+  	   }
+  	   
+  	 
+            //kernBin.enqueueNDRange(dev.queue, Array[Int](threads * numItemsA1 ), Array[Int](threads))
+            dev.queue.finish
+          }, "GPU", numIterations)
+  
+          val bufOut = allocDirectBuffer(bufA1capacity)
+  
+          time({
+            bufA1CLBuf.read(dev.queue, bufOut, true)
+  
+            bufOut.rewind
+  
+            // [NN] maybe need to copy?  but, probably not
+            Array.copy(transA1.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a.asInstanceOf[AnyRef], 0, numItemsA1)
+          }, "From GPU")
+       a
+    }
+
 
    def compileNew[A1, A2, A3, A4, A5](a: A1, b: A2, c: A3, d: A4, e: A5, kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], dev: Device) =  {
   
