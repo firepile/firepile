@@ -262,10 +262,22 @@ object Compiler {
           kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
           kernBin.setArg(1, bufA2CLBuf)
           kernBin.setArg(2, numItemsA2)
-
-          kernBin.setLocalArg(3, threads * sizeA1)
+          //kernBin.setLocalArg(3, threads * sizeA1)
           
-          kernBin.enqueueNDRange(dev.queue, Array[Int](threads * numItemsA1 ), Array[Int](threads))
+           if (dev.memConfig == null) {
+           
+              println(" Dev memConfig is null")
+	      kernBin.setLocalArg(3, threads * sizeA1)
+	      kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA1 * threads), Array[Int](threads))
+	    } else {
+	      
+	      println(" Setting default arguments ")
+	      kernBin.setLocalArg(3, dev.memConfig.localMemSize * sizeA2)
+	      kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+	   }
+	   
+	 
+          //kernBin.enqueueNDRange(dev.queue, Array[Int](threads * numItemsA1 ), Array[Int](threads))
           dev.queue.finish
         }, "GPU", numIterations)
 

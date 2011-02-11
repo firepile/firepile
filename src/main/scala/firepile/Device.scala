@@ -3,7 +3,6 @@ package firepile
 import firepile._
 import firepile.util.BufferBackedArray._
 import firepile.Marshaling._
-import firepile.Space
 
 import java.nio.ByteBuffer
 
@@ -71,10 +70,11 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     var blocks = ((n + (threads * 2 - 1)) / (threads * 2)).toInt
 
     //Space.setSpace(threads,blocks)
-    MemConfig(blocks, threads, threads)
+    //MemConfig(blocks, threads, threads)
     Kernel(threads, blocks)
     new Space(threads, blocks)
   }
+
 
  private[firepile] lazy val queue = context.createDefaultQueue()
 
