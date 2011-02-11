@@ -12,7 +12,7 @@ import firepile.util.Math.{sqrt,log,exp,fabs}
 
 object TestBlackScholesModified {
   def main(args: Array[String]) = {
-    val optionCount = if (args.length > 0) args(0).toInt * 1000000 else 4000000
+    val optionCount = if (args.length > 0) args(0).toInt * 1000000 else 1000000
     // val n = if (args.length > 1) args(1).toInt else 10
 
     implicit val gpu: Device = firepile.gpu
@@ -67,7 +67,6 @@ object TestBlackScholesModified {
 
     val space = dev.defaultPaddedPartition(S.length)
     val n = S.length
-    
 
     val CPOut = new Array[Float](S.length*2)
 
@@ -85,15 +84,37 @@ object TestBlackScholesModified {
               val               A5 = 1.330274429f
               val         RSQRT2PI = 0.39894228040143267793994605993438f
 
-              var i = g.id
+              var i = item.globalId
 
               while ( i < n) {  // n = S.length
                 val   sqrtT: Float = sqrt(T(i)).toFloat
                 val      d1: Float = (log(S(i) / X(i)).toFloat + (R + 0.5f * V * V) * T(i)) / (V * sqrtT)
                 val      d2: Float = d1 - V * sqrtT
-                val   CNDD1: Float = CND(d1)
-                val   CNDD2: Float = CND(d2)
 
+                var CNDD1: Float = 0f
+                var CNDD2: Float = 0f
+                
+                // INLINE CND FOR CNDD1
+
+                val K1 = 1.0f / (1.0f + 0.2316419f * fabs(d1))
+
+                val cnd1 = RSQRT2PI * exp(- 0.5f * d1 * d1).toFloat * (K1 * (A1 + K1 * (A2 + K1 * (A3 + K1 * (A4 + K1 * A5)))))
+
+                if(d1 > 0)
+                  CNDD1 = 1.0f - cnd1
+                else
+                  CNDD1 = cnd1
+
+                // INLINE CND FOR CNDD2
+                
+                val K2 = 1.0f / (1.0f + 0.2316419f * fabs(d2))
+
+                val cnd2 = RSQRT2PI * exp(- 0.5f * d2 * d2).toFloat * (K2 * (A1 + K2 * (A2 + K2 * (A3 + K2 * (A4 + K2 * A5)))))
+
+                if(d2 > 0)
+                  CNDD2 = 1.0f - cnd2
+                else
+                  CNDD2 = cnd2
 
                 val   expRT: Float = exp(- R * T(i)).toFloat
 
@@ -111,7 +132,7 @@ object TestBlackScholesModified {
           }
         }
       }
-      (S,X,T,CPOut,n)
+      (CPOut,S,X,T,n)
     }
       
 
@@ -134,7 +155,7 @@ object TestBlackScholesModified {
 ///////////////////////////////////////////////////////////////////////////////
 // Rational approximation of cumulative normal distribution function
 ///////////////////////////////////////////////////////////////////////////////
-@inline def CND(d: Float): Float = {
+def CND(d: Float): Float = {
     val               A1 = 0.31938153f
     val               A2 = -0.356563782f
     val               A3 = 1.781477937f

@@ -341,7 +341,7 @@ object Compiler {
 
         bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA1capacity)
 
-        println("Output buffer capacity: " + bufA1capacity)
+        // println("Output buffer capacity: " + bufA1capacity)
 
        val threads = (if (numItemsA2 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA2) / scala.math.log(2))) else dev.maxThreads).toInt
        
@@ -352,7 +352,7 @@ object Compiler {
           kernBin.setArg(1, bufA2CLBuf)
           kernBin.setArg(2, bufA3CLBuf)
           kernBin.setArg(3, bufA4CLBuf)
-          kernBin.setArg(4, e.asInstanceOf[Int]) 
+          kernBin.setArg(4, numItemsA2) 
           //kernBin.setLocalArg(3, threads * sizeA1)
           
            if (dev.memConfig == null) {
@@ -362,7 +362,7 @@ object Compiler {
 	      kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA1 * threads), Array[Int](threads))
 	    } else {
 	      
-	      println(" Setting default arguments ")
+	      // println(" Setting default arguments ")
 	      // kernBin.setLocalArg(3, dev.memConfig.localMemSize * sizeA2)
 	      kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
 	   }

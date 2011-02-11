@@ -8,6 +8,7 @@ import java.util.ArrayList
 class Item {
   var id: Int = 0
   def id(i: Int): Int = { id = i; 0 }
+  val globalId: Int = 0
 
 }
 
