@@ -126,7 +126,7 @@ object TestBlackScholesModified2 {
           }
         }
       }
-      (S,X,T,CPOut,n)
+      (CPOut,S,X,T,n)
     }
       
 

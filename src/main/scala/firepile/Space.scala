@@ -20,7 +20,7 @@ class Group {
   def local(i: Int): Int = { local = i; 0 }
   def barrier = ()
   var size: Int = 0
-  def size(i: Int): Int = { size =i ; 0}
+  def size(i: Int): Int = { size =i ; size}
 
 }
 
@@ -96,7 +96,6 @@ val sizeA2 = transA2.sizes(1).head
      }
  }
 
- /*
   class GroupIterator extends Iterator[Group] {
     def hasNext = false
     def next = null
@@ -106,9 +105,9 @@ val sizeA2 = transA2.sizes(1).head
     def iterator = new GroupIterator
     override def foreach[Unit](f: (Group) => Unit) = { } 
   }
-  */
 
-  val groups: List[Group] = List(new Group)
+  // val groups: List[Group] = List(new Group)
+  val groups: GroupIterator = new GroupIterator
 
 }
 

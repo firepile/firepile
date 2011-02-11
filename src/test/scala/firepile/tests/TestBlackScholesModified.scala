@@ -67,6 +67,7 @@ object TestBlackScholesModified {
 
     val space = dev.defaultPaddedPartition(S.length)
     val n = S.length
+    
 
     val CPOut = new Array[Float](S.length*2)
 

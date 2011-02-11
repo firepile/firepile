@@ -294,7 +294,7 @@ object Compiler {
      a
   }
 
-  def compileNew[A1, A2, A3, A4, A5](a: A1, b: A2, c: A3, d: A4, e: A5 , kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], dev: Device) =  {
+   def compileNew[A1, A2, A3, A4, A5](a: A1, b: A2, c: A3, d: A4, e: A5, kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], dev: Device) =  {
   
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
@@ -309,7 +309,7 @@ object Compiler {
 
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
  
-        var bufA1: ByteBuffer = null
+        var bufA1: ByteBuffer = transA1.toBuffer(a).head
         var bufA2: ByteBuffer = null
         var bufA3: ByteBuffer = null
         var bufA4: ByteBuffer = null
@@ -321,13 +321,11 @@ object Compiler {
         var bufA5CLBuf: CLByteBuffer = null
 
         time({
-          bufA1 = transA1.toBuffer(a).head
           bufA2 = transA2.toBuffer(b).head
           bufA3 = transA3.toBuffer(c).head
           bufA4 = transA4.toBuffer(d).head
           bufA5 = transA5.toBuffer(e).head
   
-          bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA1, true)
           bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
           bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
           bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA4, true)
@@ -339,12 +337,14 @@ object Compiler {
         val numItemsA3 = transA3.sizes(c).head / sizeA3
         val numItemsA4 = transA4.sizes(d).head / sizeA4
         val numItemsA5 = transA5.sizes(e).head / sizeA5
-        val bufA4capacity = transA4.sizes(d).head
+        val bufA1capacity = transA1.sizes(a).head
 
-        bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA4capacity)
+        bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA1capacity)
 
-        println("Output buffer capacity: " + bufA4capacity)
+        println("Output buffer capacity: " + bufA1capacity)
 
+       val threads = (if (numItemsA2 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA2) / scala.math.log(2))) else dev.maxThreads).toInt
+       
         // START TIMING CODE
 
         time({
@@ -352,34 +352,38 @@ object Compiler {
           kernBin.setArg(1, bufA2CLBuf)
           kernBin.setArg(2, bufA3CLBuf)
           kernBin.setArg(3, bufA4CLBuf)
-          kernBin.setArg(4, numItemsA1)
-
-          // No local args needed for blackscholes
-          /*
-          kernBin.setLocalArg(3, Kernel.localArgs.get(0)._3 * sizeA1)
+          kernBin.setArg(4, e.asInstanceOf[Int]) 
+          //kernBin.setLocalArg(3, threads * sizeA1)
           
-          println(" ::"+dev.memConfig.globalSize +"::")
-          println("::"+dev.memConfig.localSize+":::")
-          println("::"+ numItemsA2)
-          */
-          
-          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+           if (dev.memConfig == null) {
+           
+              println(" Dev memConfig is null")
+	      // kernBin.setLocalArg(3, threads * sizeA1)
+	      kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA1 * threads), Array[Int](threads))
+	    } else {
+	      
+	      println(" Setting default arguments ")
+	      // kernBin.setLocalArg(3, dev.memConfig.localMemSize * sizeA2)
+	      kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+	   }
+	   
+	 
+          //kernBin.enqueueNDRange(dev.queue, Array[Int](threads * numItemsA1 ), Array[Int](threads))
           dev.queue.finish
         }, "GPU", numIterations)
 
-        val bufOut = allocDirectBuffer(bufA4capacity)
+        val bufOut = allocDirectBuffer(bufA1capacity)
 
         time({
-          bufA4CLBuf.read(dev.queue, bufOut, true)
+          bufA1CLBuf.read(dev.queue, bufOut, true)
 
           bufOut.rewind
 
           // [NN] maybe need to copy?  but, probably not
-          Array.copy(transA1.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a.asInstanceOf[AnyRef], 0, numItemsA4)
+          Array.copy(transA1.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a.asInstanceOf[AnyRef], 0, numItemsA1)
         }, "From GPU")
      a
   }
-
 
 
   def findApplyMethod(src: AnyRef, arity: Int): java.lang.reflect.Method = {
