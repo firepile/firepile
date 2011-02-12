@@ -20,7 +20,7 @@ object MatrixMultiplicationModified {
 
 
 val width  = 1100
-val height = 10
+val height = 100
 val localWorkSize = 256
 val globalWorkSize = localWorkSize * height
 
@@ -35,7 +35,7 @@ def main(args: Array[String]) = run
       val odata= transpose(idata1,idata2)(firepile.gpu)
       
       println("output")
-      for ( i <- 0 until 200)
+      for ( i <- 0 until odata.length)
        println(" " +odata(i)) 
       
     
@@ -55,7 +55,7 @@ def main(args: Array[String]) = run
       //dev.setWorkSizes(localWorkSize, globalWorkSize)
       
       val width  = 1100
-      val height = 10
+      val height = 100
       val n = idata1.length
       val odata = new Array[Float](height)
       
@@ -63,8 +63,6 @@ def main(args: Array[String]) = run
         
         space.groups.foreach {
           g => {
-          
-        
           
            g.items.foreach {
 	     item=> { 
