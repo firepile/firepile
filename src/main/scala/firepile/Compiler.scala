@@ -442,8 +442,15 @@ object Compiler {
           kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
           kernBin.setArg(1, bufA2CLBuf)
           kernBin.setArg(2, bufA3CLBuf)
+          if(!Kernel.globalArgs.get(3)._2.equals("int"))
           kernBin.setArg(3, bufA4CLBuf)
-          kernBin.setArg(4, numItemsA2) 
+          else 
+          kernBin.setArg(3, d.asInstanceOf[Int])
+          if(!Kernel.globalArgs.get(3)._2.equals("int"))
+          kernBin.setArg(3, bufA4CLBuf)
+          else
+          kernBin.setArg(4, e.asInstanceOf[Int]) 
+        
           //kernBin.setLocalArg(3, threads * sizeA1)
           
            if (dev.memConfig == null) {
