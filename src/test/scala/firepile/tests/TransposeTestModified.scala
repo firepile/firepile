@@ -20,12 +20,6 @@ object TransposeTestModified {
 val globalWorkSize = 2048
 val localWorkSize =  128
 
-//szGlobalWorkSize[0] = sizePerGPU;
-//szGlobalWorkSize[1] = shrRoundUp(BLOCK_DIM, size_y);
-
-//szGlobalWorkSize[0] = sizePerGPU;
-//szGlobalWorkSize[1] = shrRoundUp(BLOCK_DIM, size_y);
-
 def main(args: Array[String]) = run
   
   def run = {
