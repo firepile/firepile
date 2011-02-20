@@ -265,7 +265,7 @@ object Compiler {
             if (name.startsWith(Kernel.outputArgs.get(j)))
               output = true
          
-          println(" variable name::"+name+"  index::"+index +"  type::"+ typ + "  output::"+output+"  loop index::"+ i)
+         // println(" variable name::"+name+"  index::"+index +"  type::"+ typ + "  output::"+output+"  loop index::"+ i)
           
           if (output) {
             val clBuf = dev.context.createByteBuffer(CLMem.Usage.Output, implicitMarshal.get(i)._3)
@@ -306,9 +306,9 @@ object Compiler {
       }
     }
 
-   println(" output Buffer size::"+ outputBuffers.size)
-   println(" max Input size ::"+ maxInputSize + " max Input items ::" + maxInputItems)
-   println(" max Output size ::"+ maxOutputSize + " max Output items ::" + maxOutputItems)
+   //println(" output Buffer size::"+ outputBuffers.size)
+   //println(" max Input size ::"+ maxInputSize + " max Input items ::" + maxInputItems)
+   //println(" max Output size ::"+ maxOutputSize + " max Output items ::" + maxOutputItems)
    
    
     val threads = (if (maxInputItems < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(maxInputItems) / scala.math.log(2))) else dev.maxThreads).toInt
@@ -322,7 +322,7 @@ object Compiler {
         kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
       } else {
 
-        println(" Setting default arguments ")
+        //println(" Setting default arguments ")
         if (Kernel.localArgs.size > 0)
           kernBin.setLocalArg(3, dev.memConfig.localMemSize * maxOutputSize)
         kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
@@ -337,7 +337,7 @@ object Compiler {
         outputBuffers.get(i) match {
 
           case (clBuf: CLByteBuffer, totalSize : Int, marshal: Marshal[_], index: Int, items: Int) => {
-            println(" total Size::"+ totalSize + " items ::"+ items)
+            //println(" total Size::"+ totalSize + " items ::"+ items)
             val bufOut = allocDirectBuffer(totalSize)
             clBuf.read(dev.queue, bufOut, true)
             bufOut.rewind
