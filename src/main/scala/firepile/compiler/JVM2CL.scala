@@ -1574,15 +1574,15 @@ object JVM2CL {
 
                 Kernel.level = 2
 
-                for (i <- closureArgs) {
+                for (i <- 0 until closureArgs.length) {
 
-                  i match {
+                  closureArgs(i) match {
 
-                    case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`.toString)) }
+                    case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`.toString,i)) }
                     case GStaticInvoke(SMethodRef(SClassName(_), name, _, _, _), args) => {
-                      for (i <- args) {
-                        i match {
-                          case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`.toString)) }
+                      for (j <- args) {
+                        j match {
+                          case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`.toString,i)) }
                           case _ => {}
                         }
                       }

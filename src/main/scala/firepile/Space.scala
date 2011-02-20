@@ -59,7 +59,8 @@ val sizeA2 = transA2.sizes(1).head
 						       for (t: Tree <- treeList.reverse)
 							kernStr.append(t.toCL)
 							
-						        firepile.Compiler.compileNew(fvals._1,fvals._2,fvals._3,kernName,kernStr.toString)(m1,m2,m3,dev) 
+						       firepile.Compiler.compileNew(fvals,kernName,kernStr.toString)(m1,m2,m3,dev) 
+						       Kernel.printTime
 						      }
                                                   
     case None => { println(" Something went wrong while creating Kernel!!!") }

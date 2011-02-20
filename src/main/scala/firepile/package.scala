@@ -108,14 +108,15 @@ package object firepile {
 
   def time[A](body: => A, label: String, iterations: Int = 1): A = {
     if (MEASURE_TIME) {
-      val t0 = System.currentTimeMillis
+      val t0 = System.nanoTime
       try {
         for (i<- 0 until iterations -1 ) body
         body
       }
       finally {
-        val t1 = System.currentTimeMillis
-        println(label + " time = " + ((t1 - t0) / 1000.) / iterations)
+        val t1 = System.nanoTime
+        println(label + " time = " + ((t1 - t0) / 1000000000.) / iterations)
+        Kernel.setTime(label,(t1-t0))
       }
     }
     else

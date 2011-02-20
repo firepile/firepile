@@ -6,7 +6,7 @@ object ReduceModifiedPlus {
   import firepile.Device
   import firepile.Space
   import firepile.Arrays._
-  import firepile.Spaces._
+  import firepile.Kernel._
   import firepile.util.BufferBackedArray._
   import firepile.tree.Trees.Tree
   import com.nativelibs4java.opencl._
@@ -49,12 +49,12 @@ def reduceModified(idata: Array[Float])
   
   val space=dev.defaultPaddedPartition(idata.length)
   //dev.setWorkSizes(NUM_ITEMS, space.blocks)
-  
-  val odata = new Array[Float](space.blocks)
-  val n = idata.length
-  
+ val odata = new Array[Float](space.blocks)
+ val n = idata.length
+ Kernel.output("odata")
+ 
  space.spawn { 
-  
+   
   space.groups.foreach {
     g => {
          
@@ -68,7 +68,7 @@ def reduceModified(idata: Array[Float])
            if (j < n) sdata(item.id)= idata(j) 
            else sdata(item.id) =0f
  
-           if (j + g.items.size < n)
+          if (j + g.items.size < n)
              sdata(item.id) += idata(j + g.items.size)
  
            g.barrier
@@ -76,13 +76,13 @@ def reduceModified(idata: Array[Float])
         var k = g.items.size / 2
         
         while ( k > 0 ) {
-       	     if (item.id < k)
+       	    if (item.id < k)
 	        sdata(item.id) += sdata(item.id + k)
              g.barrier
              k>>=1
           }
           
-       if (item.id == 0) 
+      if (item.id == 0) 
         odata(g.id) = sdata(0)
           }
         }
