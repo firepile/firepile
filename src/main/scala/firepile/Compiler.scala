@@ -249,8 +249,10 @@ object Compiler {
     implicitMarshal.add((implicitly[Marshal[A2]], implicitly[Marshal[A2]].toBuffer(tuple._2).head, implicitly[Marshal[A2]].sizes(tuple._2).head, implicitly[Marshal[A2]].sizes(1).head, implicitly[Marshal[A2]].sizes(tuple._2).head / implicitly[Marshal[A2]].sizes(1).head))
     implicitMarshal.add((implicitly[Marshal[A3]], implicitly[Marshal[A3]].toBuffer(tuple._3).head, implicitly[Marshal[A3]].sizes(tuple._3).head, implicitly[Marshal[A3]].sizes(1).head, implicitly[Marshal[A3]].sizes(tuple._3).head / implicitly[Marshal[A3]].sizes(1).head))
     val outputBuffers = new ArrayList[(CLByteBuffer, Int, Marshal[_], Int, Int)]()
-    var maxItems: Int = 0
-    var maxSize: Int = 0
+    var maxInputItems: Int = 0
+    var maxInputSize: Int = 0
+    var maxOutputItems: Int = 0
+    var maxOutputSize: Int = 0
 
     for (i <- 0 until Kernel.globalArgs.size) {
 
@@ -268,15 +270,23 @@ object Compiler {
           if (output) {
             val clBuf = dev.context.createByteBuffer(CLMem.Usage.Output, implicitMarshal.get(i)._3)
             outputBuffers.add(clBuf, implicitMarshal.get(i)._3, implicitMarshal.get(i)._1, index, implicitMarshal.get(i)._5)
+            val nItems = implicitMarshal.get(i)._5
+		  if (nItems > maxOutputItems) {
+		    maxOutputItems = nItems
+		    maxOutputSize = implicitMarshal.get(i)._4
+		  }
+              
             kernBin.setArg(i, clBuf)
           } else {
+          
+                        val nItems = implicitMarshal.get(i)._5
+	    		  if (nItems > maxInputItems) {
+	    		    maxInputItems = nItems
+	    		    maxInputSize = implicitMarshal.get(i)._4
+	    		  }
+ 
             time({
 
-              val nItems = implicitMarshal.get(i)._5
-              if (nItems > maxItems) {
-                maxItems = nItems
-                maxSize = implicitMarshal.get(i)._4
-              }
               typ match {
               
               case "int" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Int])
@@ -297,23 +307,24 @@ object Compiler {
     }
 
    println(" output Buffer size::"+ outputBuffers.size)
-   println(" max size ::"+ maxSize + " max items ::" + maxItems)
+   println(" max Input size ::"+ maxInputSize + " max Input items ::" + maxInputItems)
+   println(" max Output size ::"+ maxOutputSize + " max Output items ::" + maxOutputItems)
    
    
-    val threads = (if (maxItems < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(maxItems) / scala.math.log(2))) else dev.maxThreads).toInt
+    val threads = (if (maxInputItems < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(maxInputItems) / scala.math.log(2))) else dev.maxThreads).toInt
 
     time({
    
       if (dev.memConfig == null) {
 
         if (Kernel.localArgs.size > 0)
-          kernBin.setLocalArg(3, threads * maxSize)
-        kernBin.enqueueNDRange(dev.queue, Array[Int](maxItems * threads), Array[Int](threads))
+          kernBin.setLocalArg(3, threads * maxOutputSize)
+        kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
       } else {
 
         println(" Setting default arguments ")
         if (Kernel.localArgs.size > 0)
-          kernBin.setLocalArg(3, dev.memConfig.localMemSize * maxSize)
+          kernBin.setLocalArg(3, dev.memConfig.localMemSize * maxOutputSize)
         kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
       }
       dev.queue.finish
