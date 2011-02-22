@@ -86,7 +86,12 @@ object JVM2CL {
     val className = args(0)
     val methodSig = args(1)
 
-    compileRoot(className, methodSig)
+    val tree = compileRoot(className, methodSig)
+
+    println("Printing tree")
+    for (t <- tree) println(t.toCL)
+
+    tree
   }
 
   private val makeCallGraph = true
@@ -106,6 +111,33 @@ object JVM2CL {
       println("before process work list")
       val proc = processWorklist
       println("after process work list")
+
+      println("Result CL:")
+      for (t <- proc) println(t.toCL)
+      proc
+    } catch {
+      case e: ClassNotFoundException => {
+        println("Class not found: " + e.getMessage)
+        e.printStackTrace
+        Nil
+      }
+    }
+  }
+
+  def compileMethod(className: String, methodSig: String): List[Tree] = {
+    println("compiling " + className + "." + methodSig)
+    try {
+      addMethodToWorklist(className, methodSig)
+      if (makeCallGraph) {
+        buildCallGraph
+        optimizeCallGraph
+      }
+      println("before process work list")
+      val proc = processWorklist
+      println("after process work list")
+
+      println("Result CL:")
+      for (t <- proc) println(t.toCL)
       proc
     } catch {
       case e: ClassNotFoundException => {
@@ -142,8 +174,8 @@ object JVM2CL {
         + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
-        + ":/Users/dwhite/git2/firepile/target/scala_2.8.0-local/classes"
-        + ":/Users/dwhite/git2/firepile/target/scala_2.8.0-local/test-classes"
+        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/classes"
+        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/test-classes"
         + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
         + ":.:tests:examples:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
 
@@ -261,6 +293,7 @@ object JVM2CL {
     def run = {
       val m = method
       val anonFunsLookup = new HashMap[String, Value]()
+      kernelMethod = true
 
       // Force the class's method bodies to be loaded.
       Scene.v.tryLoadClass(m.declaringClass.getName, SootClass.HIERARCHY)
@@ -319,6 +352,7 @@ object JVM2CL {
   private val worklist = new Worklist[Task]
 
   private def addRootMethodToWorklist(className: String, methodSig: String): Unit = {
+    println("\n\nADD ROOT METHOD TO WORKLIST\n\n")
     // Set up the class we're working with
     val c = Scene.v.loadClassAndSupport(className)
     if (makeCallGraph) {
@@ -334,6 +368,26 @@ object JVM2CL {
       // println("trying " + sig)
       if (sig.equals(methodSig)) {
         worklist += CompileRootMethodTask(m.makeRef, false, null)
+      }
+    }
+  }
+
+  private def addMethodToWorklist(className: String, methodSig: String): Unit = {
+    // Set up the class we're working with
+    val c = Scene.v.loadClassAndSupport(className)
+    if (makeCallGraph) {
+      Scene.v.loadNecessaryClasses
+      c.setApplicationClass
+    }
+
+    // Retrieve the method and its body
+    // println(" Method Iterator ")
+    for (m <- c.methodIterator) {
+      // println("m.getName" + m.getName)
+      val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+      // println("trying " + sig)
+      if (sig.equals(methodSig)) {
+        worklist += CompileMethodTask(m.makeRef, false, null)
       }
     }
   }
@@ -395,7 +449,7 @@ object JVM2CL {
      printTree(tree.asInstanceOf[scala.Product],0)
 
      println()
-     println("Result CL:")
+     println("Result CL:::")
      for (t <- tree) println(t.toCL)
      */
     tree
@@ -490,15 +544,17 @@ object JVM2CL {
     // TODO: don't removeThis for normal methods; do removeThis for closures
     // TODO: verify that this is not used in the body of the method
 
-    // Commented out to only print when processing worklist
+    // printlns commented out to only print when processing worklist
 
+    /*
     println()
     println("Result tree:")
     println(fun)
 
     println()
-    println("Result CL:")
+    println("Result CL:::")
     println(fun.toCL)
+    */
 
     fun
   }
@@ -545,7 +601,7 @@ object JVM2CL {
 
   val ANY_TYPE = ValueType("__any__")
 
-  var kernelMethod = true
+  var kernelMethod = false
 
   class SymbolTable(val methodName: String) {
     val labels = new HashMap[SootUnit, String]()
@@ -674,7 +730,7 @@ object JVM2CL {
           StructDef("p_" + mangleName(arrayTyp).replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(typ)), Id("data")))))
       }
 
-      StructType("g_" + arrayTyp.replaceAll(" ", "_") + "Array")
+      StructType(arrayTyp.replaceAll(" ", "_") + "Array")
     }
 
     def dumpArrayStructs = {
@@ -759,14 +815,15 @@ object JVM2CL {
         case _ => PtrType(StructType(mangleName(t.toString)))
       }
     }
-    //case t: SootArrayType => { arraystructs.addStruct(translateType(t.getArrayElementType)) }
+    case t: SootArrayType => { arraystructs.addStruct(translateType(t.getArrayElementType)) }
 
-    case t: SootArrayType => PtrType(translateType(t.getArrayElementType))
+    //case t: SootArrayType => PtrType(translateType(t.getArrayElementType))
     case t: SootNullType => PtrType(ValueType("void"))
     // TODO: array types
     case _ => ValueType(t.toString)
   }
 
+/*
   private def translateType(memType: String, typ: String, name: String): (Tree, String) = typ match {
 
     case "java.lang.String" => (MemType(memType, ValueType("char")), "*" + mangleName(name))
@@ -781,6 +838,15 @@ object JVM2CL {
     case "double[]" => (MemType(memType, ValueType("double")), "*" + mangleName(name))
 
     case x => (MemType(memType, ValueType(typ)), mangleName(name))
+  }
+*/
+
+  private def translateType(memType: String, typ: SootType, name: String): (Tree, String) = translateType(typ) match {
+      case StructType(n) if n.endsWith("Array") => memType match {
+        case "local" => (StructType("l_" + n), mangleName(name))
+        case "global" => (StructType("g_" + n), mangleName(name))
+      }
+      case _ => (MemType(memType, translateType(typ)), mangleName(name))
   }
 
   private def translateType(t: ScalaVarDef): Tree = t.fieldScalaType match {
@@ -1471,8 +1537,11 @@ object JVM2CL {
           }
           case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
           //case GThisRef(typ) => { Id("_this") }
-          //case GParameterRef(typ, index) => { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
-          case GParameterRef(typ, index) => { Id("_this") }
+          case GParameterRef(typ, index) => { 
+            if (!symtab.kernelMethod) { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
+            else Id("_this")
+          }
+          // case GParameterRef(typ, index) => { Id("_this") }
           case GStaticFieldRef(fieldRef) => { /* classtab.addClass(new SootClass(fieldRef.`type`.toString));*/ Id("unimplemented:staticfield") }
 
           case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
@@ -1483,8 +1552,9 @@ object JVM2CL {
 
           case GInstanceFieldRef(base, fieldRef) => { println(" base ::" + base + ":::" + fieldRef); Id(mangleName(fieldRef.name)) }
 
-          // case GArrayRef(base, index) => ArrayAccess((translateExp(base, symtab, anonFuns), "data"), index)
+          case GArrayRef(base, index) => ArrayAccess(Select((translateExp(base, symtab, anonFuns)), "data"), translateExp(index, symtab, anonFuns))
 
+/*
           case GArrayRef(base, index) => {
             //println(" Array Access::"+ base+"::"+index); 
 
@@ -1497,6 +1567,7 @@ object JVM2CL {
             }
 
           }
+*/
 
           case v => Id("translateExp:unsupported:" + v.getClass.getName)
 
@@ -1542,7 +1613,7 @@ object JVM2CL {
                   args.head match {
                     case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
                       println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
-                      Kernel.localArgs.add((left.getName, typ.toString, Kernel.blocks))
+                      Kernel.localArgs.add((left.getName, typ, Kernel.blocks))
                     }
                     case _ => {}
                   }
@@ -1578,11 +1649,11 @@ object JVM2CL {
 
                   closureArgs(i) match {
 
-                    case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`.toString,i)) }
+                    case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i)) }
                     case GStaticInvoke(SMethodRef(SClassName(_), name, _, _, _), args) => {
                       for (j <- args) {
                         j match {
-                          case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`.toString,i)) }
+                          case GInstanceFieldRef(instBase, fieldRef) => { println(" Global Variable " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString); Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i)) }
                           case _ => {}
                         }
                       }
@@ -1758,6 +1829,9 @@ object JVM2CL {
     if (takesThis)
       paramTree += Formal(symtab.thisParam._2, symtab.thisParam._1)
 
+    if (symtab.params.size == 0)
+      println("\n\n PARAM SIZE of " + mangleName(m.getDeclaringClass.getName + m.getName) + " is 0\n\n")
+
     for (i <- 0 until symtab.params.size /* m.getParameterCount */ ) {
       symtab.params.get(i) match {
         case Some((id, typ)) => paramTree += Formal(typ, id)
@@ -1765,19 +1839,18 @@ object JVM2CL {
       }
     }
 
-    for (i <- Kernel.globalArgs) {
+    if (symtab.kernelMethod) { 
+      for (i <- Kernel.globalArgs) {
+        val (t: Tree, s: String) = translateType("global", i._2, i._1)
+        paramTree += Formal(t, s)
+      }
 
-      val (t: Tree, s: String) = translateType("global", i._2, i._1)
-      paramTree += Formal(t, s)
-
+      for (i <- Kernel.localArgs) {
+        val (t: Tree, s: String) = translateType("local", i._2, i._1)
+        paramTree += Formal(t, s)
+      }
     }
-
-    for (i <- Kernel.localArgs) {
-
-      val (t: Tree, s: String) = translateType("local", i._2, i._1)
-      paramTree += Formal(t, s)
-
-    }
+    
 
     for ((id: Id, typ: Tree) <- symtab.locals)
       varTree += VarDef(typ, id)
