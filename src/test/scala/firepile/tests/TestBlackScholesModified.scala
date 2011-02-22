@@ -10,7 +10,7 @@ import firepile.Marshaling._
 // import scala.math.exp
 import firepile.util.Math.{sqrt,log,exp,fabs}
 
-object TestBlackScholesModifiedNoInline {
+object TestBlackScholesModified {
   def main(args: Array[String]) = {
     val optionCount = if (args.length > 0) args(0).toInt * 1000000 else 4000000
     // val n = if (args.length > 1) args(1).toInt else 10
@@ -70,6 +70,7 @@ object TestBlackScholesModifiedNoInline {
     
 
     val CPOut = new Array[Float](S.length*2)
+    Kernel.output("CPOut")
 
     space.spawn {
       space.groups.foreach {
