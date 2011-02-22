@@ -2,7 +2,7 @@ package firepile
 
 import java.util.ArrayList
 import scala.collection.mutable.HashMap
-import soot.Type
+import soot.{Type => SootType}
 
 
 object Kernel {
@@ -43,8 +43,8 @@ var threads: Int =0
 var blocks: Int =0
 var level: Int = 1
 val src: String = ""
-val globalArgs = new ArrayList[(String,String,Int)]()
-val localArgs = new ArrayList[(String,String,Int)]()
+val globalArgs = new ArrayList[(String,SootType,Int)]()
+val localArgs = new ArrayList[(String,SootType,Int)]()
 val outputArgs = new ArrayList[String]()
 val time = new HashMap[String,Long]()
 
