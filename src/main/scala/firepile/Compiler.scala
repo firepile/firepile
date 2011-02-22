@@ -19,6 +19,7 @@ import java.util.ArrayList
 import java.nio.ByteBuffer
 
 // TODO: remove most of this.
+
 object Compiler {
   var numIterations = 16
 
