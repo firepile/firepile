@@ -11,6 +11,7 @@ import com.nativelibs4java.opencl.CLKernel
 import com.nativelibs4java.opencl.CLByteBuffer
 
 import compiler.JVM2CL.compileRoot
+import compiler.JVM2CL.compileMethod
 import compiler.JVM2CL.mangleName
 import compiler.JVM2CL.methodName
 
@@ -20,99 +21,6 @@ import java.nio.ByteBuffer
 // TODO: remove most of this.
 object Compiler {
   var numIterations = 16
-
-  val Header = ("\n" +
-    "struct Point1 {                                                                               \n" +
-    "  int x;                                                                                      \n" +
-    "};                                                                                            \n" +
-    "                                                                                              \n" +
-    "struct Point2 {                                                                               \n" +
-    "  int x;                                                                                      \n" +
-    "  int y;                                                                                      \n" +
-    "};                                                                                            \n" +
-    "                                                                                              \n" +
-    "struct Point3 {                                                                               \n" +
-    "  int x;                                                                                      \n" +
-    "  int y;                                                                                      \n" +
-    "  int z;                                                                                      \n" +
-    "};                                                                                            \n" +
-    "                                                                                              \n" +
-    "#define id1_threadIndex(p) p.x                                                                \n" +
-    "#define id2_threadIndex(p) (p.x * get_global_size(0) + p.y)                                   \n" +
-    "#define id3_threadIndex(p) (((p.x * get_global_size(0) + p.y) * get_global_size(1)) + p.z)    \n" +
-    "                                                                                              \n" +
-    "#define id1_blockIndex(p) p.x                                                                 \n" +
-    "#define id2_blockIndex(p) (p.x * get_num_groups(0) + p.y)                                     \n" +
-    "#define id3_blockIndex(p) (((p.x * get_num_groups(0) + p.y) * get_num_groups(1)) + p.z)       \n" +
-    "                                                                                              \n" +
-    "#define id1_localThreadIndex(p) p.x                                                           \n" +
-    "#define id2_localThreadIndex(p) (p.x * get_local_size(0) + p.y)                               \n" +
-    "#define id3_localThreadIndex(p) (((p.x * get_local_size(0) + p.y) * get_local_size(1)) + p.z) \n" +
-    "                                                                                              \n" +
-    "#define id1_thread  { get_global_id(0) }                                                      \n" +
-    "#define id2_thread  { get_global_id(0), get_global_id(1) }                                    \n" +
-    "#define id3_thread  { get_global_id(0), get_global_id(1), get_global_id(2) }                  \n" +
-    "                                                                                              \n" +
-    "#define id1_block  { get_group_id(0) }                                                        \n" +
-    "#define id2_block  { get_group_id(0), get_group_id(1) }                                       \n" +
-    "#define id3_block  { get_group_id(0), get_group_id(1), get_group_id(2) }                      \n" +
-    "                                                                                              \n" +
-    "#define id1_localThread  { get_local_id(0) }                                                  \n" +
-    "#define id2_localThread  { get_local_id(0), get_local_id(1) }                                 \n" +
-    "#define id3_localThread  { get_local_id(0), get_local_id(1), get_local_id(2) }                \n" +
-    "                                                                                              \n" +
-    "#define ARRAY_TYPE(Q,T) T ## Q ## _array                                                      \n" +
-    "#define ARRAY_DECL(Q,T) typedef struct { const int length; __ ## Q T *a; } ARRAY_TYPE(Q,T);   \n" +
-    "                                                                                              \n" +
-    "#define ARRAY_DECLS(Q)                                                                      \\\n" +
-    "ARRAY_DECL(Q, char)                                                                         \\\n" +
-    "ARRAY_DECL(Q, short)                                                                        \\\n" +
-    "ARRAY_DECL(Q, ushort)                                                                       \\\n" +
-    "ARRAY_DECL(Q, int)                                                                          \\\n" +
-    "ARRAY_DECL(Q, long)                                                                         \\\n" +
-    "ARRAY_DECL(Q, float)                                                                        \\\n" +
-    "ARRAY_DECL(Q, double)                                                                         \n" +
-    "                                                                                              \n" +
-    "ARRAY_DECLS(constant)                                                                         \n" +
-    "ARRAY_DECLS(global)                                                                           \n" +
-    "ARRAY_DECLS(local)                                                                            \n" +
-    "ARRAY_DECLS(private)                                                                          \n" +
-    "                                                                                              \n" +
-    "\n")
-
-  def generateMapKernel1(tree: Tree, kernelName: String): String = tree match {
-    case FunDef(returnType, name, List(Formal(formal, _)), _) => ("\n" +
-      "inline " + tree.toCL + "\n" +
-      "__kernel void " + kernelName + "(                                                           \n" +
-      "  __global const " + formal.toCL + "* a,                                                        \n" +
-      "  const int a_len,                                                                          \n" +
-      "  __global " + returnType.toCL + "* output,                                                 \n" +
-      "  const int output_len)                                                                     \n" +
-      "{                                                                                           \n" +
-      "  int i = get_global_id(0);                                                                 \n" +
-      "  if (i < output_len)                                                                       \n" +
-      "    output[i] = " + name + "(a[i]);                                                         \n" +
-      "}                                                                                           \n")
-    case _ => throw new RuntimeException("unexpected C AST " + tree.toCL)
-  }
-
-  def generateMapKernel2(tree: Tree, kernelName: String): String = tree match {
-    case FunDef(returnType, name, List(Formal(formal1, _), Formal(formal2, _)), _) => ("\n" +
-      "inline " + tree.toCL + "\n" +
-      "__kernel void " + kernelName + "(                                                           \n" +
-      "   __global const     " + formal1.toCL + "* a,                                                  \n" +
-      "   const int a_len,                                                                         \n" +
-      "   __global const     " + formal2.toCL + "* b,                                                  \n" +
-      "   const int b_len,                                                                         \n" +
-      "   __global " + returnType.toCL + "* output,                                                \n" +
-      "   const int output_len)                                                                    \n" +
-      "{                                                                                           \n" +
-      "   int i = get_global_id(0);                                                                \n" +
-      "   if (i < output_len)                                                                      \n" +
-      "     output[i] = " + name + "(a[i], b[i]);                                                  \n" +
-      "}                                                                                           \n")
-    case _ => throw new RuntimeException("unexpected C AST " + tree.toCL)
-  }
 
   def typeSig(t: java.lang.Class[_]): String = t match {
     case t if t == java.lang.Boolean.TYPE => "Z"
@@ -139,14 +47,14 @@ object Compiler {
 
       case Some(x: java.lang.reflect.Method) => {
 
-        compileRoot(src.getClass.getName, Compiler.signature(x))
+        compileMethod(src.getClass.getName, Compiler.signature(x))
 
         val lMethod = findLocalMethod(src.getClass.getName)
 
         lMethod match {
 
           case Some((x: java.lang.reflect.Method, cname2: String)) => {
-            compileRoot(cname2, Compiler.signature(x))
+            compileMethod(cname2, Compiler.signature(x))
             val kernelMethod = findKernelMethod(cname2)
 
             kernelMethod match {
@@ -243,6 +151,8 @@ object Compiler {
   def compileNew[A1, A2, A3](tuple: Tuple3[A1, A2, A3], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device) = {
 
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
+
+/*
 
     val implicitMarshal = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
     implicitMarshal.add((implicitly[Marshal[A1]], implicitly[Marshal[A1]].toBuffer(tuple._1).head, implicitly[Marshal[A1]].sizes(tuple._1).head, implicitly[Marshal[A1]].sizes(1).head, implicitly[Marshal[A1]].sizes(tuple._1).head / implicitly[Marshal[A1]].sizes(1).head))
@@ -363,6 +273,7 @@ object Compiler {
   case _ => println(" Wrong Index !!!"); null
   
    }
+*/
   
   }
  
@@ -455,6 +366,7 @@ object Compiler {
 
   def compileNew[A1, A2, A3, A4, A5](a: A1, b: A2, c: A3, d: A4, e: A5, kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], dev: Device) = {
 
+/*
     val transA1 = implicitly[Marshal[A1]]
     val transA2 = implicitly[Marshal[A2]]
     val transA3 = implicitly[Marshal[A3]]
@@ -465,9 +377,9 @@ object Compiler {
     val sizeA3 = transA3.sizes(1).head
     val sizeA4 = transA4.sizes(1).head
     val sizeA5 = transA5.sizes(1).head
-
+*/
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
-
+/*
     var bufA1: ByteBuffer = transA1.toBuffer(a).head
     var bufA2: ByteBuffer = null
     var bufA3: ByteBuffer = null
@@ -547,6 +459,7 @@ object Compiler {
       // [NN] maybe need to copy?  but, probably not
       Array.copy(transA1.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a.asInstanceOf[AnyRef], 0, numItemsA1)
     }, "From GPU")
+  */
     a
   }
 
@@ -569,82 +482,6 @@ object Compiler {
           return m
     }
     throw new RuntimeException("Could not find apply/" + arity + " method in " + k.getName)
-  }
-
-  def compileMapKernel1(src: Function1[_, _], kernelName: String): String = {
-    val k = src.getClass
-    val apply = findApplyMethod(src, 1)
-    val funs = compileRoot(k.getName, signature(apply)).reverse
-
-    if (funs.isEmpty)
-      throw new RuntimeException("Could not compile method in " + k.getName + "." + apply.getName)
-
-    funs.map {
-      case fd@FunDef(returnType, name, List(_), _) if (name.equals(methodName(apply))) => generateMapKernel1(fd, kernelName)
-      case fd => fd.toCL + "\n"
-    }.mkString("\n")
-  }
-
-  def compileMapKernel2(src: Function2[_, _, _], kernelName: String): String = {
-    val k = src.getClass
-    val apply = findApplyMethod(src, 2)
-    val funs = compileRoot(k.getName, signature(apply)).reverse
-
-    if (funs.isEmpty)
-      throw new RuntimeException("Could not compile method in " + k.getName + "." + apply.getName)
-
-    funs.map {
-      case fd@FunDef(returnType, name, List(_, _), _) if (name.equals(methodName(apply))) => generateMapKernel2(fd, kernelName)
-      case fd => fd.toCL + "\n"
-    }.mkString("\n")
-  }
-
-  def compileReduceKernel1(src: Function2[_, _, _], kernelName: String): String =
-    generateReduceKernel1(FunDef(ValueType("float"), Id("apply"), List(Formal(ValueType("float"), Id("x")), Formal(ValueType("float"), Id("y"))),
-      Return(Bin(Id("x"), "+", Id("y")))), kernelName)
-
-  def compileReduceKernel1(src: Function1[_, Function1[_, _]], kernelName: String): String =
-    generateReduceKernel1(FunDef(ValueType("float"), Id("apply"), List(Formal(ValueType("float"), Id("x")), Formal(ValueType("float"), Id("y"))),
-      Return(Bin(Id("x"), "+", Id("y")))), kernelName)
-
-  def generateReduceKernel1(tree: Tree, kernelName: String): String = tree match {
-    case FunDef(returnType, name, List(Formal(formal1, _), Formal(formal2, _)), _) => ("\n" +
-      "inline " + tree.toCL + "\n" +
-      "#define T " + returnType.toCL + "                                                  \n" +
-      "#define blockSize 128                                                              \n" +
-      "__kernel void " + kernelName + "(                                                  \n" +
-      "  __global const     T *g_idata, /* thread indexed */                                  \n" +
-      "  const int g_idata_length,                                                        \n" +
-      "  __global T *g_odata,       /* block indexed */                                   \n" +
-      "  const int g_odata_length,                                                        \n" +
-      "  __local T* sdata,          /* local thread indexed */                            \n" +
-      "  const int sdata_length) {                                                        \n" +
-      "   // perform first level of reduction,                                            \n" +
-      "   // reading from global memory, writing to local memory                          \n" +
-      "   unsigned int n = g_idata_length;                                                \n" +
-      "   unsigned int tid = get_local_id(0);                                             \n" +
-      "   unsigned int i = get_global_id(0);                                              \n" +
-      "                                                                                   \n" +
-      "   sdata[tid] = (i < n) ? g_idata[i] : 0;                                          \n" +
-      "                                                                                   \n" +
-      "   barrier(CLK_LOCAL_MEM_FENCE);                                                   \n" +
-      "                                                                                   \n" +
-      "   // do reduction in shared mem                                                   \n" +
-      "   #pragma unroll 1                                                                \n" +
-      "   for(unsigned int s=get_local_size(0)/2; s>0; s>>=1)                             \n" +
-      "   {                                                                               \n" +
-      "       if (tid < s && i+s < n)                                                     \n" +
-      "       {                                                                           \n" +
-      "           sdata[tid] = " + name + "(sdata[tid], sdata[tid+s]);                    \n" +
-      "       }                                                                           \n" +
-      "       barrier(CLK_LOCAL_MEM_FENCE);                                               \n" +
-      "   }                                                                               \n" +
-      "                                                                                   \n" +
-      "   // write result for this block to global mem                                    \n" +
-      "   if (tid == 0)                                                                   \n" +
-      "       g_odata[get_group_id(0)] = sdata[0];                                        \n" +
-      "}                                                                                  \n")
-    case _ => throw new RuntimeException("unexpected C AST " + tree.toCL)
   }
 
   var next = 0
