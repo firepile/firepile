@@ -436,6 +436,12 @@ object JVM2CL {
     // preamble += Id("#define unboxToFloat(x) x")
     preamble += Id("typedef int scala_Function2;\n")
 
+    // group/item description structs added to environment struct set and appened to preamble
+    envstructs.structs += ValueType("group_Desc") ->
+      List(StructDef("group_Desc", List(VarDef(IntType, Id("id")), VarDef(IntType, Id("size")))))
+    envstructs.structs += ValueType("item_Desc") ->
+      List(StructDef("item_Desc", List(VarDef(IntType, Id("id")), VarDef(IntType, Id("size")), VarDef(IntType, Id("globalId")))))
+
     val tree = preamble.toList ::: /* classtab.dumpClassTable ::: */ arraystructs.dumpArrayStructs ::: envstructs.dumpEnvStructs ::: functionDefs.values.toList ::: results.toList
 
     arraystructs.clearArrays
@@ -1427,7 +1433,7 @@ object JVM2CL {
 
           //g$1.<firepile.Group: scala.collection.immutable.List items()>()::<: int ()>::List()
 
-          case GInterfaceInvoke(_, SMethodRef(SClassName("scala.collection.SeqLike"), "size", _, _, _), _) => { println(" Got Local Size::"); return Call(Id("get_local_size"), IntLit(0)) }
+          case GInterfaceInvoke(_, SMethodRef(SClassName("scala.collection.SeqLike"), "size", _, _, _), _) => { println(" Got Local Size::"); return Select(Id("_item_desc"), Id("size")) }
 
           case GInterfaceInvoke(base, method, args) => base match {
 
@@ -1584,10 +1590,11 @@ object JVM2CL {
       // handle Id2, Id3, ...r1.
 
       case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => { println(" Got barrier here::"); return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))) }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => { println(" Got Item here::"); if (args.size > 0) return Some(Call(Id("get_local_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Call(Id("get_local_id"), IntLit(0))) }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { println(" Got Group here::"); if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Call(Id("get_group_id"), IntLit(0))) }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { println(" Got Global Size here::"); if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Call(Id("get_global_size"), IntLit(0))) }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => { println(" Got Global ID here::"); if (args.size > 0) return Some(Call(Id("get_global_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Call(Id("get_global_id"), IntLit(0))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => { println(" Got Item here::"); if (args.size > 0) return Some(Call(Id("get_local_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("id"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { println(" Got Group here::"); if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("id"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { println(" Got Global Size here::"); if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("size"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => { println(" Got Global ID here::"); if (args.size > 0) return Some(Call(Id("get_global_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("globalId"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => { println(" Got Local size here::"); if (args.size > 0) return Some(Call(Id("get_local_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("size"))) }
 
       case GVirtualInvoke(a, method, args) => { println("Generic Virtual Invoke:::" + a + "::" + method + ":::" + args) }
       case _ => ;
@@ -1854,6 +1861,20 @@ object JVM2CL {
 
     for ((id: Id, typ: Tree) <- symtab.locals)
       varTree += VarDef(typ, id)
+
+    // kernel methods need to populate group/item structs, later these may become parts of 
+    // environments of global and item
+    if (symtab.kernelMethod) {
+      varTree += VarDef(StructType("group_Desc"), Id("_group_desc"))
+      varTree += Assign(Select(Id("_group_desc"), Id("id")), Call(Id("get_group_id"), IntLit(0)))
+      varTree += Assign(Select(Id("_group_desc"), Id("size")), Call(Id("get_global_size"), IntLit(0)))
+      
+      varTree += VarDef(StructType("item_Desc"), Id("_item_desc"))
+      varTree += Assign(Select(Id("_item_desc"), Id("id")), Call(Id("get_local_id"), IntLit(0)))
+      varTree += Assign(Select(Id("_item_desc"), Id("size")), Call(Id("get_local_size"), IntLit(0)))
+      varTree += Assign(Select(Id("_item_desc"), Id("globalId")), Call(Id("get_global_id"), IntLit(0)))
+    }
+
 
     for (((id: Id), (typ: Tree, size: IntLit)) <- symtab.arrays)
       varTree += ArrayDef(id, typ, size)
