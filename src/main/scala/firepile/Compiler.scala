@@ -6,6 +6,8 @@ import firepile.Spaces._
 import firepile.tree.Trees._
 import firepile.Implicits._
 
+import soot.{Type => SootType}
+
 import com.nativelibs4java.opencl.CLMem
 import com.nativelibs4java.opencl.CLKernel
 import com.nativelibs4java.opencl.CLByteBuffer
@@ -149,7 +151,8 @@ object Compiler {
 
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
 
-/*
+    println("CL code:\n" + tree)
+
 
     val implicitMarshal = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
     implicitMarshal.add((implicitly[Marshal[A1]], implicitly[Marshal[A1]].toBuffer(tuple._1).head, implicitly[Marshal[A1]].sizes(tuple._1).head, implicitly[Marshal[A1]].sizes(1).head, implicitly[Marshal[A1]].sizes(tuple._1).head / implicitly[Marshal[A1]].sizes(1).head))
@@ -167,7 +170,7 @@ object Compiler {
 
       Kernel.globalArgs.get(i) match {
 
-        case (name: String, typ: String, index: Int) => {
+        case (name: String, typ: SootType, index: Int) => {
           for (j <- 0 until Kernel.outputArgs.size)
             if (name.startsWith(Kernel.outputArgs.get(j)))
               output = true
@@ -194,7 +197,7 @@ object Compiler {
  
             time({
 
-              typ match {
+              firepile.compiler.JVM2CL.translateType(typ).asInstanceOf[ValueType].name match {
               
               case "int" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Int])
               case "float" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Float])
@@ -270,7 +273,6 @@ object Compiler {
   case _ => println(" Wrong Index !!!"); null
   
    }
-*/
   
   }
  

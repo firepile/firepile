@@ -853,7 +853,7 @@ object JVM2CL {
     case _ => "Label"
   }
 
-  private def translateType(t: SootType): Tree = t match {
+  def translateType(t: SootType): Tree = t match {
     case t: SootVoidType => ValueType("void")
     case t: SootBooleanType => ValueType("int")
     case t: SootByteType => ValueType("char")
@@ -2022,9 +2022,11 @@ object JVM2CL {
         val (t: Tree, s: String) = translateType("local", i._2, i._1)
         paramTree += Formal(t, s)
       }
+      
+      println("#### globalArgs = " + Kernel.globalArgs.length)
+      println("#### localArgs = " + Kernel.localArgs.length)
     }
 
-    println("#### localArgs = " + Kernel.localArgs.length)
     
 
     for ((id: Id, typ: Tree) <- symtab.locals)
