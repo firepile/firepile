@@ -47,21 +47,17 @@ object Compiler {
     gMethod match {
 
       case Some(x: java.lang.reflect.Method) => {
-
+        Some((methodName(x), compileRoot(src.getClass.getName, Compiler.signature(x)).reverse))
+/*
         compileMethod(src.getClass.getName, Compiler.signature(x))
-
         val lMethod = findLocalMethod(src.getClass.getName)
 
         lMethod match {
-
           case Some((x: java.lang.reflect.Method, cname2: String)) => {
             compileMethod(cname2, Compiler.signature(x))
             val kernelMethod = findKernelMethod(cname2)
-
             kernelMethod match {
-
               case Some((x: java.lang.reflect.Method, cname3: String)) => {
-
                 return Some((methodName(x), compileRoot(cname3, Compiler.signature(x)).reverse))
               }
               case None => { println(" Not able to find the Kernel Code !!!"); return None }
@@ -69,12 +65,12 @@ object Compiler {
           }
           case None => { println(" Not able to find the method with Local variables !!!"); return None }
         }
+*/
       }
       case None => { println(" Not able to find the method with Global variables !!!"); return None }
     }
     //treeList.add(compileRoot(k3.getName, Compiler.signature(m)).reverse)
 
-    None
   }
 
   def findGlobalMethod(cname1: String, arity: Int): Option[java.lang.reflect.Method] = {
