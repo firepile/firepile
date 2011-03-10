@@ -149,9 +149,9 @@ object Compiler {
 
   def compileNew[A1, A2, A3](tuple: Tuple3[A1, A2, A3], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], dev: Device) = {
 
-    val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
+    println("CL code for kernel name " + kernName +" :\n" + tree)
 
-    println("CL code:\n" + tree)
+    val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
 
 
     val implicitMarshal = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
@@ -163,6 +163,7 @@ object Compiler {
     var maxInputSize: Int = 0
     var maxOutputItems: Int = 0
     var maxOutputSize: Int = 0
+    var numArrays: Int = 0
 
     for (i <- 0 until Kernel.globalArgs.size) {
 
@@ -181,29 +182,48 @@ object Compiler {
             val clBuf = dev.context.createByteBuffer(CLMem.Usage.Output, implicitMarshal.get(i)._3)
             outputBuffers.add(clBuf, implicitMarshal.get(i)._3, implicitMarshal.get(i)._1, index, implicitMarshal.get(i)._5)
             val nItems = implicitMarshal.get(i)._5
-		  if (nItems > maxOutputItems) {
-		    maxOutputItems = nItems
-		    maxOutputSize = implicitMarshal.get(i)._4
-		  }
+		  
+            if (nItems > maxOutputItems) {
+              maxOutputItems = nItems
+              maxOutputSize = implicitMarshal.get(i)._4
+            }
               
-            kernBin.setArg(i, clBuf)
+            kernBin.setArg(i+numArrays, clBuf)
           } else {
-          
-                        val nItems = implicitMarshal.get(i)._5
-	    		  if (nItems > maxInputItems) {
-	    		    maxInputItems = nItems
-	    		    maxInputSize = implicitMarshal.get(i)._4
-	    		  }
+            val nItems = implicitMarshal.get(i)._5
+            
+            if (nItems > maxInputItems) {
+              maxInputItems = nItems
+              maxInputSize = implicitMarshal.get(i)._4
+            }
  
             time({
 
-              firepile.compiler.JVM2CL.translateType(typ).asInstanceOf[ValueType].name match {
-              
-              case "int" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Int])
-              case "float" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Float])
-              case "long" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Long])
-              case "double" =>kernBin.setArg(i, get(tuple,i).asInstanceOf[Double])
-              case _ => kernBin.setArg(i, dev.context.createByteBuffer(CLMem.Usage.Input, implicitMarshal.get(i)._2, true))
+              // firepile.compiler.JVM2CL.translateType(typ).asInstanceOf[ValueType].name match {
+              firepile.compiler.JVM2CL.translateType(typ) match {
+                case ValueType("int") => kernBin.setArg(i+numArrays, get(tuple,i).asInstanceOf[Int])
+                case ValueType("float") => kernBin.setArg(i+numArrays, get(tuple,i).asInstanceOf[Float])
+                case ValueType("long") => kernBin.setArg(i+numArrays, get(tuple,i).asInstanceOf[Long])
+                case ValueType("double") => kernBin.setArg(i+numArrays, get(tuple,i).asInstanceOf[Double])
+                case StructType(typName) => typName.replace("Array", "") match {
+                  case "int" => {
+                    kernBin.setArg(i+numArrays, get(tuple,i).asInstanceOf[Array[Int]])
+                    numArrays += 1
+                    kernBin.setArg(i+numArrays, implicitMarshal.get(i)._4)
+                  }
+                  case "float" => {
+                    kernBin.setArg(i+numArrays, get(tuple,i).asInstanceOf[Array[Float]])
+                    numArrays += 1
+                    kernBin.setArg(i+numArrays, implicitMarshal.get(i)._4)
+                  }
+                  case "long" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Array[Long]])
+                  case "double" => kernBin.setArg(i, get(tuple,i).asInstanceOf[Array[Double]])
+                  case _ => throw new RuntimeException("Trying to setArg with unsupported array type")
+                }
+
+                case x => {
+                  kernBin.setArg(i, dev.context.createByteBuffer(CLMem.Usage.Input, implicitMarshal.get(i)._2, true))
+                }
         
               }
               
@@ -230,8 +250,8 @@ object Compiler {
         if (Kernel.localArgs.size > 0)
           kernBin.setLocalArg(3, threads * maxOutputSize)
         kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
-      } else {
 
+      } else {
         //println(" Setting default arguments ")
         if (Kernel.localArgs.size > 0)
           kernBin.setLocalArg(3, dev.memConfig.localMemSize * maxOutputSize)

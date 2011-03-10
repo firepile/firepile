@@ -54,7 +54,7 @@ class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld
     try {
       program = context.createProgram(src).build
     } catch {
-      case e => println(e)
+      case e => println("Compile error: " + e)
     }
 
     val kernel = program.createKernel(name)

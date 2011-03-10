@@ -345,7 +345,7 @@ object JVM2CL {
             }
             case x => List(x)
           })
-          KernelFunDef(Id(t.name), frmls, TreeSeq(popArrayStructs.toList), t.body) :: Nil
+          KernelFunDef(Id(t.name), frmls, TreeSeq(List(VarDef(StructType("kernel_ENV"), Id("_this_kernel"))) :::popArrayStructs.toList), t.body) :: Nil
         }
       }
     }
@@ -445,9 +445,11 @@ object JVM2CL {
       List(StructDef("firepile_Item", List(VarDef(IntType, Id("id")), VarDef(IntType, Id("size")), VarDef(IntType, Id("globalId")))))
 
     val preamblePostStructs = new ListBuffer[Tree]()
+    /* These can't be declared here 
     preamblePostStructs += VarDef(StructType("firepile_Group"), Id("_group_desc"))
     preamblePostStructs += VarDef(StructType("firepile_Item"), Id("_item_desc"))
     preamblePostStructs += VarDef(StructType("kernel_ENV"), Id("_this_kernel"))
+    */
 
 
     val tree = preamble.toList ::: /* classtab.dumpClassTable ::: */ arraystructs.dumpArrayStructs ::: envstructs.dumpEnvStructs ::: preamblePostStructs.toList ::: functionDefs.values.toList ::: results.toList
@@ -1611,7 +1613,8 @@ object JVM2CL {
                   }
 
                 }
-                Call(Id(methodName(applyM)), Id("NULL"))
+                // Call group function with group ID struct
+                Call(Id(methodName(applyM)), Ref(Id("_group_desc")), Id("_this_kernel"))
             }
             case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "items", _, _, _), _) => {
                 var applyM: SootMethod = null
@@ -1629,7 +1632,7 @@ object JVM2CL {
                   }
 
                 }
-                Call(Id(methodName(applyM)), Id("NULL"))
+                Call(Id(methodName(applyM)), Ref(Id("_item_desc")), Deref(Id("_arg0")), Id("_this_kernel"))
             }
             case x => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v + " --> " + x)
           }
@@ -1712,11 +1715,30 @@ object JVM2CL {
       // handle Id2, Id3, ...r1.
 
       case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => { println(" Got barrier here::"); return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))) }
+      case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => base match {
+                case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("id")))
+                case b: Local => return Some(Select(Deref(Id(b.getName)), Id("id")))
+                case _ => throw new RuntimeException("Getting size of some unknown collection")
+      }
+      /*
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => { println(" Got Item here::"); if (args.size > 0) return Some(Call(Id("get_local_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("id"))) }
+      */
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { println(" Got Group here::"); if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("id"))) }
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { println(" Got Global Size here::"); if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("size"))) }
+      /*
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => { println(" Got Global ID here::"); if (args.size > 0) return Some(Call(Id("get_global_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("globalId"))) }
       case GVirtualInvoke(base: Local, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => { println(" Got Local size here::"); if (args.size > 0) return Some(Call(Id("get_local_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id(base.getName), Id("size"))) }
+      */
+      case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => base match {
+                case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("globalId")))
+                case b: Local => return Some(Select(Deref(Id(b.getName)), Id("globalId")))
+                case _ => throw new RuntimeException("Getting size of some unknown collection")
+      }
+      case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => base match {
+                case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("size")))
+                case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
+                case _ => throw new RuntimeException("Getting size of some unknown collection")
+      }
 
       case GVirtualInvoke(a, method, args) => { println("Generic Virtual Invoke:::" + a + "::" + method + ":::" + args) }
       case _ => ;
@@ -2012,6 +2034,25 @@ object JVM2CL {
       }
     }
 
+    // Check "this" position for group or item struct types to add appropriate formals 
+    paramTree.headOption match {
+      case Some(Formal(PtrType(StructType("firepile_Group")), _)) => {
+        println("THIS IS THE Group Method")
+        paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
+        varTree += VarDef(StructType("firepile_Item"), Id("_item_desc"))
+        varTree += Assign(Select(Id("_item_desc"), Id("id")), Call(Id("get_local_id"), IntLit(0)))
+        varTree += Assign(Select(Id("_item_desc"), Id("size")), Call(Id("get_local_size"), IntLit(0)))
+        varTree += Assign(Select(Id("_item_desc"), Id("globalId")), Call(Id("get_global_id"), IntLit(0)))
+      }
+      case Some(Formal(PtrType(StructType("firepile_Item")), _)) => {
+        println("THIS IS THE Item Method")
+        paramTree += Formal(StructType("firepile_Group"), Id("_group_desc"))
+        paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
+      }
+      case None => {}
+      case _ => {}
+    }
+
     if (symtab.kernelMethod) { 
       for (i <- Kernel.globalArgs) {
         val (t: Tree, s: String) = translateType("global", i._2, i._1)
@@ -2035,12 +2076,9 @@ object JVM2CL {
     // kernel methods need to populate group/item structs, later these may become parts of 
     // environments of global and item
     if (symtab.kernelMethod) {
+      varTree += VarDef(StructType("firepile_Group"), Id("_group_desc"))
       varTree += Assign(Select(Id("_group_desc"), Id("id")), Call(Id("get_group_id"), IntLit(0)))
       varTree += Assign(Select(Id("_group_desc"), Id("size")), Call(Id("get_global_size"), IntLit(0)))
-      
-      varTree += Assign(Select(Id("_item_desc"), Id("id")), Call(Id("get_local_id"), IntLit(0)))
-      varTree += Assign(Select(Id("_item_desc"), Id("size")), Call(Id("get_local_size"), IntLit(0)))
-      varTree += Assign(Select(Id("_item_desc"), Id("globalId")), Call(Id("get_global_id"), IntLit(0)))
     }
 
 
