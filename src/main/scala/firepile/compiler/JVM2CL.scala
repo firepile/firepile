@@ -343,6 +343,10 @@ object JVM2CL {
                 case x => Nil
               }
             }
+            case x@Formal(MemType(_,ValueType(typ)), name) => {
+              popArrayStructs += Assign(Select(Id("_this_kernel"), Id(name)), Id(name))
+              List(x)
+            }
             case x => List(x)
           })
           KernelFunDef(Id(t.name), frmls, TreeSeq(List(VarDef(StructType("kernel_ENV"), Id("_this_kernel"))) :::popArrayStructs.toList), t.body) :: Nil
@@ -1502,7 +1506,7 @@ object JVM2CL {
                 case _ => throw new RuntimeException("Getting size of some unknown collection")
               }
               */
-              Select(Id("_group_desc"), Id("size"))
+              Select(Deref(Id("item")), Id("size"))
           }
 /*
               return Select(Id(base.getBase.asInstanceOf[soot.grimp.internal.GInstanceFieldRef].toString /*getBase.asInstanceOf[Local].getName*/), Id("size")) }

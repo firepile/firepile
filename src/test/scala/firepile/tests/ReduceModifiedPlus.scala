@@ -27,7 +27,7 @@ object ReduceModifiedPlus {
  
   def main(args: Array[String]) = {
 
-  if (args.length > 0) NUM_ITEMS= if (args.length > 0) (1 << args(0).toInt) else ( 1 << 20)
+  // if (args.length > 0) NUM_ITEMS= if (args.length > 0) (1 << args(0).toInt) else ( 1 << 20)
   run
   	
   }
@@ -50,6 +50,8 @@ def reduceModified(idata: Array[Float])
   val space=dev.defaultPaddedPartition(idata.length)
   //dev.setWorkSizes(NUM_ITEMS, space.blocks)
  val odata = new Array[Float](space.blocks)
+ // val odata = new Array[Float](64)
+ println("Block size = " + space.blocks)
  val n = idata.length
  Kernel.output("odata")
  
@@ -61,33 +63,34 @@ def reduceModified(idata: Array[Float])
         val sdata = Array.ofDim[Float](g.items.size)  
    
         g.items.foreach {
-           item=> { 
+          item => { 
            
-           val j = g.id * (g.items.size * 2) + item.id  
+            val i = g.id * (g.items.size * 2) + item.id  
            
-           if (j < n) sdata(item.id)= idata(j) 
-           else sdata(item.id) =0f
+            if (i < n) sdata(item.id) = idata(i) 
+            else sdata(item.id) = 0f
  
-          if (j + g.items.size < n)
-             sdata(item.id) += idata(j + g.items.size)
+            if (i + g.items.size < n)
+              sdata(item.id) += idata(i + g.items.size)
  
-           g.barrier
+            g.barrier
  
-        var k = g.items.size / 2
-        
-        while ( k > 0 ) {
-       	    if (item.id < k)
+            var k = g.items.size / 2
+            
+            while ( k > 0 ) {
+              if (item.id < k)
 	        sdata(item.id) += sdata(item.id + k)
-             g.barrier
-             k>>=1
-          }
+               g.barrier
+              k>>=1
+            }
+
           
-      if (item.id == 0) 
-        odata(g.id) = sdata(0)
+            if (item.id == 0) 
+              odata(g.id) =  sdata(0)
           }
         }
-       }
       }
+    }
      // odata escapes -- so need to pass in to the generated kernel 
      (odata,idata,n)
      
