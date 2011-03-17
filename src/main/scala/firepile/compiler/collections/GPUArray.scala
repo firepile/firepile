@@ -31,7 +31,8 @@
 	       mapper(A, B)
      }
      */
-     
+
+     /*
      def reduce(A: Array[Float]): Float = {
          implicit val gpu: Device = firepile.gpu
      
@@ -84,6 +85,7 @@
      def mapKernel(f: A=>B): Kernel2[BBArray[A], BBArray[B]] = { } 
      */
    }
+   */
 
 /*
    class GPUArray[A](a: BBArray[A]) {
@@ -109,9 +111,9 @@
      }
      
      */
-    
+*/    
    }
-*/
+
   
   /*
    //kinda want this:
