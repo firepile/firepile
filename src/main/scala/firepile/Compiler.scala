@@ -251,15 +251,12 @@ object Compiler {
             
             firepile.compiler.JVM2CL.translateType(typ) match {
               case StructType(typeName) if typeName.endsWith("Array") => {
-                println("Setting arg: " + (i+numArrays))
                 kernBin.setArg(i+numArrays, clBuf)
                 numArrays += 1
 
-                println("Setting arg: " + (i+numArrays) + " to " + nItems)
                 kernBin.setArg(i+numArrays, nItems)
               }
               case _ => {
-                println("Setting arg: " + (i+numArrays))
                 kernBin.setArg(i+numArrays, clBuf)
               }
             }
@@ -276,7 +273,6 @@ object Compiler {
 
               firepile.compiler.JVM2CL.translateType(typ) match {
                 case ValueType("int") => {
-                  println("Setting arg: " + (i+numArrays) + " to " + data.asInstanceOf[Int])
                   kernBin.setArg(i+numArrays, data.asInstanceOf[Int])
                 }
                 case ValueType("float") => kernBin.setArg(i+numArrays, data.asInstanceOf[Float])
@@ -284,18 +280,14 @@ object Compiler {
                 case ValueType("double") => kernBin.setArg(i+numArrays, data.asInstanceOf[Double])
                 case StructType(typName) => typName.replace("Array", "") match {
                   case "int" => {
-                    println("Setting arg: " + (i+numArrays))
                     kernBin.setArg(i+numArrays, data.asInstanceOf[Array[Int]])
                     numArrays += 1
-                    println("Setting arg: " + (i+numArrays))
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "float" => {
-                    println("Setting arg: " + (i+numArrays))
                     kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
 //                    println("First item of float buffer: " + marshalInfo.get(1)._2.asFloatBuffer.get(0).asInstanceOf[Float])
                     numArrays += 1
-                    println("Setting arg: " + (i+numArrays) + " to size " + nItems)
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "long" => {
@@ -312,7 +304,6 @@ object Compiler {
                 }
 
                 case x => {
-                  println("Setting arg: " + (i+numArrays))
                   kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                 }
         
@@ -339,9 +330,7 @@ object Compiler {
         if (dev.memConfig == null) {
 
           if (Kernel.localArgs.size > 0) {
-            println("Setting arg: " + (3+numArrays) + " to " + (threads * maxOutputSize))
             kernBin.setLocalArg(3 + numArrays, threads * maxOutputSize)
-            println("Setting arg: " + (3+numArrays+1) + " to " + threads)
             kernBin.setArg(3 + numArrays + 1, threads)
           }
           kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
@@ -349,7 +338,6 @@ object Compiler {
         } else {
           //println(" Setting default arguments ")
           if (Kernel.localArgs.size > 0) {
-            println("Setting arg: " + (3+numArrays))
             kernBin.setLocalArg(3 + numArrays, dev.memConfig.localMemSize * maxOutputSize)
             kernBin.setArg(3 + numArrays + 1, dev.memConfig.localMemSize)
           }
@@ -363,7 +351,6 @@ object Compiler {
           outputBuffers.get(i) match {
             case (clBuf: CLByteBuffer, totalSize : Int, marshal: Marshal[_], index: Int, items: Int) => {
               val (data, _) = tuple(index)
-              println(" total Size::"+ totalSize + " items ::"+ items)
               val bufOut = allocDirectBuffer(totalSize)
               clBuf.read(dev.queue, bufOut, true)
               bufOut.rewind

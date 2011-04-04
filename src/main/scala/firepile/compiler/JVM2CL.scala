@@ -182,22 +182,23 @@ object JVM2CL {
         + ":.:tests:examples:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
 
     // Manually add basic classes to scene for testing VirtualInvoke
-    Scene.v.addBasicClass("VirtualInvokeA")
-    Scene.v.addBasicClass("VirtualInvokeB")
-    Scene.v.addBasicClass("VirtualInvokeC")
-    Scene.v.addBasicClass("VirtualInvokeX")
-    Scene.v.addBasicClass("Point")
-    Scene.v.addBasicClass("Point1D")
-    Scene.v.addBasicClass("Point2D")
-    Scene.v.addBasicClass("Point3D")
+//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeA")
+//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeB")
+//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeC")
+//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeX")
+//    Scene.v.addBasicClass("Point")
+//    Scene.v.addBasicClass("Point1D")
+//    Scene.v.addBasicClass("Point2D")
+//    Scene.v.addBasicClass("Point3D")
 
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
     Options.v.setPhaseOption("jb", "use-original-names:true")
     Options.v.setPhaseOption("cg", "safe-forname:false")
+    Options.v.set_full_resolver(true)
     // you can set context-sensitivity of call graph with this (more time consuming)
     // Options.v.setPhaseOption("cg", "context:1cfa")
-    //Options.v.setPhaseOption("cg", "verbose:true")
+    Options.v.setPhaseOption("cg", "verbose:true")
 
     Options.v.set_allow_phantom_refs(true)
     if (makeCallGraph)
@@ -256,6 +257,7 @@ object JVM2CL {
 
   case class CompileMethodTask(method: SootMethodRef, takesThis: Boolean, anonFuns: List[(Int, Value)]) extends Task {
     def run = {
+      println("CompileMethodTask.run")
       val m = method
       val anonFunsLookup = new HashMap[String, Value]()
 
@@ -285,6 +287,7 @@ object JVM2CL {
         // println("RETURNING BODY FOR METHOD NAME: " + m.name)
         compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
           case null => Nil
+          case t if takesThis => FunDef(t.typ, t.name, Formal(PtrType(Id(mangleName(m.declaringClass.getName))), Id("_this")) :: t.formals, t.body) :: Nil
           case t => t :: Nil
         }
       }
@@ -293,6 +296,7 @@ object JVM2CL {
 
   case class CompileRootMethodTask(method: SootMethodRef, takesThis: Boolean, anonFuns: List[(Int, Value)]) extends Task {
     def run = {
+      println("CompileRootMethodTask.run()")
       val m = method
       val anonFunsLookup = new HashMap[String, Value]()
       kernelMethod = true
@@ -367,11 +371,11 @@ object JVM2CL {
     }
 
     // Retrieve the method and its body
-    // println(" Method Iterator ")
+    println(" Method Iterator ")
     for (m <- c.methodIterator) {
-      // println("m.getName" + m.getName)
+      println("m.getName " + m.getName)
       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-      // println("trying " + sig)
+      println("trying " + sig)
       if (sig.equals(methodSig)) {
         worklist += CompileRootMethodTask(m.makeRef, false, null)
       }
@@ -456,7 +460,7 @@ object JVM2CL {
     */
 
 
-    val tree = preamble.toList ::: /* classtab.dumpClassTable ::: */ arraystructs.dumpArrayStructs ::: envstructs.dumpEnvStructs ::: preamblePostStructs.toList ::: functionDefs.values.toList ::: results.toList
+    val tree = preamble.toList :::  arraystructs.dumpArrayStructs ::: envstructs.dumpEnvStructs ::: preamblePostStructs.toList ::: classtab.dumpClassTable ::: functionDefs.values.toList ::: results.toList
 
     arraystructs.clearArrays
     envstructs.clearEnvs
@@ -714,7 +718,7 @@ object JVM2CL {
     def addClass(cls: SootClass) = {
       // HACK to ignore Java classes for now
       if (!knownClasses.contains(cls) && !cls.getName.startsWith("java.")) {
-        enumElements += Id(cls.getName + "_ID")
+        enumElements += Id(mangleName(cls.getName) + "_ID")
 
         val sSig = if (cls.getName.contains("$")) getScalaJavaSignature(cls.getName, cls)
         else getScalaSignature(cls.getName)
@@ -730,14 +734,14 @@ object JVM2CL {
             case NamedTyp(name: String) if name.equals("java.lang.Object") => false
             case _ => true
           }).map(st => st match {
-            case NamedTyp(n: String) => VarDef(StructType(n), Id("_" + n))
-            case InstTyp(base: NamedTyp, _) => VarDef(StructType(base.name), Id("_" + base.name))
+            case NamedTyp(n: String) => VarDef(StructType(mangleName(n)), Id("_" + mangleName(n)))
+            case InstTyp(base: NamedTyp, _) => VarDef(StructType(mangleName(base.name)), Id("_" + mangleName(base.name)))
             case _ => VarDef(Id("UNKNOWN"), Id("_UNKNOWN"))
           })
 
-          val struct = StructDef(Id(cls.getName), VarDef(IntType, Id("__id")) :: superTypeStructs ::: scalaSig.head.fields.map(f => VarDef(translateType(f), f.name)))
+          val struct = StructDef(Id(mangleName(cls.getName)), VarDef(IntType, Id("__id")) :: superTypeStructs ::: scalaSig.head.fields.map(f => VarDef(translateType(f), f.name)))
           // maybe we should also call addClass on list returned from getDirectSubclassesOf(cls)
-          val union = UnionDef(Id(cls.getName + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => VarDef(StructType(sc.getName), Id("_" + sc.getName))).toList)
+          val union = UnionDef(Id(mangleName(cls.getName) + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => VarDef(StructType(mangleName(sc.getName)), Id("_" + mangleName(sc.getName)))).toList)
 
           knownClasses += cls -> (struct, union)
         } catch {
@@ -1364,13 +1368,13 @@ object JVM2CL {
                       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
                       // println("Checking method: " + sig + " against " + methodSig)
                       if (sig.equals(methodSig)) {
-                        // println("Adding CompileMethodTask(" + method + ", " + pr + ")")
+                        println("Adding CompileMethodTask(" + method + ", " + pr + ")")
                         if (args.length > 0)
-                          worklist += CompileMethodTask(method, true, anonFunParams.toList)
+                          worklist += CompileMethodTask(m, true, anonFunParams.toList)
                         else
-                          worklist += CompileMethodTask(method, true)
+                          worklist += CompileMethodTask(m, true)
                         methodReceiversRef += m
-                        // classtab.addClass(pr)
+                        classtab.addClass(pr)
                       }
                     }
                   }
@@ -1479,14 +1483,14 @@ object JVM2CL {
 
                   val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
 
-                  val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mr._1.getName + "_ID"), TreeSeq(Return(Call(Id(mr._2), (Cast(PtrType(Id(mr._1.getName + "_intr")), Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
+                  val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mangleName(mr._1.getName) + "_ID"), TreeSeq(Return(Call(Id(mangleName(mr._2)), (Cast(PtrType(Id(mangleName(mr._1.getName) + "_intr")), Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
 
                   // add appropriate formal parameters for call
-                  worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString), Id("dispatch_" + method.declaringClass.getName), Formal(PtrType(Id(method.declaringClass.getName + "_intr")), "cls") :: methodFormals, List(switchStmt).toArray: _*))
+                  worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString), Id("dispatch_" + mangleName(method.declaringClass.getName)), Formal(PtrType(Id(mangleName(method.declaringClass.getName) + "_intr")), "cls") :: methodFormals, List(switchStmt).toArray: _*))
 
                   // FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray:_*)
                   // Call(Id("unimplemented: call to " + methodName(method)), TreeSeq())
-                  Call(Id("dispatch_" + method.declaringClass.getName), Id(base.asInstanceOf[Local].getName) :: argsToPass)
+                  Call(Id("dispatch_" + mangleName(method.declaringClass.getName)), Id(base.asInstanceOf[Local].getName) :: argsToPass)
                 }
 
               }
@@ -1650,7 +1654,7 @@ object JVM2CL {
                 symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
             }
             case _ => {
-              if (anonFuns.contains(name))
+              if (anonFuns != null && anonFuns.contains(name))
                 translateExp(anonFuns(name), symtab, anonFuns)
               else
                 symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
@@ -1968,6 +1972,7 @@ object JVM2CL {
 
   // TODO: pass in anonFuns.  Lookup base in the anonFuns map to get a more precise type.
   private def getPossibleReceivers(base: Value, method: SootMethodRef) = {
+    Scene.v.loadDynamicClasses
     if (Modifier.isFinal(method.declaringClass.getModifiers)) {
       method.declaringClass :: Nil
     } else if (Modifier.isFinal(method.resolve.getModifiers)) {
@@ -1983,7 +1988,28 @@ object JVM2CL {
           val result = ListBuffer[SootClass]()
 
           val methodSig = method.name + soot.AbstractJasminClass.jasminDescriptorOf(method)
-          val H = Scene.v.getActiveHierarchy
+
+          val classesInPkg = getClassesInPackage(t.getSootClass.getPackageName)
+
+          for (c <- classesInPkg) {
+            println("Class found: " + c.getName + ", adding to Scene")
+            // Scene.v.addBasicClass(c.getName, SootClass.HIERARCHY)
+            //Scene.v.loadBasicClasses
+            //for (m <- Scene.v.loadClass(c.getName, SootClass.HIERARCHY).methodIterator)
+            //  println(c.getName + " has method " + m.getName)
+            // Scene.v.loadClass(c.getName, SootClass.HIERARCHY)
+            
+            // Scene.v.addBasicClass(c.getName, SootClass.SIGNATURES)
+           
+            
+            // Scene.v.tryLoadClass(c.getName, SootClass.HIERARCHY)
+            // Scene.v.tryLoadClass(c.getName, SootClass.SIGNATURES)
+            // Scene.v.tryLoadClass(c.getName, SootClass.BODIES)
+            Scene.v.forceResolve(c.getName, SootClass.BODIES) 
+            // soot.SootResolver.v.resolveClass(c.getName, SootClass.SIGNATURES) 
+          }
+
+          val H = Scene.v.getActiveHierarchy          
 
           val queue = new Queue[SootClass]()
           queue += t.getSootClass
@@ -2007,13 +2033,20 @@ object JVM2CL {
               result += c
             }
 
-            queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
+            // queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
+            println("Getting subclasses of " + c.getName + " through package name " + c.getPackageName)
+
+
+            queue ++= H.getSubclassesOf(c).asInstanceOf[java.util.List[SootClass]].toList
+
+            for (i <- queue)
+              println("Subclass found: " + i)
           }
 
           if (result.isEmpty)
             method.declaringClass :: Nil
           else
-            result.toList
+            result.distinct.toList
         }
 
         case _ => Nil
@@ -2090,5 +2123,59 @@ object JVM2CL {
       varTree += ArrayDef(id, typ, size)
 
     FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray: _*)
+  }
+
+  // Adapted from http://snippets.dzone.com/posts/show/4831
+  def getClassesInPackage(pkgName: String): List[java.lang.Class[_]] = {
+    val classLoader = Thread.currentThread.getContextClassLoader
+
+    val path = pkgName.replace('.', '/')
+    val resources = classLoader.getResources(path)
+
+    val dirs = new ListBuffer[java.io.File]()
+
+    for (r <- resources) {
+      val fileName = r.getFile
+      val fileNameDecoded = java.net.URLDecoder.decode(fileName, "UTF-8")
+      dirs += new java.io.File(fileNameDecoded)
+    }
+
+    val classes = new ListBuffer[java.lang.Class[_]]()
+
+    for (d <- dirs)
+      classes ++= findClasses(d, pkgName)
+
+    classes.toList
+  }
+
+  def findClasses(directory: java.io.File, pkgName: String): ListBuffer[java.lang.Class[_]] = {
+    val classes = new ListBuffer[java.lang.Class[_]]()
+
+    if (!directory.exists)
+      return classes
+
+    val files = directory.listFiles
+
+    for (file <- files) {
+      val fileName = file.getName
+      if (file.isDirectory)
+        classes ++= findClasses(file, pkgName + "." + fileName)
+      else if (fileName.endsWith(".class") && !fileName.contains("$")) {
+        var _class: java.lang.Class[_] = null
+
+        try {
+          _class = java.lang.Class.forName(pkgName + "." + fileName.substring(0, fileName.length-6))
+        }
+        catch {
+          case e: ExceptionInInitializerError => {
+       	  _class = java.lang.Class.forName(pkgName + '.' + fileName.substring(0, fileName.length-6),
+            false, Thread.currentThread.getContextClassLoader)
+          }
+        }
+        classes += _class
+      }
+    }
+
+    classes
   }
 }
