@@ -247,7 +247,7 @@ object JVM2CL {
   case class CompileMethodTree(t: Tree) extends Task {
     def run = {
       t match {
-        case FunDef(_, name, _, _) if name.startsWith("firepile_util_Unsigned") => Nil
+        case FunDef(_, name, _, _) if name.startsWith("firepile_util_") => Nil
         case _ => List(compileMethod(t))
       }
     }
@@ -281,7 +281,7 @@ object JVM2CL {
 
       println("TASK RUN ON METHOD NAME: " + m.name + " declaring Class::" + m.declaringClass.getName)
       // m.declaringClass.getName.startsWith("init") removed 
-      if (m.declaringClass.getName.startsWith("java.lang") || m.declaringClass.getName.startsWith("firepile.Spaces") || m.declaringClass.getName.startsWith("scala.runtime") || m.declaringClass.getName.startsWith("scala.Product") || m.declaringClass.getName.startsWith("firepile.util.Unsigned"))
+      if (m.declaringClass.getName.startsWith("java.lang") || m.declaringClass.getName.startsWith("firepile.Spaces") || m.declaringClass.getName.startsWith("scala.runtime") || m.declaringClass.getName.startsWith("scala.Product") || m.declaringClass.getName.startsWith("firepile.util"))
         Nil
       else {
         // println("RETURNING BODY FOR METHOD NAME: " + m.name)
@@ -346,6 +346,10 @@ object JVM2CL {
                 }
                 case x => Nil
               }
+            }
+            case x@Formal(ConstType(ValueType(typ)), name) => {
+              popArrayStructs += Assign(Select(Id("_this_kernel"), Id(name)), Id(name))
+              List(x)
             }
             case x@Formal(MemType(_,ValueType(typ)), name) => {
               popArrayStructs += Assign(Select(Id("_this_kernel"), Id(name)), Id(name))
@@ -883,6 +887,7 @@ object JVM2CL {
         case "firepile.Spaces$Point1" => IntType
         case "firepile.Spaces$Id1" => StructType(mangleName(t.toString))
         case "firepile.util.Unsigned$UInt" => ValueType("unsigned int")
+        case "firepile.util.BufferBackedArray$BBArray" => { arraystructs.addStruct(ValueType("UNKOWN")) }
         case _ => PtrType(StructType(mangleName(t.toString)))
       }
     }
@@ -917,7 +922,8 @@ object JVM2CL {
         case "local" => (StructType("l_" + n), mangleName(name))
         case "global" => (StructType("g_" + n), mangleName(name))
       }
-      case _ => (MemType(memType, translateType(typ)), mangleName(name))
+      case _ => (ConstType(translateType(typ)), mangleName(name))
+      // case _ => (MemType(memType, translateType(typ)), mangleName(name))
   }
 
   private def translateType(t: ScalaVarDef): Tree = t.fieldScalaType match {
@@ -1744,6 +1750,12 @@ object JVM2CL {
       }
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => base match {
                 case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("size")))
+                case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
+                case _ => throw new RuntimeException("Getting size of some unknown collection")
+      }
+
+      case GVirtualInvoke(base, SMethodRef(SClassName("firepile.util.BufferBackedArray$BBArray"), "update", _, _, _), args) => base match {
+                case b: soot.grimp.internal.GInstanceFieldRef => return Some(ArrayAccess(Id(mangleName(b.getField.getName)), translateExp(args(0),symtab,anonFuns)))
                 case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
                 case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
