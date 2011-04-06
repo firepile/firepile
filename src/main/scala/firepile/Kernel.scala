@@ -33,7 +33,7 @@ for( i <- time.keys){
 val t = time.get(i)
 t match {
 
-case Some(l: Long) => println(" Time for ::"+ i +"  is ::"+ l/1000000000. +" seconds ")
+case Some(l: Long) => println(" Time for ::"+ i +"  is ::"+ l/1000000. +" Milli seconds ")
 case _ => { } 
   }
  }

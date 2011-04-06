@@ -115,7 +115,7 @@ package object firepile {
       }
       finally {
         val t1 = System.nanoTime
-        println(label + " time = " + ((t1 - t0) / 1000000000.) / iterations)
+        println(label + " time = " + ((t1 - t0) / 1000000.) / iterations)
         Kernel.setTime(label,(t1-t0))
       }
     }
