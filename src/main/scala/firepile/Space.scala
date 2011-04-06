@@ -49,7 +49,7 @@ val sizeA2 = transA2.sizes(1).head
 
     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
 
-    val kernArgs = time(firepile.Compiler.findAllMethods(f, 3), "Compile")
+    val kernArgs = time(firepile.Compiler.findAllMethods(f, 3, List(m1, m2, m3)), "Compile")
     
     kernArgs match {
     
@@ -59,7 +59,7 @@ val sizeA2 = transA2.sizes(1).head
 						       for (t: Tree <- treeList.reverse)
 							kernStr.append(t.toCL)
 							
-						       firepile.Compiler.compileNew(fvals,kernName,kernStr.toString)(m1,m2,m3,dev) 
+						       firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 
 						       Kernel.printTime
 						      }
                                                   
@@ -76,7 +76,7 @@ val sizeA2 = transA2.sizes(1).head
  
      //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
  
-     val kernArgs = time(firepile.Compiler.findAllMethods(f, 4), "Compile")
+     val kernArgs = time(firepile.Compiler.findAllMethods(f, 4, List(m1, m2, m3, m4)), "Compile")
      
      kernArgs match {
      
@@ -104,7 +104,7 @@ val sizeA2 = transA2.sizes(1).head
 
     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
 
-    val kernArgs = time(firepile.Compiler.findAllMethods(f, 5), "Compile")
+    val kernArgs = time(firepile.Compiler.findAllMethods(f, 5, List(m1, m2, m3, m4, m5)), "Compile")
     println("findAllmethods done")
     
     kernArgs match {

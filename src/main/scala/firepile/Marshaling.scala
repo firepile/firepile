@@ -13,7 +13,7 @@ object Marshaling {
     def sizes(len: Int): List[Int]
     def align: Int
     // require(align <= size)
-
+    def fixedSizeMarshalMM: FixedSizeMarshal[_]
     def toBuffer(x: A): List[ByteBuffer]
     def fromBuffer(b: List[ByteBuffer]): A
   }
@@ -33,6 +33,7 @@ object Marshaling {
 
   implicit def MM[A:FixedSizeMarshal] = new Marshal[A] {
     lazy val size = implicitly[FixedSizeMarshal[A]].size
+    def fixedSizeMarshalMM = fixedSizeMarshal[A]
     def sizes(a: A) = size :: Nil
     def sizes(len: Int) = size :: Nil
     def align = implicitly[FixedSizeMarshal[A]].align

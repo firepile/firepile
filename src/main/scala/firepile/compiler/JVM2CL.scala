@@ -75,6 +75,8 @@ import soot.jimple.{
   StringConstant
 }
 import firepile.compiler.GrimpUnapply._
+import firepile.Marshaling._
+import firepile.BBArrayMarshal
 
 import scala.collection.mutable.HashMap
 
@@ -88,7 +90,7 @@ object JVM2CL {
     val className = args(0)
     val methodSig = args(1)
 
-    val tree = compileRoot(className, methodSig)
+    val tree = compileRoot(className, methodSig, List[Marshal[_]]())
 
     println("Printing tree")
     for (t <- tree) println(t.toCL)
@@ -99,11 +101,30 @@ object JVM2CL {
   private val makeCallGraph = true
   private var activeHierarchy: Hierarchy = null
   private var ids = Array(false, false, false)
+  private var argsByIndex = new ListBuffer[(Boolean,Tree)]()
 
   setup
 
-  def compileRoot(className: String, methodSig: String): List[Tree] = {
+  def compileRoot(className: String, methodSig: String, argMarshals: List[Marshal[_]]): List[Tree] = {
     println("compiling " + className + "." + methodSig)
+    println("arg types: " + argMarshals.map(am => am match {
+        case bbm: BBArrayMarshal[_] => "BB:" + bbm.fixedSizeMarshalMM.manifest
+        case fsm: { def fixedSizeMarshalMM: FixedSizeMarshal[_] } => "FM:" + fsm.fixedSizeMarshalMM.manifest
+        case x => "unknown marshal " + x
+      }))
+
+    for (am <- argMarshals) {
+      // Need to add a case for regular Scala Array??
+      am match {
+        case bbm: BBArrayMarshal[_] => {
+          argsByIndex += Tuple2(true, translateType(bbm.fixedSizeMarshalMM.manifest.toString))
+        }
+        case fsm: { def fixedSizeMarshalMM: FixedSizeMarshal[_] } => argsByIndex += Tuple2(false, translateType(fsm.fixedSizeMarshalMM.manifest.toString))
+        case x => { }
+      }
+    }
+
+
     try {
       addRootMethodToWorklist(className, methodSig)
       if (makeCallGraph) {
@@ -318,6 +339,7 @@ object JVM2CL {
           anonFunsLookup += paramName -> value
         }
       }
+
 
       compileMethod(m.resolve, 0, takesThis, anonFunsLookup) match {
         case null => Nil
@@ -867,7 +889,14 @@ object JVM2CL {
     case _ => "Label"
   }
 
-  def translateType(t: SootType): Tree = t match {
+  def translateTypeByIndex(i: Int) = {
+    argsByIndex(i) match {
+      case (true, x: ValueType) => StructType(x.name)
+      case (false, x) => x
+    }
+  }
+
+  def translateType(t: SootType, i: Int = -1): Tree = t match {
     case t: SootVoidType => ValueType("void")
     case t: SootBooleanType => ValueType("int")
     case t: SootByteType => ValueType("char")
@@ -887,7 +916,7 @@ object JVM2CL {
         case "firepile.Spaces$Point1" => IntType
         case "firepile.Spaces$Id1" => StructType(mangleName(t.toString))
         case "firepile.util.Unsigned$UInt" => ValueType("unsigned int")
-        case "firepile.util.BufferBackedArray$BBArray" => { arraystructs.addStruct(ValueType("UNKOWN")) }
+        case "firepile.util.BufferBackedArray$BBArray" => { arraystructs.addStruct(argsByIndex(i)._2) }
         case _ => PtrType(StructType(mangleName(t.toString)))
       }
     }
@@ -917,7 +946,7 @@ object JVM2CL {
   }
 */
 
-  private def translateType(memType: String, typ: SootType, name: String): (Tree, String) = translateType(typ) match {
+  private def translateType(memType: String, typ: SootType, name: String, idx: Int): (Tree, String) = translateType(typ, idx) match {
       case StructType(n) if n.endsWith("Array") => memType match {
         case "local" => (StructType("l_" + n), mangleName(name))
         case "global" => (StructType("g_" + n), mangleName(name))
@@ -949,6 +978,19 @@ object JVM2CL {
       case x => PtrType(ValueType(x))
     }
     case _ => PtrType(ValueType(t.fieldTypeAsString))
+  }
+
+  private def translateType(t: String): Tree = t match {
+    case "Unit" => PtrType(ValueType("void"))
+    case "Boolean" => ValueType("BOOL")
+    case "Byte" => ValueType("char")
+    case "Char" => ValueType("char")
+    case "Short" => ValueType("short")
+    case "Int" => ValueType("int")
+    case "Long" => ValueType("long")
+    case "Float" => ValueType("float")
+    case "Double" => ValueType("double")
+    case x => PtrType(ValueType(x))
   }
 
   object ScalaMathCall {
@@ -1755,16 +1797,23 @@ object JVM2CL {
       }
 
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.util.BufferBackedArray$BBArray"), "update", _, _, _), args) => base match {
-                case b: soot.grimp.internal.GInstanceFieldRef => return Some(ArrayAccess(Id(mangleName(b.getField.getName)), translateExp(args(0),symtab,anonFuns)))
-                case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
+                case b: soot.grimp.internal.GInstanceFieldRef => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getField.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)), translateExp(args(1), symtab, anonFuns)))
+                case b: Local => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)), translateExp(args(1), symtab, anonFuns)))
                 case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
 
-      case GVirtualInvoke(a, method, args) => { println("Generic Virtual Invoke:::" + a + "::" + method + ":::" + args) }
-      case _ => ;
+      case GVirtualInvoke(base, SMethodRef(SClassName("firepile.util.BufferBackedArray$BBArray"), "apply", _, _, _), args) => base match {
+                case b: soot.grimp.internal.GInstanceFieldRef => Some(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getField.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)))
+                case b: Local => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)), translateExp(args(1), symtab, anonFuns)))
+                case _ => throw new RuntimeException("Getting size of some unknown collection")
+      }
+
+
+      // case GVirtualInvoke(a, method, args) => { println("Generic Virtual Invoke:::" + a + "::" + method + ":::" + args) }
+      case _ => None
     }
 
-    None
+    //None
   }
   private def translateUnits(units: List[SootUnit], result: List[Tree], symtab: SymbolTable, anonFuns: HashMap[String, Value]): List[Tree] = {
     implicit val iv: (SymbolTable, HashMap[String, Value]) = (symtab, anonFuns)
@@ -1793,7 +1842,18 @@ object JVM2CL {
           case GAssignStmt(left: Local, right) => {
               println(" Level 2::" + left.getName)
               right match {
-
+                // BBArray.ofDim
+                case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
+                  println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
+                  Kernel.localArgs.add((left.getName, left.getType, Kernel.blocks))
+                  val fieldType = translateType(left.getType) match {
+                    case ft: StructType => StructType("l_" + mangleName(ft.name))
+                    case x => x
+                  }
+                  envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
+                  TreeSeq()
+                }
+                // Array.ofDim
                 case GCast(GVirtualInvoke(_, method, args), typ) => {
                   args.head match {
                     case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
@@ -1809,7 +1869,6 @@ object JVM2CL {
                     case _ => TreeSeq()
                   }
                 }
-
                 case _ => Eval(Assign(left, right))
               }
           }
@@ -1845,7 +1904,7 @@ object JVM2CL {
                       println(" Global Variable from inst field ref " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
                       Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
                       envstructs.addStruct(ValueType("kernel"))
-                      val fieldType = translateType(fieldRef.`type`) match {
+                      val fieldType = translateType(fieldRef.`type`, i) match {
                         case ft: StructType => StructType("g_" + mangleName(ft.name))
                         case x => x
                       }
@@ -1858,7 +1917,7 @@ object JVM2CL {
                             println(" Global Variable from static invoke with instance field ref arg " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
                             Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
                             envstructs.addStruct(ValueType("kernel"))
-                            val fieldType = translateType(fieldRef.`type`) match {
+                            val fieldType = translateType(fieldRef.`type`, i) match {
                               case ft: StructType => StructType("g_" + mangleName(ft.name))
                               case x => x
                             }
@@ -2104,12 +2163,12 @@ object JVM2CL {
 
     if (symtab.kernelMethod) { 
       for (i <- Kernel.globalArgs) {
-        val (t: Tree, s: String) = translateType("global", i._2, i._1)
+        val (t: Tree, s: String) = translateType("global", i._2, i._1, i._3)
         paramTree += Formal(t, s)
       }
 
       for (i <- Kernel.localArgs) {
-        val (t: Tree, s: String) = translateType("local", i._2, i._1)
+        val (t: Tree, s: String) = translateType("local", i._2, i._1, -1)
         paramTree += Formal(t, s)
       }
       

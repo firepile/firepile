@@ -9,6 +9,7 @@ class ArrayMarshal[A](marshal: FixedSizeMarshal[A], manifest: ClassManifest[A]) 
   def sizes(a: Array[A]) = sizes(a.length)
   def sizes(len: Int) = (marshal.size * len) :: implicitly[FixedSizeMarshal[Int]].size :: Nil
   def align = marshal.align
+  def fixedSizeMarshalMM = marshal
   override def toBuffer(a: Array[A]) = {
     implicit val m = marshal // need evidence
     implicit val M = manifest // need evidence

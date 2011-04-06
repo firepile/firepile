@@ -9,6 +9,7 @@ class BBArrayMarshal[A: FixedSizeMarshal] extends Marshal[BBArray[A]] {
   def sizes(a: BBArray[A]) = sizes(a.length)
   def sizes(len: Int) = (fixedSizeMarshal[A].size * len) :: Nil
   def align = fixedSizeMarshal[A].align
+  def fixedSizeMarshalMM = fixedSizeMarshal[A]
   override def toBuffer(a: BBArray[A]) = a.buffer :: Nil
   override def fromBuffer(b: List[ByteBuffer]) = new BBArray(b.head)
 }
