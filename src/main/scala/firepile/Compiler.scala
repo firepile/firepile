@@ -153,21 +153,21 @@ object Compiler {
 
 
   def compileNew[A1, A2, A3](tuple: Tuple3[A1, A2, A3], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3]) = {
-    val marshalInfo = new ArrayList[(FixedSizeMarshal[_], ByteBuffer, Int, Int, Int)]()
+    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
 
     val (a1, a2, a3) = tuple
 
     a1 match {
-        case a: BBArray[_] => marshalInfo.add((a.marshal, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
-        case a => marshalInfo.add((ma1.fixedSizeMarshalMM, ma1.toBuffer(a1).head, ma1.sizes(a1).head, ma1.sizes(1).head, ma1.sizes(a1).head / ma1.sizes(1).head))
+        case a: BBArray[_] => marshalInfo.add((ma1, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma1, ma1.toBuffer(a1).head, ma1.sizes(a1).head, ma1.sizes(1).head, ma1.sizes(a1).head / ma1.sizes(1).head))
     }
     a2 match {
-        case a: BBArray[_] => marshalInfo.add((a.marshal, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
-        case a => marshalInfo.add((ma2.fixedSizeMarshalMM, ma2.toBuffer(a2).head, ma2.sizes(a2).head, ma2.sizes(1).head, ma2.sizes(a2).head / ma2.sizes(1).head))
+        case a: BBArray[_] => marshalInfo.add((ma2, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma2, ma2.toBuffer(a2).head, ma2.sizes(a2).head, ma2.sizes(1).head, ma2.sizes(a2).head / ma2.sizes(1).head))
     }
     a3 match {
-        case a: BBArray[_] => marshalInfo.add((a.marshal, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
-        case a => marshalInfo.add((ma3.fixedSizeMarshalMM, ma3.toBuffer(a3).head, ma3.sizes(a3).head, ma3.sizes(1).head, ma3.sizes(a3).head / ma3.sizes(1).head))
+        case a: BBArray[_] => marshalInfo.add((ma3, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma3, ma3.toBuffer(a3).head, ma3.sizes(a3).head, ma3.sizes(1).head, ma3.sizes(a3).head / ma3.sizes(1).head))
     }
 
  //   marshalInfo.add((tuple._2.marshal, tuple._2.buffer, tuple._2.marshal.size * tuple._2.length, tuple._2.marshal.size, tuple._2.length))
@@ -249,10 +249,10 @@ object Compiler {
     compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
   }
 
-  def compileN_BB(tuple: List[(_,(FixedSizeMarshal[_], ByteBuffer, Int, Int, Int))], kernName: String, tree: String, dev: Device) = { 
+  def compileN_BB(tuple: List[(_,(Marshal[_], ByteBuffer, Int, Int, Int))], kernName: String, tree: String, dev: Device) = { 
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
 
-    val outputBuffers = new ArrayList[(CLByteBuffer, Int, FixedSizeMarshal[_], Int, Int)]()
+    val outputBuffers = new ArrayList[(CLByteBuffer, Int, Marshal[_], Int, Int)]()
     var maxInputItems: Int = 0
     var maxInputSize: Int = 0
     var maxOutputItems: Int = 0
@@ -380,14 +380,17 @@ object Compiler {
         println("Number of output buffers: " + outputBuffers.size)
         for (i <- 0 until outputBuffers.size) {
           outputBuffers.get(i) match {
-            case (clBuf: CLByteBuffer, totalSize : Int, marshal: FixedSizeMarshal[_], index: Int, items: Int) => {
+            case (clBuf: CLByteBuffer, totalSize : Int, marshal: Marshal[_], index: Int, items: Int) => {
               val (data, _) = tuple(index)
               println("total size of output buffer: " + totalSize)
               val bufOut = allocDirectBuffer(totalSize)
               clBuf.read(dev.queue, bufOut, true)
               bufOut.rewind
               // Array.copy(bufOut, 0, data.asInstanceOf[AnyRef], 0, items)
-              // Array.copy(marshal.fromBuffer(List(bufOut)), 0, get(tuple,index).asInstanceOf[AnyRef], 0, items)
+              data match {
+                case d: BBArray[_] => d.buffer = bufOut 
+                case _ => Array.copy(marshal.fromBuffer(List(bufOut)), 0, tuple(index).asInstanceOf[AnyRef], 0, items)
+              }
             }
             case _ => {}
           }

@@ -71,7 +71,7 @@ object BufferBackedArray {
     def ofDim[A: FixedSizeMarshal](n: Int) = new BBArray[A](n)
   }
 
-  class BBArray[A: FixedSizeMarshal](val buffer: ByteBuffer) extends ArrayLike[A, BBArray[A]] with Iterable[A] {
+  class BBArray[A: FixedSizeMarshal](var buffer: ByteBuffer) extends ArrayLike[A, BBArray[A]] with Iterable[A] {
     def this(n: Int) = this(allocBuffer(n * implicitly[FixedSizeMarshal[A]].size))
       // ByteBuffer.wrap(Array.ofDim[Byte](n * implicitly[FixedSizeMarshal[A]].size)))
 
