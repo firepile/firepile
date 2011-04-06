@@ -447,12 +447,12 @@ object Compiler {
       dev.queue.finish
 
       time({
-        println("Number of output buffers: " + outputBuffers.size)
+        // println("Number of output buffers: " + outputBuffers.size)
         for (i <- 0 until outputBuffers.size) {
           outputBuffers.get(i) match {
             case (clBuf: CLByteBuffer, totalSize : Int, marshal: Marshal[_], index: Int, items: Int) => {
               val (data, _) = tuple(index)
-              println("total size of output buffer: " + totalSize)
+              // println("total size of output buffer: " + totalSize)
               val bufOut = allocDirectBuffer(totalSize)
               clBuf.read(dev.queue, bufOut, true)
               bufOut.rewind

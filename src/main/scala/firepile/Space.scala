@@ -55,7 +55,7 @@ val sizeA2 = transA2.sizes(1).head
     
     case Some((kernName: String, treeList: List[Tree])) => {
 						       val kernStr = new StringBuffer()
-						       println(" name ::" + kernName + "::\n")
+						       // println(" name ::" + kernName + "::\n")
 						       for (t: Tree <- treeList.reverse)
 							kernStr.append(t.toCL)
 							
@@ -82,7 +82,7 @@ val sizeA2 = transA2.sizes(1).head
      
      case Some((kernName: String, treeList: List[Tree])) => {
  						       val kernStr = new StringBuffer()
- 						       println(" name ::" + kernName + "::\n")
+ 						       // println(" name ::" + kernName + "::\n")
  						       for (t: Tree <- treeList.reverse)
  							kernStr.append(t.toCL)
  							
@@ -96,22 +96,22 @@ val sizeA2 = transA2.sizes(1).head
  }
 
    def spawn[A, B, C, D, E](block: => (A, B, C, D, E))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], m5: Marshal[E], dev: Device) = {
-    println("in Spawn")
+    // println("in Spawn")
     val fvals = block
-    println("fvals = block")
+    // println("fvals = block")
     val f = () => block
-    println("f = () => block")
+    // println("f = () => block")
 
     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
 
     val kernArgs = time(firepile.Compiler.findAllMethods(f, 5, List(m1, m2, m3, m4, m5)), "Compile")
-    println("findAllmethods done")
+    // println("findAllmethods done")
     
     kernArgs match {
     
     case Some((kernName: String, treeList: List[Tree])) => {
 						       val kernStr = new StringBuffer()
-						       println(" name ::" + kernName + "::\n")
+						       // println(" name ::" + kernName + "::\n")
 						       for (t: Tree <- treeList.reverse)
 							kernStr.append(t.toCL)
 							

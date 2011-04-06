@@ -92,8 +92,10 @@ object JVM2CL {
 
     val tree = compileRoot(className, methodSig, List[Marshal[_]]())
 
+    /*
     println("Printing tree")
     for (t <- tree) println(t.toCL)
+    */
 
     tree
   }
@@ -106,12 +108,14 @@ object JVM2CL {
   setup
 
   def compileRoot(className: String, methodSig: String, argMarshals: List[Marshal[_]]): List[Tree] = {
-    println("compiling " + className + "." + methodSig)
+    // println("compiling " + className + "." + methodSig)
+    /*
     println("arg types: " + argMarshals.map(am => am match {
         case bbm: BBArrayMarshal[_] => "BB:" + bbm.fixedSizeMarshalMM.manifest
         case fsm: { def fixedSizeMarshalMM: FixedSizeMarshal[_] } => "FM:" + fsm.fixedSizeMarshalMM.manifest
         case x => "unknown marshal " + x
       }))
+    */
 
     for (am <- argMarshals) {
       // Need to add a case for regular Scala Array??
@@ -131,12 +135,15 @@ object JVM2CL {
         buildCallGraph
         optimizeCallGraph
       }
-      println("before process work list")
+      // println("before process work list")
       val proc = processWorklist
-      println("after process work list")
+      // println("after process work list")
 
+      /*
       println("Result CL:")
       for (t <- proc) println(t.toCL)
+      */
+
       proc
     } catch {
       case e: ClassNotFoundException => {
@@ -148,19 +155,22 @@ object JVM2CL {
   }
 
   def compileMethod(className: String, methodSig: String): List[Tree] = {
-    println("compiling " + className + "." + methodSig)
+    // println("compiling " + className + "." + methodSig)
     try {
       addMethodToWorklist(className, methodSig)
       if (makeCallGraph) {
         buildCallGraph
         optimizeCallGraph
       }
-      println("before process work list")
+      // println("before process work list")
       val proc = processWorklist
-      println("after process work list")
+      // println("after process work list")
 
+      /*
       println("Result CL:")
       for (t <- proc) println(t.toCL)
+      */
+
       proc
     } catch {
       case e: ClassNotFoundException => {
@@ -278,7 +288,7 @@ object JVM2CL {
 
   case class CompileMethodTask(method: SootMethodRef, takesThis: Boolean, anonFuns: List[(Int, Value)]) extends Task {
     def run = {
-      println("CompileMethodTask.run")
+      // println("CompileMethodTask.run")
       val m = method
       val anonFunsLookup = new HashMap[String, Value]()
 
@@ -300,7 +310,7 @@ object JVM2CL {
         }
       }
 
-      println("TASK RUN ON METHOD NAME: " + m.name + " declaring Class::" + m.declaringClass.getName)
+      // println("TASK RUN ON METHOD NAME: " + m.name + " declaring Class::" + m.declaringClass.getName)
       // m.declaringClass.getName.startsWith("init") removed 
       if (m.declaringClass.getName.startsWith("java.lang") || m.declaringClass.getName.startsWith("firepile.Spaces") || m.declaringClass.getName.startsWith("scala.runtime") || m.declaringClass.getName.startsWith("scala.Product") || m.declaringClass.getName.startsWith("firepile.util"))
         Nil
@@ -317,7 +327,7 @@ object JVM2CL {
 
   case class CompileRootMethodTask(method: SootMethodRef, takesThis: Boolean, anonFuns: List[(Int, Value)]) extends Task {
     def run = {
-      println("CompileRootMethodTask.run()")
+      // println("CompileRootMethodTask.run()")
       val m = method
       val anonFunsLookup = new HashMap[String, Value]()
       kernelMethod = true
@@ -388,7 +398,7 @@ object JVM2CL {
   private val worklist = new Worklist[Task]
 
   private def addRootMethodToWorklist(className: String, methodSig: String): Unit = {
-    println("\n\nADD ROOT METHOD TO WORKLIST\n\n")
+    // println("\n\nADD ROOT METHOD TO WORKLIST\n\n")
     // Set up the class we're working with
     val c = Scene.v.loadClassAndSupport(className)
     if (makeCallGraph) {
@@ -397,11 +407,11 @@ object JVM2CL {
     }
 
     // Retrieve the method and its body
-    println(" Method Iterator ")
+    // println(" Method Iterator ")
     for (m <- c.methodIterator) {
-      println("m.getName " + m.getName)
+      // println("m.getName " + m.getName)
       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
-      println("trying " + sig)
+      // println("trying " + sig)
       if (sig.equals(methodSig)) {
         worklist += CompileRootMethodTask(m.makeRef, false, null)
       }
@@ -574,8 +584,10 @@ object JVM2CL {
     }
 
     val units = unitBuffer.toList
+    /*
     println("Grimp method body:")
     println(units.mkString("\n"))
+    */
 
     val body = translateUnits(units, Nil, symtab, anonFuns)
 
@@ -1260,7 +1272,7 @@ object JVM2CL {
 
       case _ => {
 
-        println("::v::" + v)
+        // println("::v::" + v)
         v match {
           // Must be first
           case LibraryCall(t) => t
@@ -1343,10 +1355,10 @@ object JVM2CL {
           case GStaticInvoke(method@SMethodRef(_, "boxToFloat", _, _, _), args) => args.map(a => translateExp(a, symtab, anonFuns)).head
           case GStaticInvoke(method@SMethodRef(_, "unboxToFloat", _, _, _), args) => args.map(a => translateExp(a, symtab, anonFuns)).head
           case GStaticInvoke(method, args) => {
-            println(" static method:" + method)
-            println(" static method NAME:" + method.name)
-            println("methodName(method):" + methodName(method))
-            for (i <- args) println("arg::" + i)
+            // println(" static method:" + method)
+            // println(" static method NAME:" + method.name)
+            // println("methodName(method):" + methodName(method))
+            // for (i <- args) println("arg::" + i)
 
             worklist += CompileMethodTask(method)
             // classtab.addClass(method.declaringClass)
@@ -1416,7 +1428,7 @@ object JVM2CL {
                       val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
                       // println("Checking method: " + sig + " against " + methodSig)
                       if (sig.equals(methodSig)) {
-                        println("Adding CompileMethodTask(" + method + ", " + pr + ")")
+                        // println("Adding CompileMethodTask(" + method + ", " + pr + ")")
                         if (args.length > 0)
                           worklist += CompileMethodTask(m, true, anonFunParams.toList)
                         else
@@ -1548,7 +1560,7 @@ object JVM2CL {
           //g$1.<firepile.Group: scala.collection.immutable.List items()>()::<: int ()>::List()
 
           case GInterfaceInvoke(base: GVirtualInvokeExpr, SMethodRef(SClassName("scala.collection.SeqLike"), "size", _, _, _), _) => { 
-              println(" Got Local Size::"); 
+              // println(" Got Local Size::"); 
               // Use real base name of firepile_Group
               // COMMENTED OUT until these are passed around as args
               /*
@@ -1612,13 +1624,13 @@ object JVM2CL {
             }
             case GInstanceFieldRef(instBase, fieldRef) => {
 
-              println(" GInstanceFieldRef::" + instBase + "::" + fieldRef)
+              // println(" GInstanceFieldRef::" + instBase + "::" + fieldRef)
               // printf("GInstanceFieldRef:: instBase name = " + instBase.asInstanceOf[Local].getName + " with method name " + method.name)
               // TODO: comment
               // Handle accessing captured variables.  Assumes captured variable 'x' is 'this.x$1'
               // TODO: eliminate (if possible) the assumptions here about the naming conventions of variables.
               if (fieldRef.`type`.toString.startsWith("scala.Function")) {
-                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
+                // println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
                 anonFuns.keys.foreach(k => print(k + " "))
                 anonFuns(fieldRef.name.takeWhile(_ != '$')) match {
                   // matched 'this.x$1.apply(args)' where 'x$1' is a captured variable 'x'
@@ -1641,10 +1653,10 @@ object JVM2CL {
                     ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
                   }
                   //case _ => Select(base, mangleName(fieldRef.name)) // TODO: punt
-                  case _ => println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name))
+                  case _ => /* println(" mangled name::" + mangleName(fieldRef.name));*/ Id(mangleName(fieldRef.name))
                 }
                 //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
-              } else { println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name)) }
+              } else { /* println(" mangled name::" + mangleName(fieldRef.name)); */ Id(mangleName(fieldRef.name)) }
 
             }
 
@@ -1655,14 +1667,14 @@ object JVM2CL {
             case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Space"), "groups", _, _, _), _) => {
                 var applyM: SootMethod = null
                 for (a <- args) {
-                  println("Getting SootClass for: " + a.getType.toString)
+                  // println("Getting SootClass for: " + a.getType.toString)
                   val sootcls = Scene.v.getSootClass(a.getType.toString)
                   val applyMethods = sootcls.getMethods.filter(mn => mn.getName.equals("apply")  && !mn.getParameterType(0).toString.equals("java.lang.Object"))
-                  println("number of methods = " + sootcls.getMethodCount)
+                  // println("number of methods = " + sootcls.getMethodCount)
 
-                  println("Apply methods found: " + applyMethods.length)
+                  // println("Apply methods found: " + applyMethods.length)
                   for (applyMethod <- applyMethods) {
-                    println("Found method: " + applyMethod.getSignature)
+                    // println("Found method: " + applyMethod.getSignature)
                     worklist += CompileMethodTask(applyMethod.makeRef)
                     compileMethod(applyMethod, 0, false, anonFuns)
                     applyM = applyMethod
@@ -1675,14 +1687,14 @@ object JVM2CL {
             case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "items", _, _, _), _) => {
                 var applyM: SootMethod = null
                 for (a <- args) {
-                  println("Getting SootClass for: " + a.getType.toString)
+                  // println("Getting SootClass for: " + a.getType.toString)
                   val sootcls = Scene.v.getSootClass(a.getType.toString)
                   val applyMethods = sootcls.getMethods.filter(mn => mn.getName.equals("apply")  && !mn.getParameterType(0).toString.equals("java.lang.Object"))
-                  println("number of methods = " + sootcls.getMethodCount)
+                  // println("number of methods = " + sootcls.getMethodCount)
 
-                  println("Apply methods found: " + applyMethods.length)
+                  // println("Apply methods found: " + applyMethods.length)
                   for (applyMethod <- applyMethods) {
-                    println("Found method: " + applyMethod.getSignature)
+                    // println("Found method: " + applyMethod.getSignature)
                     worklist += CompileMethodTask(applyMethod.makeRef)
                     applyM = applyMethod
                   }
@@ -1719,7 +1731,7 @@ object JVM2CL {
 
           case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
             //Select(Deref(base), mangleName(fieldRef.name))
-            println(" mangled Name::" + mangleName(fieldRef.name) + "  original::" + fieldRef.name)
+            // println(" mangled Name::" + mangleName(fieldRef.name) + "  original::" + fieldRef.name)
             // Look up instance in environment
             if (envstructs.contains(ValueType("kernel"), mangleName(fieldRef.name))) {
               Select(Id("_this_kernel"), Id(mangleName(fieldRef.name)))
@@ -1729,7 +1741,7 @@ object JVM2CL {
           }
 
           case GInstanceFieldRef(base, fieldRef) => { 
-            println(" base ::" + base + ":::" + fieldRef)
+            // println(" base ::" + base + ":::" + fieldRef)
 
             // Look up instance in environment
             if (envstructs.contains(ValueType("kernel"), mangleName(fieldRef.name))) {
@@ -1770,7 +1782,7 @@ object JVM2CL {
       // don't assume the local is named "id"
       // handle Id2, Id3, ...r1.
 
-      case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => { println(" Got barrier here::"); return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => { /* println(" Got barrier here::");*/ return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))) }
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => base match {
                 case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("id")))
                 case b: Local => return Some(Select(Deref(Id(b.getName)), Id("id")))
@@ -1779,8 +1791,8 @@ object JVM2CL {
       /*
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => { println(" Got Item here::"); if (args.size > 0) return Some(Call(Id("get_local_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("id"))) }
       */
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { println(" Got Group here::"); if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("id"))) }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { println(" Got Global Size here::"); if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("size"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { /* println(" Got Group here::");*/ if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("id"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { /* println(" Got Global Size here::");*/ if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("size"))) }
       /*
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => { println(" Got Global ID here::"); if (args.size > 0) return Some(Call(Id("get_global_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("globalId"))) }
       case GVirtualInvoke(base: Local, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => { println(" Got Local size here::"); if (args.size > 0) return Some(Call(Id("get_local_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id(base.getName), Id("size"))) }
@@ -1840,11 +1852,11 @@ object JVM2CL {
             symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, symtab, anonFuns)); TreeSeq()
           }
           case GAssignStmt(left: Local, right) => {
-              println(" Level 2::" + left.getName)
+              // println(" Level 2::" + left.getName)
               right match {
                 // BBArray.ofDim
                 case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
-                  println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
+                  // println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
                   Kernel.localArgs.add((left.getName, left.getType, Kernel.blocks))
                   val fieldType = translateType(left.getType) match {
                     case ft: StructType => StructType("l_" + mangleName(ft.name))
@@ -1857,7 +1869,7 @@ object JVM2CL {
                 case GCast(GVirtualInvoke(_, method, args), typ) => {
                   args.head match {
                     case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
-                      println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
+                      // println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
                       Kernel.localArgs.add((left.getName, typ, Kernel.blocks))
                       val fieldType = translateType(typ) match {
                         case ft: StructType => StructType("l_" + mangleName(ft.name))
@@ -1877,14 +1889,14 @@ object JVM2CL {
           case GGoto(target) => GoTo(translateLabel(target, symtab))
           case GNop() => Nop
           case GReturnVoid() if Kernel.level == 2 => {
-            println(" Changing to Level 3 ")
+            // println(" Changing to Level 3 ")
             Kernel.level = 3;
             // return List(TreeSeq())
             Return
           } 
           case GReturnVoid() => Return
           case GReturn(returned) if Kernel.level == 2 => {
-            println(" Changing to Level 3 ")
+            // println(" Changing to Level 3 ")
             Kernel.level = 3;
             // return List(TreeSeq())
             Return
@@ -1901,7 +1913,7 @@ object JVM2CL {
                 for (i <- 0 until closureArgs.length) {
                   closureArgs(i) match {
                     case GInstanceFieldRef(instBase, fieldRef) => { 
-                      println(" Global Variable from inst field ref " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
+                      // println(" Global Variable from inst field ref " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
                       Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
                       envstructs.addStruct(ValueType("kernel"))
                       val fieldType = translateType(fieldRef.`type`, i) match {
@@ -1914,7 +1926,7 @@ object JVM2CL {
                       for (j <- args) {
                         j match {
                           case GInstanceFieldRef(instBase, fieldRef) => { 
-                            println(" Global Variable from static invoke with instance field ref arg " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
+                            // println(" Global Variable from static invoke with instance field ref arg " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
                             Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
                             envstructs.addStruct(ValueType("kernel"))
                             val fieldType = translateType(fieldRef.`type`, i) match {
@@ -1933,7 +1945,7 @@ object JVM2CL {
 //                return List(TreeSeq())
 //              }
              
-            println("closureType = " + closureTyp.toString + " closureMethod = " + closureMethod.name)
+            // println("closureType = " + closureTyp.toString + " closureMethod = " + closureMethod.name)
             Return
               //translateExp(ni, symtab, anonFuns)
 
@@ -2020,7 +2032,7 @@ object JVM2CL {
           case GExitMonitor(op) => Id("monitors unsupported")
           case GEnterMonitor(op) => Id("monitors unsupported")
 
-          case GStaticInvoke(method, args) => { println("GstaticInvoke::" + method + "::" + args); args.map(a => translateExp(a, symtab, anonFuns)).head }
+          case GStaticInvoke(method, args) => { /* println("GstaticInvoke::" + method + "::" + args); */ args.map(a => translateExp(a, symtab, anonFuns)).head }
 
           case _ => { println("huh " + u); Id("unsupported: " + u) }
         }
@@ -2063,7 +2075,7 @@ object JVM2CL {
           val classesInPkg = getClassesInPackage(t.getSootClass.getPackageName)
 
           for (c <- classesInPkg) {
-            println("Class found: " + c.getName + ", adding to Scene")
+            // println("Class found: " + c.getName + ", adding to Scene")
             // Scene.v.addBasicClass(c.getName, SootClass.HIERARCHY)
             //Scene.v.loadBasicClasses
             //for (m <- Scene.v.loadClass(c.getName, SootClass.HIERARCHY).methodIterator)
@@ -2105,13 +2117,15 @@ object JVM2CL {
             }
 
             // queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
-            println("Getting subclasses of " + c.getName + " through package name " + c.getPackageName)
+            // println("Getting subclasses of " + c.getName + " through package name " + c.getPackageName)
 
 
             queue ++= H.getSubclassesOf(c).asInstanceOf[java.util.List[SootClass]].toList
 
+            /*
             for (i <- queue)
               println("Subclass found: " + i)
+            */
           }
 
           if (result.isEmpty)
@@ -2132,8 +2146,10 @@ object JVM2CL {
     if (takesThis)
       paramTree += Formal(symtab.thisParam._2, symtab.thisParam._1)
 
+    /*
     if (symtab.params.size == 0)
       println("\n\n PARAM SIZE of " + mangleName(m.getDeclaringClass.getName + m.getName) + " is 0\n\n")
+    */
 
     for (i <- 0 until symtab.params.size /* m.getParameterCount */ ) {
       symtab.params.get(i) match {
@@ -2145,7 +2161,7 @@ object JVM2CL {
     // Check "this" position for group or item struct types to add appropriate formals 
     paramTree.headOption match {
       case Some(Formal(PtrType(StructType("firepile_Group")), _)) => {
-        println("THIS IS THE Group Method")
+        // println("THIS IS THE Group Method")
         paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
         varTree += VarDef(StructType("firepile_Item"), Id("_item_desc"))
         varTree += Assign(Select(Id("_item_desc"), Id("id")), Call(Id("get_local_id"), IntLit(0)))
@@ -2153,7 +2169,7 @@ object JVM2CL {
         varTree += Assign(Select(Id("_item_desc"), Id("globalId")), Call(Id("get_global_id"), IntLit(0)))
       }
       case Some(Formal(PtrType(StructType("firepile_Item")), _)) => {
-        println("THIS IS THE Item Method")
+        // println("THIS IS THE Item Method")
         paramTree += Formal(StructType("firepile_Group"), Id("_group_desc"))
         paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
       }
@@ -2172,8 +2188,8 @@ object JVM2CL {
         paramTree += Formal(t, s)
       }
       
-      println("#### globalArgs = " + Kernel.globalArgs.length)
-      println("#### localArgs = " + Kernel.localArgs.length)
+      // println("#### globalArgs = " + Kernel.globalArgs.length)
+      // println("#### localArgs = " + Kernel.localArgs.length)
     }
 
     
