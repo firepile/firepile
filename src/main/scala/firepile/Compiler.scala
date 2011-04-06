@@ -151,6 +151,22 @@ object Compiler {
     None
   }
 
+  def compileNew[A1, A2](tuple: Tuple2[A1, A2], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2]) = {
+    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
+
+    val (a1, a2) = tuple
+
+    a1 match {
+        case a: BBArray[_] => marshalInfo.add((ma1, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma1, ma1.toBuffer(a1).head, ma1.sizes(a1).head, ma1.sizes(1).head, ma1.sizes(a1).head / ma1.sizes(1).head))
+    }
+    a2 match {
+        case a: BBArray[_] => marshalInfo.add((ma2, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma2, ma2.toBuffer(a2).head, ma2.sizes(a2).head, ma2.sizes(1).head, ma2.sizes(a2).head / ma2.sizes(1).head))
+    }
+
+    compileN_BB((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
+  }
 
   def compileNew[A1, A2, A3](tuple: Tuple3[A1, A2, A3], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3]) = {
     val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
@@ -170,15 +186,67 @@ object Compiler {
         case a => marshalInfo.add((ma3, ma3.toBuffer(a3).head, ma3.sizes(a3).head, ma3.sizes(1).head, ma3.sizes(a3).head / ma3.sizes(1).head))
     }
 
- //   marshalInfo.add((tuple._2.marshal, tuple._2.buffer, tuple._2.marshal.size * tuple._2.length, tuple._2.marshal.size, tuple._2.length))
- //   marshalInfo.add((tuple._3.marshal, tuple._3.buffer, tuple._3.marshal.size * tuple._3.length, tuple._3.marshal.size, tuple._3.length))
+    compileN_BB((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
+  }
 
+  def compileNew[A1, A2, A3, A4](tuple: Tuple4[A1, A2, A3, A4], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4]) = {
+    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
+
+    val (a1, a2, a3, a4) = tuple
+
+    a1 match {
+        case a: BBArray[_] => marshalInfo.add((ma1, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma1, ma1.toBuffer(a1).head, ma1.sizes(a1).head, ma1.sizes(1).head, ma1.sizes(a1).head / ma1.sizes(1).head))
+    }
+    a2 match {
+        case a: BBArray[_] => marshalInfo.add((ma2, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma2, ma2.toBuffer(a2).head, ma2.sizes(a2).head, ma2.sizes(1).head, ma2.sizes(a2).head / ma2.sizes(1).head))
+    }
+    a3 match {
+        case a: BBArray[_] => marshalInfo.add((ma3, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma3, ma3.toBuffer(a3).head, ma3.sizes(a3).head, ma3.sizes(1).head, ma3.sizes(a3).head / ma3.sizes(1).head))
+    }
+    a4 match {
+        case a: BBArray[_] => marshalInfo.add((ma4, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma4, ma4.toBuffer(a4).head, ma4.sizes(a4).head, ma4.sizes(1).head, ma4.sizes(a4).head / ma4.sizes(1).head))
+    }
 
     compileN_BB((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
   }
 
 
+  def compileNew[A1, A2, A3, A4, A5](tuple: Tuple5[A1, A2, A3, A4, A5], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5]) = {
+    val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
+
+    val (a1, a2, a3, a4, a5) = tuple
+
+    a1 match {
+        case a: BBArray[_] => marshalInfo.add((ma1, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma1, ma1.toBuffer(a1).head, ma1.sizes(a1).head, ma1.sizes(1).head, ma1.sizes(a1).head / ma1.sizes(1).head))
+    }
+    a2 match {
+        case a: BBArray[_] => marshalInfo.add((ma2, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma2, ma2.toBuffer(a2).head, ma2.sizes(a2).head, ma2.sizes(1).head, ma2.sizes(a2).head / ma2.sizes(1).head))
+    }
+    a3 match {
+        case a: BBArray[_] => marshalInfo.add((ma3, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma3, ma3.toBuffer(a3).head, ma3.sizes(a3).head, ma3.sizes(1).head, ma3.sizes(a3).head / ma3.sizes(1).head))
+    }
+    a4 match {
+        case a: BBArray[_] => marshalInfo.add((ma4, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma4, ma4.toBuffer(a4).head, ma4.sizes(a4).head, ma4.sizes(1).head, ma4.sizes(a4).head / ma4.sizes(1).head))
+    }
+    a5 match {
+        case a: BBArray[_] => marshalInfo.add((ma5, a.buffer, a.marshal.size * a.length, a.marshal.size, a.length))
+        case a => marshalInfo.add((ma5, ma5.toBuffer(a5).head, ma5.sizes(a5).head, ma5.sizes(1).head, ma5.sizes(a5).head / ma5.sizes(1).head))
+    }
+
+
+    compileN_BB((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
+  }  
 // compile for standard Scala arrays. Creates a ByteBuffer. Slow.
+
+/*
   def compileNew[A1, A2](tuple: Tuple2[A1, A2], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], dev: Device) = {
     val marshalInfo =  new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
     marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
@@ -187,7 +255,7 @@ object Compiler {
     compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
   }
 
-/*
+
   def compileNew[A1, A2, A3](tuple: Tuple3[A1, A2, A3], kernName: String, tree: String, dev: Device)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3]) = {
     val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
     marshalInfo.add((ma1, ma1.toBuffer(tuple._1).head, ma1.sizes(tuple._1).head, ma1.sizes(1).head, ma1.sizes(tuple._1).head / ma1.sizes(1).head))
@@ -197,7 +265,6 @@ object Compiler {
 
     compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
   }
-*/
 
   def compileNew[A1, A2, A3, A4](tuple: Tuple4[A1, A2, A3, A4], kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], dev: Device) = {
     val marshalInfo = new ArrayList[(Marshal[_], ByteBuffer, Int, Int, Int)]()
@@ -248,6 +315,8 @@ object Compiler {
 
     compileN((tuple.productIterator.toList zip marshalInfo.toList), kernName, tree, dev)
   }
+*/
+
 
   def compileN_BB(tuple: List[(_,(Marshal[_], ByteBuffer, Int, Int, Int))], kernName: String, tree: String, dev: Device) = { 
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
@@ -389,7 +458,7 @@ object Compiler {
               // Array.copy(bufOut, 0, data.asInstanceOf[AnyRef], 0, items)
               data match {
                 case d: BBArray[_] => d.buffer = bufOut 
-                case _ => Array.copy(marshal.fromBuffer(List(bufOut)), 0, tuple(index).asInstanceOf[AnyRef], 0, items)
+                case _ => Array.copy(marshal.fromBuffer(List(bufOut)), 0, data.asInstanceOf[AnyRef], 0, items)
               }
             }
             case _ => {}

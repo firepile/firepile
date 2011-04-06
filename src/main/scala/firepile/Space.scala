@@ -86,7 +86,7 @@ val sizeA2 = transA2.sizes(1).head
  						       for (t: Tree <- treeList.reverse)
  							kernStr.append(t.toCL)
  							
- 						        firepile.Compiler.compileNew(fvals._1,fvals._2,fvals._3,fvals._4,kernName,kernStr.toString)(m1,m2,m3,m4,dev) 
+ 						        firepile.Compiler.compileNew(fvals,kernName,kernStr.toString,dev)(m1,m2,m3,m4) 
  						      }
                                                    
      case None => { println(" Something went wrong while creating Kernel!!!") }
@@ -115,7 +115,7 @@ val sizeA2 = transA2.sizes(1).head
 						       for (t: Tree <- treeList.reverse)
 							kernStr.append(t.toCL)
 							
-						        firepile.Compiler.compileNew(fvals._1,fvals._2,fvals._3,fvals._4,fvals._5,kernName,kernStr.toString)(m1,m2,m3,m4,m5,dev) 
+						        firepile.Compiler.compileNew(fvals,kernName,kernStr.toString,dev)(m1,m2,m3,m4,m5) 
 						      }
                                                   
     case None => { println(" Something went wrong while creating Kernel!!!") }
