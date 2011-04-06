@@ -442,8 +442,9 @@ object Compiler {
           }
           kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
         }
-        dev.queue.finish
       }, "GPU", numIterations)
+
+      dev.queue.finish
 
       time({
         println("Number of output buffers: " + outputBuffers.size)
