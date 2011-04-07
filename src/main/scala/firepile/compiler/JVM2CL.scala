@@ -139,10 +139,12 @@ object JVM2CL {
       val proc = processWorklist
       // println("after process work list")
 
+     
       /*
       println("Result CL:")
       for (t <- proc) println(t.toCL)
       */
+      
 
       proc
     } catch {
@@ -1430,9 +1432,9 @@ object JVM2CL {
                       if (sig.equals(methodSig)) {
                         // println("Adding CompileMethodTask(" + method + ", " + pr + ")")
                         if (args.length > 0)
-                          worklist += CompileMethodTask(m, true, anonFunParams.toList)
+                          worklist += CompileMethodTask(m, false, anonFunParams.toList) // Should we be taking "this" here?
                         else
-                          worklist += CompileMethodTask(m, true)
+                          worklist += CompileMethodTask(m, false)  // Should we be taking "this" here?
                         methodReceiversRef += m
                         classtab.addClass(pr)
                       }
@@ -1500,7 +1502,7 @@ object JVM2CL {
                 if (possibleReceivers.length == 1) {
                   // monomorphic call
                   // should be: Call(Id(methodName(method)), translateExp(base)::args.map(a => translateExp(a)))
-                  // println("Monomorphic call to " + methodName(method))
+                  println("Monomorphic call to " + methodName(method))
 
                   symtab.addInlineParamsNoRename(addParams.takeRight(addParams.length - method.resolve.getParameterCount).filter(p => {
                     p match {

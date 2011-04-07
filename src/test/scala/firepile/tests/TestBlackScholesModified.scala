@@ -27,9 +27,9 @@ object TestBlackScholesModified {
     println("BS x "  + optionCount)
 
 
-     val h_S    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
-     val h_X     = BBArray.tabulate[Float](optionCount)(i => -1.0f)
-	 val h_T     = BBArray.tabulate[Float](optionCount)(i => -1.0f)
+    val h_S    = BBArray.tabulate[Float](optionCount)(i => randFloat(5.0f, 30.0f))
+    val h_X     = BBArray.tabulate[Float](optionCount)(i => randFloat(1.0f, 100.0f))
+    val h_T     = BBArray.tabulate[Float](optionCount)(i => randFloat(0.25f, 10.0f))
 	 
     //val h_S       = Array.fill[Float](optionCount)(randFloat(5.0f, 30.0f))
     //val h_X       = Array.fill[Float](optionCount)(randFloat(1.0f, 100.0f))
@@ -62,6 +62,8 @@ object TestBlackScholesModified {
       println("put " + h_Put)
       
       println("done")
+
+      Kernel.printTime
   }
     
   def BlackScholes(S: BBArray[Float], X: BBArray[Float], T: BBArray[Float])(implicit dev: Device): (Float, Float) = {
