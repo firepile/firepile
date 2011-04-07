@@ -32,7 +32,7 @@ run
   
       val random = new Random(0)
       // val idata = Array.fill( globalWorkSize ) (random.nextFloat)
-	  val idata    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
+      val idata    = BBArray.tabulate[Float](globalWorkSize)(i => random.nextFloat)
       val odata= transpose(idata)(firepile.gpu)
       
       println("output")

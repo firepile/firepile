@@ -432,6 +432,7 @@ object Compiler {
             kernBin.setLocalArg(3 + numArrays, threads * maxOutputSize)
             kernBin.setArg(3 + numArrays + 1, threads)
           }
+          println("GlobalWorkSize: " + (maxOutputItems * threads) + " Blocks: " + threads)
           kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
 
         } else {

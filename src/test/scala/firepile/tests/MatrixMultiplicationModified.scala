@@ -22,14 +22,15 @@ object MatrixMultiplicationModified {
 val width  = 1100
 var height = 100
 val localWorkSize = 256
-val globalWorkSize = localWorkSize * height
+var globalWorkSize = 0
 
 def main(args: Array[String]) = {
  
-if (args.length > 0) 
-height= if (args.length > 0) (args(0).toInt) else 100
+  height= if (args.length > 0) (args(0).toInt) else 100
 
- run
+
+  globalWorkSize = localWorkSize * height
+  run
 }  
   def run = {
       
@@ -37,9 +38,9 @@ height= if (args.length > 0) (args(0).toInt) else 100
       val random = new Random(0)
       //val idata1 = Array.fill( width * height) (random.nextFloat)
       //val idata2 = Array.fill( width ) (random.nextFloat)
-	  val idata1    = BBArray.tabulate[Float](width * height)(i => -1.0f)
-	  val idata2    = BBArray.tabulate[Float](width)(i => -1.0f)
-      val odata= transpose(idata1,idata2,width,height)(firepile.gpu)
+      val idata1    = BBArray.tabulate[Float](width * height)(i => random.nextFloat)
+      val idata2    = BBArray.tabulate[Float](width)(i => random.nextFloat)
+      val odata= matrixMul(idata1,idata2,width,height)(firepile.gpu)
       
       println("output")
       for ( i <- 0 until odata.length)
@@ -56,10 +57,10 @@ height= if (args.length > 0) (args(0).toInt) else 100
   //    V = (float*)malloc(mem_size_V);
   //  unsigned int mem_size_W = height * sizeof(float);
   
-  def transpose(idata1 : BBArray[Float], idata2 : BBArray[Float], width: Int, height: Int)(implicit dev: Device): BBArray[Float] = {
+  def matrixMul(idata1 : BBArray[Float], idata2 : BBArray[Float], width: Int, height: Int)(implicit dev: Device): BBArray[Float] = {
   
       val space=dev.defaultPaddedPartition(idata1.length)
-      //dev.setWorkSizes(localWorkSize, globalWorkSize)
+      dev.setWorkSizes(globalWorkSize, localWorkSize)
       
       //val width  = 1100
       //val height = 100
