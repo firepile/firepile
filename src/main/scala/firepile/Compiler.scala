@@ -46,14 +46,14 @@ object Compiler {
   def signature(m: java.lang.reflect.Method) =
     m.getName + "(" + m.getParameterTypes.toList.map(t => typeSig(t)).mkString("") + ")" + typeSig(m.getReturnType)
 
-  def findAllMethods(src: AnyRef, arity: Int, argMarshals: List[Marshal[_]]): Option[(String, List[Tree])] = {
+  def findAllMethods(src: AnyRef, arity: Int, argMarshals: List[Marshal[_]], dev: Device): Option[(String, List[Tree])] = {
 
     val gMethod = findGlobalMethod(src.getClass.getName, arity)
 
     gMethod match {
 
       case Some(x: java.lang.reflect.Method) => {
-        Some((methodName(x), compileRoot(src.getClass.getName, Compiler.signature(x), argMarshals).reverse))
+        Some((methodName(x), compileRoot(src.getClass.getName, Compiler.signature(x), argMarshals, dev).reverse))
 /*
         compileMethod(src.getClass.getName, Compiler.signature(x))
         val lMethod = findLocalMethod(src.getClass.getName)
@@ -441,7 +441,7 @@ object Compiler {
             kernBin.setLocalArg(3 + numArrays, dev.memConfig.localMemSize * maxOutputSize)
             kernBin.setArg(3 + numArrays + 1, dev.memConfig.localMemSize)
           }
-          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+          kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
         }
       }, "GPU", numIterations)
 
@@ -592,7 +592,7 @@ object Compiler {
             kernBin.setLocalArg(3 + numArrays, dev.memConfig.localMemSize * maxOutputSize)
             kernBin.setArg(3 + numArrays + 1, dev.memConfig.localMemSize)
           }
-          kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+          kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
         }
         dev.queue.finish
       }, "GPU", numIterations)
@@ -692,7 +692,7 @@ object Compiler {
 
         // println(" Setting default arguments ")
         // kernBin.setLocalArg(3, dev.memConfig.localMemSize * sizeA2)
-        kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+        kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
       }
 
       //kernBin.enqueueNDRange(dev.queue, Array[Int](threads * numItemsA1 ), Array[Int](threads))

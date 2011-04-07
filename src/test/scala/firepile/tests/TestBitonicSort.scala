@@ -88,7 +88,7 @@ object TestBitonicSort {
 
           kernBinSort.setLocalArg(8, dev.memConfig.localMemSize * sizeA1)
           kernBinSort.setArg(9, dev.memConfig.localMemSize)
-          kernBinSort.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+          kernBinSort.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
 
         }
       }
@@ -117,7 +117,7 @@ object TestBitonicSort {
           
           kernBinSort.setLocalArg(16, dev.memConfig.localMemSize * sizeA1)
           kernBinSort.setArg(17, dev.memConfig.localMemSize)
-          kernBinSort.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
+          kernBinSort.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
 
         }
       }

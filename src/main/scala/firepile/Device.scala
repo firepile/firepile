@@ -44,10 +44,11 @@ object Device {
 class Device(platform: Platform, cld: CLDevice) extends DeviceLike(platform, cld) {
   var program: CLProgram = null
 
-  case class MemConfig(globalSize: Int, localSize: Int, localMemSize: Int)
+  case class MemConfig(globalSize: Array[Int], localSize: Array[Int], localMemSize: Int)
   var memConfig: MemConfig = null
 
-  def setWorkSizes(gs: Int, ls: Int) = memConfig = MemConfig(gs, ls, ls)
+  def setWorkSizes(gs: Int, ls: Int) = memConfig = MemConfig(Array(gs), Array(ls), ls)
+  def setWorkSizes(gs: Array[Int], ls: Array[Int]) = memConfig = MemConfig(gs, ls, ls(0))
   def setLocalMemSize(lms: Int) = memConfig = MemConfig(memConfig.globalSize, memConfig.localSize, lms)
 
   def buildProgramSrc(name: String, src: String): CLKernel = {
