@@ -31,7 +31,8 @@ run
   def run = {
   
       val random = new Random(0)
-      val idata = Array.fill( globalWorkSize ) (random.nextFloat)
+      // val idata = Array.fill( globalWorkSize ) (random.nextFloat)
+	  val idata    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
       val odata= transpose(idata)(firepile.gpu)
       
       println("output")
@@ -41,11 +42,11 @@ run
     
   }
   
-  def transpose(idata : Array[Float])(implicit dev: Device): Array[Float] = {
+  def transpose(idata : BBArray[Float])(implicit dev: Device): BBArray[Float] = {
   
       val space=dev.defaultPaddedPartition(idata.length)
       //dev.setWorkSizes(globalWorkSize, localWorkSize)
-      val odata = new Array[Float](idata.length)
+      val odata = new BBArray[Float](idata.length)
       val width = globalWorkSize
       val height = globalWorkSize
       
