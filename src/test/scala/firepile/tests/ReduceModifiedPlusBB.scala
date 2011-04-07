@@ -27,7 +27,7 @@ object ReduceModifiedPlusBB {
  
   def main(args: Array[String]) = {
 
-  // if (args.length > 0) NUM_ITEMS= if (args.length > 0) (1 << args(0).toInt) else ( 1 << 20)
+   if (args.length > 0) NUM_ITEMS= if (args.length > 0) (1 << args(0).toInt) else ( 1 << 20)
   run
   	
   }

@@ -27,12 +27,14 @@ object TestBlackScholesModified {
     println("BS x "  + optionCount)
 
 
-    // val h_Call    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
-    // val h_Put     = BBArray.tabulate[Float](optionCount)(i => -1.0f)
-    val h_S       = Array.fill[Float](optionCount)(randFloat(5.0f, 30.0f))
-    val h_X       = Array.fill[Float](optionCount)(randFloat(1.0f, 100.0f))
-    val h_T       = Array.fill[Float](optionCount)(randFloat(0.25f, 10.0f))
-
+     val h_S    = BBArray.tabulate[Float](optionCount)(i => -1.0f)
+     val h_X     = BBArray.tabulate[Float](optionCount)(i => -1.0f)
+	 val h_T     = BBArray.tabulate[Float](optionCount)(i => -1.0f)
+	 
+    //val h_S       = Array.fill[Float](optionCount)(randFloat(5.0f, 30.0f))
+    //val h_X       = Array.fill[Float](optionCount)(randFloat(1.0f, 100.0f))
+    //val h_T       = Array.fill[Float](optionCount)(randFloat(0.25f, 10.0f))
+     
 
 
 /*
@@ -62,14 +64,14 @@ object TestBlackScholesModified {
       println("done")
   }
     
-  def BlackScholes(S: Array[Float], X: Array[Float], T: Array[Float])(implicit dev: Device): (Float, Float) = {
+  def BlackScholes(S: BBArray[Float], X: BBArray[Float], T: BBArray[Float])(implicit dev: Device): (Float, Float) = {
     dev.setWorkSizes(60 * 1024, 128)
 
     val space = dev.defaultPaddedPartition(S.length)
     val n = S.length
     
 
-    val CPOut = new Array[Float](S.length*2)
+    val CPOut = new BBArray[Float](S.length*2)
     Kernel.output("CPOut")
 
     space.spawn {
