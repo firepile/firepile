@@ -1791,19 +1791,31 @@ object JVM2CL {
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => base match {
                 case b: soot.grimp.internal.GInstanceFieldRef => {
                   if (args.size > 0) {
-                    val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
-                    println("======= Need kernel of dim " + dim)
                     return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
                   }
                   else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),IntLit(0)), Id("id")))
                 }
                 case b: Local => {
                   if (args.size > 0) {
-                    val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
-                    println("======= Need kernel of dim " + dim)
                     return Some(Select(ArrayAccess(Id(b.getName),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
                   }
                   else return Some(Select(ArrayAccess(Id(b.getName),IntLit(0)), Id("id")))
+                }
+
+                case _ => throw new RuntimeException("Getting size of some unknown collection")
+      }
+      case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => base match {
+                case b: soot.grimp.internal.GInstanceFieldRef => {
+                  if (args.size > 0) {
+                    return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
+                  }
+                  else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),IntLit(0)), Id("globalId")))
+                }
+                case b: Local => {
+                  if (args.size > 0) {
+                    return Some(Select(ArrayAccess(Id(b.getName),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
+                  }
+                  else return Some(Select(ArrayAccess(Id(b.getName),IntLit(0)), Id("globalId")))
                 }
 
                 case _ => throw new RuntimeException("Getting size of some unknown collection")
@@ -1826,11 +1838,13 @@ object JVM2CL {
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => { println(" Got Global ID here::"); if (args.size > 0) return Some(Call(Id("get_global_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("globalId"))) }
       case GVirtualInvoke(base: Local, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => { println(" Got Local size here::"); if (args.size > 0) return Some(Call(Id("get_local_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id(base.getName), Id("size"))) }
       */
+      /*
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => base match {
                 case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("globalId")))
                 case b: Local => return Some(Select(Deref(Id(b.getName)), Id("globalId")))
                 case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
+      */
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => base match {
                 case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("size")))
                 case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
