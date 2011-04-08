@@ -429,17 +429,16 @@ object Compiler {
         if (dev.memConfig == null) {
 
           if (Kernel.localArgs.size > 0) {
-            kernBin.setLocalArg(3 + numArrays, threads * maxOutputSize)
-            kernBin.setArg(3 + numArrays + 1, threads)
+            kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, threads * maxOutputSize)
+            kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, threads)
           }
-          println("GlobalWorkSize: " + (maxOutputItems * threads) + " Blocks: " + threads)
           kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
 
         } else {
           //println(" Setting default arguments ")
           if (Kernel.localArgs.size > 0) {
-            kernBin.setLocalArg(3 + numArrays, dev.memConfig.localMemSize * maxOutputSize)
-            kernBin.setArg(3 + numArrays + 1, dev.memConfig.localMemSize)
+            kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, dev.memConfig.localMemSize * maxOutputSize)
+            kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, dev.memConfig.localMemSize)
           }
           kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
         }

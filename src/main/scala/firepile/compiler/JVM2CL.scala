@@ -400,6 +400,7 @@ object JVM2CL {
   }
 
   private val worklist = new Worklist[Task]
+  private var kernelMethodName = ""
 
   private def addRootMethodToWorklist(className: String, methodSig: String): Unit = {
     // println("\n\nADD ROOT METHOD TO WORKLIST\n\n")
@@ -418,6 +419,7 @@ object JVM2CL {
       // println("trying " + sig)
       if (sig.equals(methodSig)) {
         worklist += CompileRootMethodTask(m.makeRef, false, null)
+        kernelMethodName = methodName(m)
       }
     }
   }
@@ -933,7 +935,11 @@ object JVM2CL {
         case "firepile.Spaces$Point1" => IntType
         case "firepile.Spaces$Id1" => StructType(mangleName(t.toString))
         case "firepile.util.Unsigned$UInt" => ValueType("unsigned int")
-        case "firepile.util.BufferBackedArray$BBArray" => { arraystructs.addStruct(argsByIndex(i)._2) }
+        case "firepile.util.BufferBackedArray$BBArray" =>  
+          if (kernelMethodName.equals("firepile_tests_DCT8x8__anonfun_DCT8x8_1apply")) 
+            arraystructs.addStruct(ValueType("float"))
+          else
+            arraystructs.addStruct(argsByIndex(i)._2) 
         case _ => PtrType(StructType(mangleName(t.toString)))
       }
     }
@@ -1895,11 +1901,11 @@ object JVM2CL {
             symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, symtab, anonFuns)); TreeSeq()
           }
           case GAssignStmt(left: Local, right) => {
-              // println(" Level 2::" + left.getName)
+            println(" Level 2::" + left.getName + " -> " + right)
               right match {
                 // BBArray.ofDim
                 case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
-                  // println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
+                  println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
                   Kernel.localArgs.add((left.getName, left.getType, Kernel.blocks))
                   val fieldType = translateType(left.getType) match {
                     case ft: StructType => StructType("l_" + mangleName(ft.name))
