@@ -17,43 +17,45 @@ import scala.util.Random
 
 object TransposeTestModifiedNaive {
 
-var globalWorkSize = 2048
+var height= 2048
 var localWorkSize =  128
 
 
 def main(args: Array[String]) = { 
 
 if (args.length > 0) 
-   globalWorkSize = if (args.length > 0) (1 << args(0).toInt) else ( 1 << 20)
+   height = if (args.length > 0) (1 << args(0).toInt) else ( 1 << 20)
 run
 }
   
   def run = {
   
       val random = new Random(0)
-      // val idata = Array.fill( globalWorkSize ) (random.nextFloat)
-      val idata    = BBArray.tabulate[Float](globalWorkSize)(i => random.nextFloat)
-      val odata= transpose(idata)(firepile.gpu)
+      // val idata = Array.fill( height * height ) (random.nextFloat)
+      val idata    = BBArray.tabulate[Float](height * height)(i => random.nextFloat)
+      val odata= transpose(idata, height,height )(firepile.gpu)
       
-      println("output")
-      for ( i <- 0 until 200)
-       println(" " +odata(i)) 
+      //println("output")
+      //for ( i <- 0 until odata.length)
+       //println(" " +odata(i)) 
       
     
   }
   
-  def transpose(idata : BBArray[Float])(implicit dev: Device): BBArray[Float] = {
+  def transpose(idata : BBArray[Float], width : Int, height : Int)(implicit dev: Device): BBArray[Float] = {
   
       val space=dev.defaultPaddedPartition(idata.length)
-      //dev.setWorkSizes(globalWorkSize, localWorkSize)
+	  val blockDim = 16
       val odata = new BBArray[Float](idata.length)
-      val width = globalWorkSize
-      val height = globalWorkSize
-      
-      //val n = idata.length
-      
+	  println(" inpu tlenght "+ idata.length)
+	  val size =height - (height % blockDim) + blockDim 
+      val globalArray = Array(size,size)
+      val localArray =  Array(blockDim,blockDim)
+      dev.setWorkSizes(globalArray, localArray)
+	  Kernel.output("odata")
+	  
+   
      space.spawn { 
-        
         
         space.groups.foreach {
           g => {
@@ -61,8 +63,8 @@ run
 	     item=> { 
          
             	       	        
-                var xIndex = g.id(0)
-	        var yIndex = g.id(1)
+            var xIndex = item.globalId(0)
+	        var yIndex = item.globalId(1)
 	      
 	        if( xIndex < width &&  yIndex < height ) 
 	             {
