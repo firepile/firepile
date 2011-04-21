@@ -13,8 +13,7 @@ To run:
 
 $ bin/firepile firepile.tests.Foo
 
-NOTE: You will need to modify $SCALA_LIB_JAR in bin/firepile to point to your
-Scala installation's scala-library.jar
+NOTE: You must have $SCALA_HOME set to the location of your Scala 2.9 installation
 
 ---------------------------------------------------
 Examples to try:
