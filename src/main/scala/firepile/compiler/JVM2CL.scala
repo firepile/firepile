@@ -85,7 +85,7 @@ object JVM2CL {
   def main(args: Array[String]) = {
     if (args.length != 2) {
       println("usage: firepile.compile.JVM2CL className methodSig")
-      exit(1)
+      sys.exit(1)
     }
 
     val className = args(0)
@@ -189,7 +189,7 @@ object JVM2CL {
     // java.class.path is broken in Scala, especially when running under sbt
     //Scene.v.setSootClassPath(Scene.v.defaultClassPath
     //println("setting up"+System.getProperty("os.name"))
-
+/*
     if (System.getProperty("os.name").toLowerCase().startsWith("win"))
       Scene.v.setSootClassPath(Scene.v.defaultClassPath
         + ";." + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/firepilesoot.jar"
@@ -211,20 +211,11 @@ object JVM2CL {
         + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
-        + ":/Users/dwhite/git5/firepile/target/scala_2.9.0.RC1/classes"
-        + ":/Users/dwhite/git5/firepile/target/scala_2.9.0.RC1/test-classes"
+        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/classes"
+        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/test-classes"
         + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
         + ":.:tests:examples:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
-
-    // Manually add basic classes to scene for testing VirtualInvoke
-//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeA")
-//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeB")
-//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeC")
-//    Scene.v.addBasicClass("firepile.tests.virtual.VirtualInvokeX")
-//    Scene.v.addBasicClass("Point")
-//    Scene.v.addBasicClass("Point1D")
-//    Scene.v.addBasicClass("Point2D")
-//    Scene.v.addBasicClass("Point3D")
+*/
 
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
@@ -1838,8 +1829,17 @@ object JVM2CL {
           else 
             return Some(Select(ArrayAccess(Id("_group_desc"),IntLit(0)) , Id("id"))) 
       }
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { 
+          /* println(" Got Group here::");*/ 
+          if (args.size > 0) {
+            val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
+            return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("size"))) 
+          }
+          else 
+            return Some(Select(ArrayAccess(Id("_group_desc"),IntLit(0)) , Id("size"))) 
+      }
       // case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { /* println(" Got Group here::");*/ if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("id"))) }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { /* println(" Got Global Size here::");*/ if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("size"))) }
+      // case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { /* println(" Got Global Size here::");*/ if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("size"))) }
       /*
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => { println(" Got Global ID here::"); if (args.size > 0) return Some(Call(Id("get_global_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("globalId"))) }
       case GVirtualInvoke(base: Local, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => { println(" Got Local size here::"); if (args.size > 0) return Some(Call(Id("get_local_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id(base.getName), Id("size"))) }

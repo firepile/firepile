@@ -1,0 +1,33 @@
+Firepile 0.1 -- OpenCL GPU Programming with Scala
+----------------------------------------------------
+
+To compile Firepile:
+
+$ sbt compile
+
+To compile test cases:
+
+$ sbt test-compile
+
+To run:
+
+$ bin/firepile firepile.tests.Foo
+
+NOTE: You will need to modify $SCALA_LIB_JAR in bin/firepile to point to your
+Scala installation's scala-library.jar
+
+---------------------------------------------------
+Examples to try:
+
+firepile.tests.ReduceModifiedPlusBB <n>
+
+<n> - 2 ^ n randomly generated elements to reduce (default 20)
+
+ 
+firepile.tests.TestBlackScholesModified <n>
+
+<n> - n * 1000000 options (default 4)
+
+
+
+

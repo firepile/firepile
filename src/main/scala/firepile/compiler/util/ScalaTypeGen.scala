@@ -8,6 +8,7 @@ import soot.SootClass
 import scala.tools.scalap._
 import scala.tools.scalap.{ Main => Scalap }
 import scala.tools.scalap.scalax.rules.scalasig._
+// import scala.tools.scalap.scalax.rules.scalasig.NullaryMethodType
 
 import java.util.ArrayList
 import scala.collection.mutable.Queue
@@ -151,6 +152,9 @@ object ScalaTypeGen {
       case AnnotatedWithSelfType(typeRef: Type, symbol: Symbol, attribTreeRefs: List[Int]) => NamedTyp("AnnotatedType")
       case DeBruijnIndexType(typeLevel: Int, typeIndex: Int) => NamedTyp(" DebruijnIndex")
       case ExistentialType(typeRef: Type, symbols: Seq[Symbol]) => NamedTyp(" ExistentialType")
+      // NullaryMethodType(TypeRefType(ThisType(scala),scala.Int,List())) NEW IN 2.9 ?
+      // case NullaryMethodType(typeRef: Type) => NamedTyp("NullaryMethodType")
+      case _ => NamedTyp("UnknownOrNewType")
     }
   }
 
