@@ -384,18 +384,18 @@ object Compiler {
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "float" => {
-                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
+                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, false))
 //                    println("First item of float buffer: " + marshalInfo.get(1)._2.asFloatBuffer.get(0).asInstanceOf[Float])
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "long" => {
-                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
+                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, false))
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "double" => {
-                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
+                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, false))
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
@@ -403,7 +403,7 @@ object Compiler {
                 }
 
                 case x => {
-                  kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, true))
+                  kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, false))
                 }
         
               }

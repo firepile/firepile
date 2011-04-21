@@ -36,7 +36,7 @@ object ReduceModifiedPlusBB {
     val random = new Random(0)
     val randInput = Array.fill(NUM_ITEMS)(random.nextFloat)
     val cpuSum = randInput.sum
-    val gpuSum = reduceModified(BBArray.fromArray(randInput))(firepile.gpu)
+    val gpuSum = reduceModified(BBArray.fromArray(randInput).directCopy)(firepile.gpu)
 
     println("CPU sum = " + cpuSum + "   GPU sum = " + gpuSum)
 

@@ -445,7 +445,7 @@ object TypeFlow {
 
     def getSupertypes(bottom: ScalaType): List[ScalaType] = bottom match {
       case NamedTyp(name) => getSupertypes(getScalaSignature(name))
-      case InstTyp(base, _) => getSupertypes(getScalaSignature(name))
+      case InstTyp(base, _) => getSupertypes(base)
       case ParamTyp(name, vr) => List(new ParamTyp(name, vr), new ParamTyp("scala.Any", vr))
     }
 

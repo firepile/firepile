@@ -211,8 +211,8 @@ object JVM2CL {
         + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
         + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
-        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/classes"
-        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/test-classes"
+        + ":/Users/dwhite/git5/firepile/target/scala_2.9.0.RC1/classes"
+        + ":/Users/dwhite/git5/firepile/target/scala_2.9.0.RC1/test-classes"
         + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
         + ":.:tests:examples:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
 
