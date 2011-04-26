@@ -334,6 +334,10 @@ object Compiler {
       Kernel.globalArgs.get(i) match {
         case (name: String, typ: SootType, index: Int) => {
           val (data, marshalInfo) = tuple(index)
+                
+          if (data.isInstanceOf[BBArray[_]] && !marshalInfo._2.isDirect)
+            throw new RuntimeException("Use direct NIO buffers for better copy performance")
+            
           for (j <- 0 until Kernel.outputArgs.size)
             if (name.startsWith(Kernel.outputArgs.get(j)))
               output = true
@@ -385,18 +389,18 @@ object Compiler {
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "float" => {
-                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, false))
+                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
 //                    println("First item of float buffer: " + marshalInfo.get(1)._2.asFloatBuffer.get(0).asInstanceOf[Float])
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "long" => {
-                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, false))
+                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
                   case "double" => {
-                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, false))
+                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
@@ -404,7 +408,7 @@ object Compiler {
                 }
 
                 case x => {
-                  kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, false))
+                  kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                 }
         
               }
