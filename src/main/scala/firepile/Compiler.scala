@@ -368,7 +368,8 @@ object Compiler {
               maxInputSize = marshalInfo._4
             }
  
-            time({
+//            time({
+              val copyToGPU = System.nanoTime
 
               firepile.compiler.JVM2CL.translateType(typ, index) match {
                 case ValueType("int") => {
@@ -408,7 +409,8 @@ object Compiler {
         
               }
               
-            }, "Copy to GPU")
+//            }, "Copy to GPU")
+              Kernel.setTime("Copy to GPU", (System.nanoTime-copyToGPU))
           }
 
           }
@@ -423,9 +425,7 @@ object Compiler {
    
       val threads = (if (maxInputItems < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(maxInputItems) / scala.math.log(2))) else dev.maxThreads).toInt
 
-      time({
-        // println("Number of kernel localArgs = " + Kernel.localArgs.size)  BUG HERE?
-     
+      // WARM UP
         if (dev.memConfig == null) {
 
           if (Kernel.localArgs.size > 0) {
@@ -442,11 +442,41 @@ object Compiler {
           }
           kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
         }
-      }, "GPU", numIterations)
+        dev.queue.finish
+      // END WARM UP
+
+//      time({
+        // println("Number of kernel localArgs = " + Kernel.localArgs.size)  BUG HERE?
+ 
+        val gpuTime = System.nanoTime
+        var x = 0
+        while (x < numIterations) {
+          if (dev.memConfig == null) {
+
+            if (Kernel.localArgs.size > 0) {
+              kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, threads * maxOutputSize)
+              kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, threads)
+            }
+            kernBin.enqueueNDRange(dev.queue, Array[Int](maxOutputItems * threads), Array[Int](threads))
+
+          } else {
+            //println(" Setting default arguments ")
+            if (Kernel.localArgs.size > 0) {
+              kernBin.setLocalArg(Kernel.globalArgs.size + numArrays, dev.memConfig.localMemSize * maxOutputSize)
+              kernBin.setArg(Kernel.globalArgs.size + numArrays + 1, dev.memConfig.localMemSize)
+            }
+            kernBin.enqueueNDRange(dev.queue, dev.memConfig.globalSize, dev.memConfig.localSize)
+          }
+          x += 1
+        }
+//      }, "GPU", numIterations)
 
       dev.queue.finish
+      Kernel.setTime("GPU", (System.nanoTime - gpuTime))
 
-      time({
+//      time({
+
+      val copyFromGPU = System.nanoTime
         // println("Number of output buffers: " + outputBuffers.size)
         for (i <- 0 until outputBuffers.size) {
           outputBuffers.get(i) match {
@@ -465,7 +495,8 @@ object Compiler {
             case _ => {}
           }
         }
-      }, "From GPU")
+//      }, "From GPU")
+      Kernel.setTime("From GPU", (System.nanoTime - copyFromGPU))
 
   }
 
