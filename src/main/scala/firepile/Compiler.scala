@@ -334,10 +334,9 @@ object Compiler {
       Kernel.globalArgs.get(i) match {
         case (name: String, typ: SootType, index: Int) => {
           val (data, marshalInfo) = tuple(index)
-                
-          if (data.isInstanceOf[BBArray[_]] && !marshalInfo._2.isDirect)
-            throw new RuntimeException("Use direct NIO buffers for better copy performance")
-            
+		  if (data.isInstanceOf[BBArray[_]] && !marshalInfo._2.isDirect)
+		    throw new RuntimeException("Use direct NIO buffers for better copy performance")
+			
           for (j <- 0 until Kernel.outputArgs.size)
             if (name.startsWith(Kernel.outputArgs.get(j)))
               output = true
@@ -384,7 +383,7 @@ object Compiler {
                 case ValueType("double") => kernBin.setArg(i+numArrays, data.asInstanceOf[Double])
                 case StructType(typName) => typName.replace("Array", "") match {
                   case "int" => {
-                    kernBin.setArg(i+numArrays, data.asInstanceOf[Array[Int]])
+                    kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                     numArrays += 1
                     kernBin.setArg(i+numArrays, nItems)
                   }
@@ -476,7 +475,7 @@ object Compiler {
 //      }, "GPU", numIterations)
 
       dev.queue.finish
-      Kernel.setTime("GPU", (System.nanoTime - gpuTime))
+      Kernel.setTime("GPU", (System.nanoTime - gpuTime)/numIterations)
 
 //      time({
 

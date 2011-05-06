@@ -49,7 +49,7 @@ def reduceModified(idata: BBArray[Float])
   
   val space=dev.defaultPaddedPartition(idata.length)
   //dev.setWorkSizes(NUM_ITEMS, space.blocks)
- val odata = BBArray.ofDim[Float](space.blocks)
+ val odata = BBArray.ofDim[Float](space.blocks).directCopy
  // val odata = new Array[Float](64)
  println("Block size = " + space.blocks)
  val n = idata.length

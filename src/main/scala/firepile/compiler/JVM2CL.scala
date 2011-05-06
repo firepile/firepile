@@ -144,8 +144,8 @@ object JVM2CL {
       // println("after process work list")
 
      
-      println("Result CL:")
-      for (t <- proc) println(t.toCL)
+      // println("Result CL:")
+      // for (t <- proc) println(t.toCL)
       
 
       proc
@@ -1901,7 +1901,7 @@ object JVM2CL {
             symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, symtab, anonFuns)); TreeSeq()
           }
           case GAssignStmt(left: Local, right) => {
-            println(" Level 2::" + left.getName + " -> " + right)
+            // println(" Level 2::" + left.getName + " -> " + right)
               right match {
                 // BBArray.ofDim
                 case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
@@ -2210,7 +2210,7 @@ object JVM2CL {
     // Check "this" position for group or item struct types to add appropriate formals 
     paramTree.headOption match {
       case Some(Formal(PtrType(StructType("firepile_Group")), _)) => {
-        println("THIS IS THE Group Method")
+        // println("THIS IS THE Group Method")
         paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
         varTree += ArrayDef(Id("_item_desc"), StructType("firepile_Item"), IntLit(kernelDim))
         for (i <- 0 until kernelDim) {
@@ -2220,7 +2220,7 @@ object JVM2CL {
         }
       }
       case Some(Formal(PtrType(StructType("firepile_Item")), _)) => {
-        println("THIS IS THE Item Method")
+        // println("THIS IS THE Item Method")
         paramTree += Formal(PtrType(StructType("firepile_Group")), Id("_group_desc"))
         paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
       }
