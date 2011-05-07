@@ -73,7 +73,7 @@ object TestBlackScholesModified {
     val n = S.length
     
 
-    val CPOut = new BBArray[Float](S.length*2)
+    val CPOut = new BBArray[Float](S.length*2).directCopy
     Kernel.output("CPOut")
 
     space.spawn {

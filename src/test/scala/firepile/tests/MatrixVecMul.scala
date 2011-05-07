@@ -34,8 +34,8 @@ def main(args: Array[String]) = {
       val random = new Random(0)
       //val idata1 = Array.fill( width * height) (random.nextFloat)
       //val idata2 = Array.fill( width ) (random.nextFloat)
-      val idata1    = BBArray.tabulate[Float](width * height)(i => random.nextFloat)
-      val idata2    = BBArray.tabulate[Float](width)(i => random.nextFloat)
+      val idata1    = BBArray.tabulate[Float](width * height)(i => random.nextFloat).directCopy
+      val idata2    = BBArray.tabulate[Float](width)(i => random.nextFloat).directCopy
       val odata= matrixVecMul(idata1,idata2,width,height)(firepile.gpu)
       
       println("output")
@@ -54,7 +54,7 @@ def main(args: Array[String]) = {
       Kernel.output("odata")
 	  
       val n = idata1.length
-      val odata = new BBArray[Float](height)
+      val odata = new BBArray[Float](height).directCopy
       
      space.spawn { 
         

@@ -32,12 +32,14 @@ run
   
       val random = new Random(0)
       // val idata = Array.fill( height * height ) (random.nextFloat)
-      val idata    = BBArray.tabulate[Float](height * height)(i => random.nextFloat)
+      val idata    = BBArray.tabulate[Float](height * height)(i => random.nextFloat).directCopy
       val odata= transpose(idata, height,height )(firepile.gpu)
       
       //println("output")
       //for ( i <- 0 until odata.length)
        //println(" " +odata(i)) 
+	   
+	   Kernel.printTime
       
     
   }
@@ -46,7 +48,7 @@ run
   
       val space=dev.defaultPaddedPartition(idata.length)
 	  val blockDim = 16
-      val odata = new BBArray[Float](idata.length)
+      val odata = new BBArray[Float](idata.length).directCopy
 	  println(" inpu tlenght "+ idata.length)
 	  val size =height - (height % blockDim) + blockDim 
       val globalArray = Array(size,size)

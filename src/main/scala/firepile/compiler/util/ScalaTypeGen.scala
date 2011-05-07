@@ -147,7 +147,7 @@ object ScalaTypeGen {
       case PolyType(ClassInfoType(symbol: Symbol, typeRefs: Seq[Type]), symbols) => if (symbols.isEmpty) { if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol) } else InstTyp((if (symbol.path.indexOf("<empty>") >= 0) getVar(symbol.name, symbol) else getVar(symbol.path, symbol)), symbols.map(i => getVar(i.name, i)).toList)
       case PolyType(typeRef: Type, symbols: Seq[TypeSymbol]) => scalaType(typeRef)
       case PolyTypeWithCons(typeRef: Type, symbols: Seq[TypeSymbol], cons: String) => NamedTyp("PolyType")
-      case ImplicitMethodType(resultType: Type, paramSymbols: Seq[Symbol]) => NamedTyp("ImplicitType")
+//      case ImplicitMethodType(resultType: Type, paramSymbols: Seq[Symbol]) => NamedTyp("ImplicitType")
       case AnnotatedType(typeRef: Type, attribTreeRefs: List[Int]) => scalaType(typeRef)
       case AnnotatedWithSelfType(typeRef: Type, symbol: Symbol, attribTreeRefs: List[Int]) => NamedTyp("AnnotatedType")
       case DeBruijnIndexType(typeLevel: Int, typeIndex: Int) => NamedTyp(" DebruijnIndex")
@@ -522,7 +522,7 @@ object ScalaTypeGen {
 
         val (returnType: Type, returnTypeString: String, param: List[MyVarDef]) = mt.resultType match {
           case mt: MethodType => makeMethodType(mt, printResult)
-          case imt: ImplicitMethodType => makeMethodType(imt, printResult)
+         // case imt: ImplicitMethodType => makeMethodType(imt, printResult)
           case x => (mt.resultType, toString(mt.resultType)(TypeFlags(true)), paramEntries)
         }
 
@@ -531,7 +531,7 @@ object ScalaTypeGen {
 
       t match {
         case mt@MethodType(resType, paramSymbols) => _pmt(mt)
-        case mt@ImplicitMethodType(resType, paramSymbols) => _pmt(mt)
+        //case mt@ImplicitMethodType(resType, paramSymbols) => _pmt(mt)
         case pt@PolyType(mt, typeParams) => makeMethodType(mt, printResult)
         //todo consider another method types
         case x => (makeType(x), "NoType", List(null))
@@ -695,7 +695,7 @@ object ScalaTypeGen {
         case RefinedType(classSym, typeRefs) => sep + typeRefs.map(toString)
         case ClassInfoType(symbol, typeRefs) => sep + typeRefs.map(toString)
         case ClassInfoTypeWithCons(symbol, typeRefs, cons) => sep + typeRefs.map(toString)
-        case ImplicitMethodType(resultType, _) => toString(makeType(resultType, sep))
+        //case ImplicitMethodType(resultType, _) => toString(makeType(resultType, sep))
         case MethodType(resultType, _) => toString(makeType(resultType, sep))
 
         case PolyType(typeRef, symbols) => typeParamString(symbols) + makeType(typeRef, sep)
