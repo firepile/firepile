@@ -28,7 +28,7 @@ object DCT8x8 {
  
   def main(args: Array[String]) = {
 
-  if (args.length > 0) NUM_ITEMS= if (args.length > 0) (1 << args(0).toInt) else ( 1 << 11)
+  if (args.length > 0) NUM_ITEMS= if (args.length > 0) (1 << args(0).toInt) else ( 1 << 7)
 
   width = NUM_ITEMS
   height = NUM_ITEMS
@@ -45,8 +45,8 @@ object DCT8x8 {
   def run = {
     val random = new Random(2009)
     val randInput = Array.fill(height * stride)(random.nextFloat)
-    val result = DCT8x8(BBArray.fromArray(randInput))(firepile.gpu)
-
+    val result = DCT8x8(BBArray.fromArray(randInput).directCopy)(firepile.gpu)
+    Kernel.printTime
 
   }
 
@@ -65,7 +65,7 @@ def DCT8x8(src: BBArray[Float])
   val gs2 = iDivUp(imageH, BLOCK_Y) * (BLOCK_Y / BLOCK_SIZE)
   dev.setWorkSizes(Array(gs1, gs2),Array(BLOCK_X, BLOCK_Y / BLOCK_SIZE))
   dev.setLocalMemSize(BLOCK_Y * (BLOCK_X+1))
-  val dst = BBArray.ofDim[Float](src.length)
+  val dst = BBArray.ofDim[Float](src.length).directCopy
   
   println("Block size = " + space.blocks)
   Kernel.output("dst")
