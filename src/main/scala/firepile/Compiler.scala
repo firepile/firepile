@@ -10,6 +10,7 @@ import soot.{Type => SootType}
 
 import com.nativelibs4java.opencl.CLMem
 import com.nativelibs4java.opencl.CLKernel
+import com.nativelibs4java.opencl.CLEvent
 import com.nativelibs4java.opencl.CLByteBuffer
 
 import compiler.JVM2CL.compileRoot
@@ -23,6 +24,12 @@ import scala.collection.JavaConversions._
 
 import scala.collection.mutable.ArrayBuffer
 import firepile.Marshaling._
+
+import com.nativelibs4java.opencl.JavaCL
+import com.nativelibs4java.opencl.library.OpenCLLibrary
+import com.nativelibs4java.opencl.library.OpenCLLibrary._
+import com.nativelibs4java.util.JNAUtils.toNS
+import com.sun.jna.Native
 
 // TODO: remove most of this.
 
@@ -486,13 +493,20 @@ object Compiler {
             case (clBuf: CLByteBuffer, totalSize : Int, marshal: Marshal[_], index: Int, items: Int) => {
               val (data, _) = tuple(index)
               // println("total size of output buffer: " + totalSize)
-              val bufOut = allocDirectBuffer(totalSize)
-              clBuf.read(dev.queue, bufOut, true)
-              bufOut.rewind
-              // Array.copy(bufOut, 0, data.asInstanceOf[AnyRef], 0, items)
               data match {
-                case d: BBArray[_] => d.buffer = bufOut 
-                case _ => Array.copy(marshal.fromBuffer(List(bufOut)), 0, data.asInstanceOf[AnyRef], 0, items)
+                case d: BBArray[_] => {
+				                        val clOut = CLEvent.new_event_out(null)
+				                        val clArray = CLEvent.to_cl_event_array(null)  
+				                        JavaCL.CL.clEnqueueReadBuffer(dev.queue.getEntity(),clBuf.getEntity(),CL_TRUE,toNS(0),toNS(totalSize),Native.getDirectBufferPointer(d.buffer),0 ,clArray,clOut)
+				                        //d.buffer = bufOut 
+									   }	
+                case _ => {  
+				            val bufOut = allocDirectBuffer(totalSize)
+							clBuf.read(dev.queue, bufOut, true)
+							bufOut.rewind
+							Array.copy(bufOut, 0, data.asInstanceOf[AnyRef], 0, items)
+              				Array.copy(marshal.fromBuffer(List(bufOut)), 0, data.asInstanceOf[AnyRef], 0, items) 
+					}
               }
             }
             case _ => {}
