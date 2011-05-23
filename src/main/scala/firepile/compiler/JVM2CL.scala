@@ -65,7 +65,7 @@ import firepile.compiler.util.ClassDefs.{
 import firepile.compiler.util.TypeFlow.getSupertypes
 import firepile.tree.Trees._
 import firepile.Kernel
-import firepile.tree.Trees.{ Seq => TreeSeq }
+import firepile.tree.Trees.{ Return => CLReturn, Seq => TreeSeq }
 import scala.Seq
 import soot.jimple.{
   FloatConstant,
@@ -144,8 +144,8 @@ object JVM2CL {
       // println("after process work list")
 
      
-      // println("Result CL:")
-      // for (t <- proc) println(t.toCL)
+      println("Result CL:")
+      for (t <- proc) println(t.toCL)
       
 
       proc
@@ -448,9 +448,10 @@ object JVM2CL {
     StaticInliner.v.transform
   }
 
+  val functionDefs = HashMap[String, Tree]()
+
   private def processWorklist = {
     val results = ListBuffer[Tree]()
-    val functionDefs = HashMap[String, Tree]()
     val preamble = ListBuffer[Tree]()
 
     while (!worklist.isEmpty) {
@@ -1004,6 +1005,9 @@ object JVM2CL {
     case "Long" => ValueType("long")
     case "Float" => ValueType("float")
     case "Double" => ValueType("double")
+    case "java.lang.Float" => ValueType("float")
+    case "java.lang.Int" => ValueType("int")
+    case "java.lang.Double" => ValueType("double")
     case x => PtrType(ValueType(x))
   }
 
@@ -1545,7 +1549,7 @@ object JVM2CL {
 
                   val methodReceivers = methodReceiversRef.map(mr => methodName(mr))
 
-                  val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mangleName(mr._1.getName) + "_ID"), TreeSeq(Return(Call(Id(mangleName(mr._2)), (Cast(PtrType(Id(mangleName(mr._1.getName) + "_intr")), Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
+                  val switchStmt = Switch(Id("cls->object.__id"), (possibleReceivers zip methodReceivers).map(mr => Case(Id(mangleName(mr._1.getName) + "_ID"), TreeSeq(CLReturn(Call(Id(mangleName(mr._2)), (Cast(PtrType(Id(mangleName(mr._1.getName) + "_intr")), Id("cls")) :: methodFormalIds))))))) // really no need for a break if we are returning
 
                   // add appropriate formal parameters for call
                   worklist += new CompileMethodTree(FunDef(ValueType(method.returnType.toString), Id("dispatch_" + mangleName(method.declaringClass.getName)), Formal(PtrType(Id(mangleName(method.declaringClass.getName) + "_intr")), "cls") :: methodFormals, List(switchStmt).toArray: _*))
@@ -1632,32 +1636,43 @@ object JVM2CL {
               // Handle accessing captured variables.  Assumes captured variable 'x' is 'this.x$1'
               // TODO: eliminate (if possible) the assumptions here about the naming conventions of variables.
               if (fieldRef.`type`.toString.startsWith("scala.Function")) {
-                // println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
+                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
                 anonFuns.keys.foreach(k => print(k + " "))
-                anonFuns(fieldRef.name.takeWhile(_ != '$')) match {
+                
+                // REFLECT
+/*
+                anonFuns.get(fieldRef.name.takeWhile(_ != '$')) match {
                   // matched 'this.x$1.apply(args)' where 'x$1' is a captured variable 'x'
                   // and 'x' is 'new anonfun$1(closureArgs)'
                   // ->
                   // anonfun_dollar1_apply(env, args)
                   // and also translate the body of that method
-                  case GNewInvoke(closureTyp, closureMethod, closureArgs) => {
+                  case Some(GNewInvoke(closureTyp, closureMethod, closureArgs)) => {
                     // println("CLOSURE METHOD: " + fieldRef.name)
                     // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
                     val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
 
-                    /*
-                for (applyMethod <- applyMethods) {
+                for (applyMethod <- applyMethods) 
                   println("Found apply method: " + applyMethod.getSignature)
-                }
-                */
 
                     worklist += CompileMethodTask(applyMethods.head)
                     ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
                   }
                   //case _ => Select(base, mangleName(fieldRef.name)) // TODO: punt
-                  case _ => /* println(" mangled name::" + mangleName(fieldRef.name));*/ Id(mangleName(fieldRef.name))
+                  case None => println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name))
                 }
+*/
+                var argNum = -1
+                if (args.length == args.filter(a => a.getType.toString != "java.lang.Object").length)
+                  functionDefs += fieldRef.name.takeWhile(_ != '$') -> FunDec(translateType(args(0).getType.toString), fieldRef.name.takeWhile(_ != '$'), args.map(a => { argNum += 1; Formal(translateType(a.getType.toString), Id("_arg" + argNum))}))
+
+                Kernel.closureFName = fieldRef.name.takeWhile(_ != '$')
+
+                ClosureCall(Id(mangleName(fieldRef.name.takeWhile(_ != '$'))), args.map(a => translateExp(a, symtab, anonFuns)))
+
                 //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
+
+
               } else { /* println(" mangled name::" + mangleName(fieldRef.name)); */ Id(mangleName(fieldRef.name)) }
 
             }
@@ -1941,14 +1956,14 @@ object JVM2CL {
             // println(" Changing to Level 3 ")
             Kernel.level = 3;
             // return List(TreeSeq())
-            Return
+            CLReturn
           } 
-          case GReturnVoid() => Return
+          case GReturnVoid() => CLReturn
           case GReturn(returned) if Kernel.level == 2 => {
             // println(" Changing to Level 3 ")
             Kernel.level = 3;
             // return List(TreeSeq())
-            Return
+            CLReturn
           } 
           case GReturn(returned) => returned match {
             // TODO: Maybe remove this????
@@ -1995,7 +2010,7 @@ object JVM2CL {
 //              }
              
             // println("closureType = " + closureTyp.toString + " closureMethod = " + closureMethod.name)
-            Return
+            CLReturn
               //translateExp(ni, symtab, anonFuns)
 
 /*
@@ -2051,12 +2066,12 @@ object JVM2CL {
               TreeSeq(VarDef(StructType("EnvX"), Id("this")) :: args.map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
                 List(ClosureCall(Id(mangleName(base.toString) + method.name), args.map(ca => translateExp(ca, symtab, anonFuns)))))
             }
-            case _ => Return(translateExp(returned, symtab, anonFuns)) match {
-              case Return(Cast(typ, StructLit(fields))) => {
+            case _ => CLReturn(translateExp(returned, symtab, anonFuns)) match {
+              case CLReturn(Cast(typ, StructLit(fields))) => {
                 val tmp = freshName("ret")
                 symtab.addLocalVar(typ, Id(tmp))
                 // println(" typ ::" + typ + ":: fields" + fields + " tmp::" + tmp)
-                TreeSeq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), Return(Id(tmp)))
+                TreeSeq(Eval(Assign(Id(tmp), Cast(typ, StructLit(fields)))), CLReturn(Id(tmp)))
               }
               case t => t
             }

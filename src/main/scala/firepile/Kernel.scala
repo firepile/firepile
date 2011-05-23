@@ -67,6 +67,7 @@ val globalArgs = new ArrayList[(String,SootType,Int)]()
 val localArgs = new ArrayList[(String,SootType,Int)]()
 val outputArgs = new ArrayList[String]()
 val time = new HashMap[String,Long]()
+var closureFName: String = null
 
 }
 

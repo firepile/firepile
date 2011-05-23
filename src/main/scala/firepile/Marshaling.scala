@@ -116,6 +116,7 @@ object Marshaling {
     def get(buf:ByteBuffer, i: Int) = (buf.getInt(i)).toUInt
     val manifest = Predef.manifest[UInt]
   }
+
   
   // Local memory marshal
   abstract class Local[A: Marshal] {

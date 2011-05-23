@@ -174,6 +174,8 @@ package object firepile {
     }
   }
 
+  def whatIsTypeName[T <: AnyRef](t: T)(implicit m: scala.reflect.Manifest[T]) = t.getClass.getName
+
   class SimpleArrayDist2[T: HasLength, U: HasLength] extends Dist2[T,U] {
     def apply(a1: T, a2: U) = new Dist {
       val totalNumberOfItems = implicitly[HasLength[T]].length(a1) max implicitly[HasLength[U]].length(a2)

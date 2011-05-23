@@ -13,7 +13,10 @@ object Reflect2CL {
         }), body.map(b => toCLTree(b)):_*)
     }
     case Assign(Ident(LocalValue(_,lhs,_)),Ident(LocalValue(_,rhs,_))) => CLAssign(Id(lhs), Id(rhs))
+    // Assign(Ident(LocalValue(NoSymbol,this,NamedType(Unmatched:PlusFuns))),This(NoSymbol))
+    case Assign(_, This(_)) => Seq()
     case Apply(Select(Ident(LocalValue(_,op1,_)),Method(methodName,_)),List(Ident(LocalValue(NoSymbol,op2,_)))) => Bin(Id(op1),methodToBinOp(methodName), Id(op2))
+    case ValDef(LocalValue(_,name,typ), _) => VarDef(translateType(typ), Id(name))
     case Return(ret) => CLReturn(toCLTree(ret))
     case x => Id(x.toString)
   }
@@ -50,7 +53,7 @@ object Reflect2CL {
     case PrefixedType(ThisType(Class("scala")),Class("scala.Long")) => ValueType("long")
     case PrefixedType(ThisType(Class("scala")),Class("scala.Float")) => ValueType("float")
     case PrefixedType(ThisType(Class("scala")),Class("scala.Double")) => ValueType("double")
-    case _ => throw new RuntimeException("unsupported type")  
+    case x => throw new RuntimeException("unsupported type: " + x)  
   }
 }
 

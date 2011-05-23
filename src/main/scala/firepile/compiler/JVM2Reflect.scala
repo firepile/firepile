@@ -5,6 +5,7 @@ import scala.tools.scalap.{ Main => Scalap }
 // import scala.tools.scalap.scalax.rules.scalasig._
 
 import scala.reflect._
+import firepile.tree.Trees.{Tree => CLTree}
 
 import scala.collection.mutable.Queue
 import scala.collection.mutable.HashSet
@@ -85,10 +86,16 @@ import firepile.Device
 
 import scala.collection.mutable.HashMap
 
+import scala.reflect.generic._
+
+
 case class DummyTree(name: String) extends Tree
+case class EmptyTree() extends Tree
 case class Return(exp: Tree) extends Tree
 
+
 object JVM2Reflect {
+
   def main(args: Array[String]) = {
     if (args.length != 2) {
       println("usage: firepile.compile.JVM2Reflect className methodSig")
@@ -115,7 +122,7 @@ object JVM2Reflect {
 
   setup
 
-  def compileRoot(className: String, methodSig: String, argMarshals: List[Marshal[_]], dev: Device = null): List[Tree] = {
+  def compileRoot(className: String, methodSig: String, argMarshals: List[Marshal[_]], dev: Device = null): List[CLTree] = {
     // println("compiling " + className + "." + methodSig)
     /*
     println("arg types: " + argMarshals.map(am => am match {
@@ -136,6 +143,9 @@ object JVM2Reflect {
       val proc = processWorklist
       // println("after process work list")
 
+
+      println("Result Reflect Tree:")
+      for (t <- proc) println(t.toString)
      
       println("Result CLTree:")
       for (t <- proc) println(Reflect2CL.toCLTree(t))
@@ -144,7 +154,11 @@ object JVM2Reflect {
       for (t <- proc) println(Reflect2CL.toCLTree(t).toCL)
       
 
-      proc.toList
+      // proc.toList
+      val clTrees = new ListBuffer[CLTree]()
+      for (t <- proc) clTrees += Reflect2CL.toCLTree(t)
+
+      clTrees.toList
     } catch {
       case e: ClassNotFoundException => {
         println("Class not found: " + e.getMessage)
@@ -291,9 +305,9 @@ object JVM2Reflect {
     // println(" Method Iterator ")
     for (m <- c.methodIterator) {
       // println("m.getName " + m.getName)
-      val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+      val sig = m.getName // + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
       // println("trying " + sig)
-      if (sig.equals(methodSig)) {
+      if (sig.equals(methodSig) && m.getParameterTypes.forall(p => !p.toString.equals("java.lang.Object"))) {
         worklist += CompileRootMethodTask(m.makeRef, false, null)
         kernelMethodName = methodName(m)
       }
@@ -474,7 +488,7 @@ object JVM2Reflect {
     val labels = new HashMap[SootUnit, String]()
     val params = new HashMap[Int, (Symbol, Type)]()
     val mparams = new HashMap[Int, (String, Tree)]()
-    val locals = new HashMap[Symbol, Type]()
+    val locals = new ListBuffer[ValDef]()
     val arrays = new HashMap[Symbol, (Type /*type*/ , Tree /*size*/ )]()
     var thisParam: (Symbol, Tree) = null
     var kernelMethod = false
@@ -511,8 +525,9 @@ object JVM2Reflect {
       }
     }
 
+    
     def addLocalVar(typ: SootType, id: Symbol) = {
-      assert(!params.contains(id))
+      // assert(!params.contains(id))
       // assert(!locals.contains(id))
       /*
       translateType(typ) match {
@@ -521,11 +536,13 @@ object JVM2Reflect {
         case _ => locals += id -> translateType(typ)
       }
       */
-      locals += id -> translateType(typ)
+      // locals += id -> translateType(typ)
+      // locals += ValDef(id, translateType(typ))
     }
+    
 
     def addLocalVar(typ: Type, id: Symbol) = {
-      assert(!params.contains(id))
+      // assert(!params.contains(id))
       // assert(!locals.contains(id))
       /*
       typ match {
@@ -534,7 +551,7 @@ object JVM2Reflect {
         case _ => locals += id -> typ
       }
       */
-      locals += id -> typ
+      // locals += id -> typ
     }
 
     def addArrayDef(typ: SootType, id: Symbol, size: Tree) = {
@@ -1199,7 +1216,13 @@ object JVM2Reflect {
     units match {
       case u :: us => {
         val tree: Tree = u match {
-          case GIdentity(left: Value, right) => Assign(left,right)
+          case GIdentity(left: Value, right) => {
+            left match {
+              case l: Local if !(l.getName.equals("this") || l.getName.equals("l0")) => symtab.locals += ValDef(LocalValue(NoSymbol,l.getName,translateType(l.getType)),EmptyTree())
+              case _ => { }
+            }
+            Assign(left,right) 
+          }
           case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => {
             DummyTree("Assign from new array")
           }
@@ -1343,7 +1366,7 @@ object JVM2Reflect {
       }
     }
 
-    Function(funParams.toList, Block(body, Ident(Method(methodName(m),translateType(m.getReturnType)))))
+    Function(funParams.toList, Block(symtab.locals.toList ::: body, Ident(Method(methodName(m),translateType(m.getReturnType)))))
   }
   
 
