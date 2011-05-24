@@ -56,7 +56,7 @@ def reduceModified(idata: BBArray[Float])
   val n = idata.length
   Kernel.output("odata")
  
-  space.spawnF { 
+  space.spawn { 
    
     space.groups.foreach {
       g => {

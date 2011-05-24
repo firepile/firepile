@@ -44,6 +44,7 @@ val sizeA2 = transA2.sizes(1).head
 }
 */
 
+/*
   def spawn[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device) = {
     //println("in Spawn")
     val fvals = block
@@ -70,18 +71,23 @@ val sizeA2 = transA2.sizes(1).head
 
      }
  }
+*/
 
-
-  def spawnF[A, B, C, X](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[Float,Float,Float]) = {
+  def spawn[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
     println("in Spawn")
     val fvals = block
     val fbody = () => block
 
-    val f_in = implicitly[Function2[Float,Float,Float]]
+    var f_in: Function2[_,_,_] = null
+    var closureTree: List[firepile.tree.Trees.Tree] = null
 
-    println("type of f is: " + whatIsTypeName(f_in))
+    if (e != null) {
+      f_in = implicitly[Function2[_,_,_]]
 
-    val closureTree: List[firepile.tree.Trees.Tree] = JVM2Reflect.compileRoot(whatIsTypeName(f_in), "apply", List(m1, m2, m3))
+      println("type of f is: " + whatIsTypeName(f_in))
+
+      closureTree = JVM2Reflect.compileRoot(whatIsTypeName(f_in), "apply", List(m1, m2, m3))
+    }
 
     //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
 
@@ -93,14 +99,16 @@ val sizeA2 = transA2.sizes(1).head
 						       val kernStr = new StringBuffer()
 						       // println(" name ::" + kernName + "::\n")
 						       for (t: Tree <- treeList.reverse)
-							kernStr.append(t.toCL)
-							
-                                                       val rewrittenClosureTree = closureTree match {
-                                                         case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
-                                                         case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
-                                                       }
+							 kernStr.append(t.toCL)
+						       
+                                                       if (closureTree != null) {
+                                                         val rewrittenClosureTree = closureTree match {
+                                                           case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
+                                                           case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
+                                                         }
 
-                                                       kernStr.append(rewrittenClosureTree.toCL)
+                                                         kernStr.append(rewrittenClosureTree.toCL)
+                                                       }
 
                                                        println("Final kernel code: \n" + kernStr.toString)
 						       
