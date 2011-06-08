@@ -13,7 +13,7 @@ import com.nativelibs4java.opencl.CLKernel
 import com.nativelibs4java.opencl.CLEvent
 import com.nativelibs4java.opencl.CLByteBuffer
 
-import compiler.JVM2CL.compileRoot
+import compiler.JVM2Reflect.compileRoot
 import compiler.JVM2CL.compileMethod
 import compiler.JVM2CL.mangleName
 import compiler.JVM2CL.methodName

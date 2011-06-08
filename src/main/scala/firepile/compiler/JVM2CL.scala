@@ -65,7 +65,7 @@ import firepile.compiler.util.ClassDefs.{
 import firepile.compiler.util.TypeFlow.getSupertypes
 import firepile.tree.Trees._
 import firepile.Kernel
-import firepile.tree.Trees.{ Return => CLReturn, Seq => TreeSeq }
+import firepile.tree.Trees.{ Return => CLReturn, Seq => TreeSeq, ArrayDef => CLArrayDef }
 import scala.Seq
 import soot.jimple.{
   FloatConstant,
@@ -109,7 +109,7 @@ object JVM2CL {
   setup
 
   def compileRoot(className: String, methodSig: String, argMarshals: List[Marshal[_]], dev: Device = null): List[Tree] = {
-    // println("compiling " + className + "." + methodSig)
+    println("compiling " + className + "." + methodSig)
     /*
     println("arg types: " + argMarshals.map(am => am match {
         case bbm: BBArrayMarshal[_] => "BB:" + bbm.fixedSizeMarshalMM.manifest
@@ -1630,17 +1630,17 @@ object JVM2CL {
             }
             case GInstanceFieldRef(instBase, fieldRef) => {
 
-              // println(" GInstanceFieldRef::" + instBase + "::" + fieldRef)
-              // printf("GInstanceFieldRef:: instBase name = " + instBase.asInstanceOf[Local].getName + " with method name " + method.name)
+              println(" GInstanceFieldRef::" + instBase + "::" + fieldRef)
+              // println("GInstanceFieldRef:: instBase name = " + instBase.asInstanceOf[Local].getName + " with method name " + method.name)
               // TODO: comment
               // Handle accessing captured variables.  Assumes captured variable 'x' is 'this.x$1'
               // TODO: eliminate (if possible) the assumptions here about the naming conventions of variables.
               if (fieldRef.`type`.toString.startsWith("scala.Function")) {
-                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
+                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " of type " + fieldRef.`type`.toString + " in ")
                 anonFuns.keys.foreach(k => print(k + " "))
                 
                 // REFLECT
-/*
+                /*
                 anonFuns.get(fieldRef.name.takeWhile(_ != '$')) match {
                   // matched 'this.x$1.apply(args)' where 'x$1' is a captured variable 'x'
                   // and 'x' is 'new anonfun$1(closureArgs)'
@@ -1652,16 +1652,17 @@ object JVM2CL {
                     // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
                     val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
 
-                for (applyMethod <- applyMethods) 
-                  println("Found apply method: " + applyMethod.getSignature)
+                    for (applyMethod <- applyMethods) 
+                      println("Found apply method: " + applyMethod.getSignature)
 
                     worklist += CompileMethodTask(applyMethods.head)
                     ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
                   }
                   //case _ => Select(base, mangleName(fieldRef.name)) // TODO: punt
-                  case None => println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name))
+                  case None => { println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name)) }
                 }
-*/
+                */
+                
                 var argNum = -1
                 if (args.length == args.filter(a => a.getType.toString != "java.lang.Object").length)
                   functionDefs += fieldRef.name.takeWhile(_ != '$') -> FunDec(translateType(args(0).getType.toString), fieldRef.name.takeWhile(_ != '$'), args.map(a => { argNum += 1; Formal(translateType(a.getType.toString), Id("_arg" + argNum))}))
@@ -1672,8 +1673,10 @@ object JVM2CL {
 
                 //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
 
-
-              } else { /* println(" mangled name::" + mangleName(fieldRef.name)); */ Id(mangleName(fieldRef.name)) }
+              } 
+              else { /* println(" mangled name::" + mangleName(fieldRef.name)); */ 
+                Id(mangleName(fieldRef.name)) 
+              }
 
             }
 
@@ -2227,7 +2230,7 @@ object JVM2CL {
       case Some(Formal(PtrType(StructType("firepile_Group")), _)) => {
         // println("THIS IS THE Group Method")
         paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
-        varTree += ArrayDef(Id("_item_desc"), StructType("firepile_Item"), IntLit(kernelDim))
+        varTree += CLArrayDef(Id("_item_desc"), StructType("firepile_Item"), IntLit(kernelDim))
         for (i <- 0 until kernelDim) {
           varTree += Assign(Select(ArrayAccess(Id("_item_desc"), IntLit(i)), Id("id")), Call(Id("get_local_id"), IntLit(i)))
           varTree += Assign(Select(ArrayAccess(Id("_item_desc"), IntLit(i)), Id("size")), Call(Id("get_local_size"), IntLit(i)))
@@ -2266,7 +2269,7 @@ object JVM2CL {
     // kernel methods need to populate group/item structs, later these may become parts of 
     // environments of global and item
     if (symtab.kernelMethod) {
-      varTree += ArrayDef(Id("_group_desc"), StructType("firepile_Group"), IntLit(kernelDim))
+      varTree += CLArrayDef(Id("_group_desc"), StructType("firepile_Group"), IntLit(kernelDim))
       for (i <- 0 until kernelDim) {
         varTree += Assign(Select(ArrayAccess(Id("_group_desc"), IntLit(i)), Id("id")), Call(Id("get_group_id"), IntLit(i)))
         varTree += Assign(Select(ArrayAccess(Id("_group_desc"), IntLit(i)), Id("size")), Call(Id("get_global_size"), IntLit(i)))
@@ -2275,7 +2278,7 @@ object JVM2CL {
 
 
     for (((id: Id), (typ: Tree, size: IntLit)) <- symtab.arrays)
-      varTree += ArrayDef(id, typ, size)
+      varTree += CLArrayDef(id, typ, size)
 
     FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray: _*)
   }

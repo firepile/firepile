@@ -44,7 +44,7 @@ val sizeA2 = transA2.sizes(1).head
 }
 */
 
-/*
+
   def spawn[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device) = {
     //println("in Spawn")
     val fvals = block
@@ -71,15 +71,19 @@ val sizeA2 = transA2.sizes(1).head
 
      }
  }
-*/
 
-  def spawn[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
-    println("in Spawn")
+ /*
+   Some bug caused by having implicit e having default value
+ def spawn[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
+    println("in Spawn3")
     val fvals = block
     val fbody = () => block
-
+  
+    
     var f_in: Function2[_,_,_] = null
     var closureTree: List[firepile.tree.Trees.Tree] = null
+    
+
 
     if (e != null) {
       f_in = implicitly[Function2[_,_,_]]
@@ -89,18 +93,19 @@ val sizeA2 = transA2.sizes(1).head
       closureTree = JVM2Reflect.compileRoot(whatIsTypeName(f_in), "apply", List(m1, m2, m3))
     }
 
-    //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
 
-    val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 3, List(m1, m2, m3), dev), "Compile")
+    //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
     
+    val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 3, List(m1, m2, m3), dev), "Compile")
+
     kernArgs match {
     
     case Some((kernName: String, treeList: List[Tree])) => {
-						       val kernStr = new StringBuffer()
-						       // println(" name ::" + kernName + "::\n")
-						       for (t: Tree <- treeList.reverse)
-							 kernStr.append(t.toCL)
-						       
+                                                       val kernStr = new StringBuffer()
+                                                       // println(" name ::" + kernName + "::\n")
+                                                       for (t: Tree <- treeList.reverse)
+                                                         kernStr.append(t.toCL)
+                                                        
                                                        if (closureTree != null) {
                                                          val rewrittenClosureTree = closureTree match {
                                                            case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
@@ -111,17 +116,75 @@ val sizeA2 = transA2.sizes(1).head
                                                        }
 
                                                        println("Final kernel code: \n" + kernStr.toString)
-						       
+                                                       
+                                                       
                                                        firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 
 
-						       Kernel.printTime
-						      }
+                                                       Kernel.printTime
+                                                      }
                                                   
     case None => { println(" Something went wrong while creating Kernel!!!") }
-	//
+        //
 
      }
  }
+ */
+
+  def spawnF[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
+    println("in Spawn3")
+    val fvals = block
+    val fbody = () => block
+  
+    
+    var f_in: Function2[_,_,_] = null
+    var closureTree: List[firepile.tree.Trees.Tree] = null
+    
+
+
+    if (e != null) {
+      f_in = implicitly[Function2[_,_,_]]
+
+      println("type of f is: " + whatIsTypeName(f_in))
+
+      closureTree = JVM2Reflect.compileRoot(whatIsTypeName(f_in), "apply", List(m1, m2, m3))
+    }
+
+
+    //println(" ::" + m1.toString + "::" + m2.toString + "::" + m3.toString)
+    
+    val kernArgs = time(firepile.Compiler.findAllMethods(fbody, 3, List(m1, m2, m3), dev), "Compile")
+
+    kernArgs match {
+    
+    case Some((kernName: String, treeList: List[Tree])) => {
+                                                       val kernStr = new StringBuffer()
+                                                       // println(" name ::" + kernName + "::\n")
+                                                       for (t: Tree <- treeList.reverse)
+                                                         kernStr.append(t.toCL)
+                                                        
+                                                       if (closureTree != null) {
+                                                         val rewrittenClosureTree = closureTree match {
+                                                           case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
+                                                           case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
+                                                         }
+
+                                                         kernStr.append(rewrittenClosureTree.toCL)
+                                                       }
+
+                                                       println("Final kernel code: \n" + kernStr.toString)
+                                                       
+                                                       
+                                                       firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 
+
+                                                       Kernel.printTime
+                                                      }
+                                                  
+    case None => { println(" Something went wrong while creating Kernel!!!") }
+        //
+
+     }
+ }
+
  
    def spawn[A, B, C, D](block: => (A, B, C, D))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], m4: Marshal[D], dev: Device) = {
      //println("in Spawn")
