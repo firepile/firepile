@@ -1205,7 +1205,7 @@ object JVM2Reflect {
               Apply(Select(Ident(LocalValue(NoSymbol,fieldName,PrefixedType(ThisType(Class("scala.collection")),Class("scala.collection.SeqLike")))),
                           Method("scala.collection.SeqLike.size",MethodType(List(LocalValue(NoSymbol,"x",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))), PrefixedType(ThisType(Class("scala")),Class("scala.Int"))))), List(Literal(0)))
               */
-              Select(Apply(Select(Ident(LocalValue(NoSymbol, "_group_desc", NamedType("firepile_Group"))), Method("apply", MethodType(List(LocalValue(NoSymbol,"x",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))),PrefixedType(ThisType(Class("scala")),Class("scala.Int"))))), List(Literal(0))), Field("size", PrefixedType(ThisType(Class("scala")),Class("scala.Int"))))
+              Select(Apply(Select(Ident(LocalValue(NoSymbol, "item", NamedType("firepile_Group"))), Method("apply", MethodType(List(LocalValue(NoSymbol,"x",PrefixedType(ThisType(Class("scala")),Class("scala.Int")))),PrefixedType(ThisType(Class("scala")),Class("scala.Int"))))), List(Literal(0))), Field("size", PrefixedType(ThisType(Class("scala")),Class("scala.Int"))))
 
           }
 /*

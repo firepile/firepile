@@ -6,6 +6,8 @@ import firepile.Spaces._
 import firepile.tree.Trees._
 import firepile.Implicits._
 
+import scala.reflect.NamedType
+
 import soot.{Type => SootType}
 
 import com.nativelibs4java.opencl.CLMem
@@ -14,9 +16,9 @@ import com.nativelibs4java.opencl.CLEvent
 import com.nativelibs4java.opencl.CLByteBuffer
 
 import compiler.JVM2Reflect.compileRoot
-import compiler.JVM2CL.compileMethod
-import compiler.JVM2CL.mangleName
-import compiler.JVM2CL.methodName
+// import compiler.JVM2CL.compileMethod
+import compiler.JVM2Reflect.mangleName
+import compiler.JVM2Reflect.methodName
 
 import java.util.ArrayList
 import java.nio.ByteBuffer
@@ -358,8 +360,8 @@ object Compiler {
               maxOutputSize = marshalInfo._4
             }
             
-            firepile.compiler.JVM2CL.translateType(typ, index) match {
-              case StructType(typeName) if typeName.endsWith("Array") => {
+            firepile.compiler.JVM2Reflect.translateType(typ, index) match {
+              case NamedType(typeName) if typeName.endsWith("Array") => {
                 kernBin.setArg(i+numArrays, clBuf)
                 numArrays += 1
 
@@ -381,14 +383,15 @@ object Compiler {
 //            time({
               val copyToGPU = System.nanoTime
 
-              firepile.compiler.JVM2CL.translateType(typ, index) match {
+
+              firepile.tree.Reflect2CL.translateType(firepile.compiler.JVM2Reflect.translateType(typ, index)) match {
                 case ValueType("int") => {
                   kernBin.setArg(i+numArrays, data.asInstanceOf[Int])
                 }
                 case ValueType("float") => kernBin.setArg(i+numArrays, data.asInstanceOf[Float])
                 case ValueType("long") => kernBin.setArg(i+numArrays, data.asInstanceOf[Long])
                 case ValueType("double") => kernBin.setArg(i+numArrays, data.asInstanceOf[Double])
-                case StructType(typName) => typName.replace("Array", "") match {
+                case ValueType(typName) if typName.endsWith("Array") => firepile.tree.Reflect2CL.translateType(typName.replace("Array", "")) match {
                   case "int" => {
                     kernBin.setArg(i+numArrays, dev.context.createBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                     numArrays += 1
@@ -414,6 +417,7 @@ object Compiler {
                 }
 
                 case x => {
+                  println("Setting unknown arg: " + (i+numArrays))
                   kernBin.setArg(i+numArrays, dev.context.createByteBuffer(CLMem.Usage.Input, marshalInfo._2, true))
                 }
         
