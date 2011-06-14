@@ -383,7 +383,8 @@ object JVM2Reflect {
     // println(" Method Iterator ")
     for (m <- c.methodIterator) {
       // println("m.getName" + m.getName)
-      val sig = m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef)
+      val sig = if (methodSig.contains('(')) m.getName + soot.AbstractJasminClass.jasminDescriptorOf(m.makeRef) else m.getName
+
       // println("trying " + sig)
       if (sig.equals(methodSig)) {
         worklist += CompileMethodTask(m.makeRef, false, null)
@@ -404,9 +405,10 @@ object JVM2Reflect {
     StaticInliner.v.transform
   }
 
+  val functionDefs = HashMap[String, Tree]()
+
   private def processWorklist = {
     val results = ListBuffer[Tree]()
-    val functionDefs = HashMap[String, Tree]()
     val preambleArrays = ListBuffer[Tree]()
     val preambleEnvs = ListBuffer[Tree]()
 
@@ -444,6 +446,7 @@ object JVM2Reflect {
 
     arraystructs.clearArrays
     envstructs.clearEnvs
+    functionDefs.clear
     // classtab.clearClassTable
 
     tree
@@ -682,6 +685,8 @@ object JVM2Reflect {
         case "scala.Tuple4" => PrefixedType(ThisType(Class("scala")),Class("scala.Tuple4"))
         case "scala.Tuple5" => PrefixedType(ThisType(Class("scala")),Class("scala.Tuple5"))
         case "scala.Tuple6" => PrefixedType(ThisType(Class("scala")),Class("scala.Tuple6"))
+        case "java.lang.Int" => PrefixedType(ThisType(Class("scala")),Class("scala.Int"))
+        case "java.lang.Float" => PrefixedType(ThisType(Class("scala")),Class("scala.Float"))
         case "firepile.Spaces$Point1" => PrefixedType(ThisType(Class("scala")),Class("scala.Int"))
         case "firepile.Spaces$Id1" => PrefixedType(ThisType(Class("scala")),Class("scala.Any")) // StructType(mangleName(t.toString))
         case "firepile.util.Unsigned$UInt" => NamedType("firepile.util.Unsigned.UInt") 
@@ -1259,15 +1264,17 @@ object JVM2Reflect {
           */
             }
             case GInstanceFieldRef(instBase, fieldRef) => {
-
-              // println(" GInstanceFieldRef::" + instBase + "::" + fieldRef)
-              // printf("GInstanceFieldRef:: instBase name = " + instBase.asInstanceOf[Local].getName + " with method name " + method.name)
+              println(" GInstanceFieldRef::" + instBase + "::" + fieldRef)
+              // println("GInstanceFieldRef:: instBase name = " + instBase.asInstanceOf[Local].getName + " with method name " + method.name)
               // TODO: comment
               // Handle accessing captured variables.  Assumes captured variable 'x' is 'this.x$1'
               // TODO: eliminate (if possible) the assumptions here about the naming conventions of variables.
               if (fieldRef.`type`.toString.startsWith("scala.Function")) {
-                // println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
+                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " of type " + fieldRef.`type`.toString + " in ")
                 anonFuns.keys.foreach(k => print(k + " "))
+                
+                // REFLECT
+                /*
                 anonFuns.get(fieldRef.name.takeWhile(_ != '$')) match {
                   // matched 'this.x$1.apply(args)' where 'x$1' is a captured variable 'x'
                   // and 'x' is 'new anonfun$1(closureArgs)'
@@ -1279,25 +1286,36 @@ object JVM2Reflect {
                     // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
                     val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
 
-                    /*
-                for (applyMethod <- applyMethods) {
-                  println("Found apply method: " + applyMethod.getSignature)
-                }
-                */
+                    for (applyMethod <- applyMethods) 
+                      println("Found apply method: " + applyMethod.getSignature)
 
                     worklist += CompileMethodTask(applyMethods.head)
-                    // ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
-                    DummyTree("GInstanceFieldRef on scala.Function")
+                    ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
                   }
                   //case _ => Select(base, mangleName(fieldRef.name)) // TODO: punt
-                  
-                  case None => Select(Ident(Class(translateTypeSimpleName(base.getType))), Field(mangleName(fieldRef.name), translateType(fieldRef.`type`)))
- // DummyTree("GInstanceFieldRef") // Id(mangleName(fieldRef.name))
+                  case None => { println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name)) }
                 }
-                //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
-              } else Select(Ident(Class(translateTypeSimpleName(base.getType))), Field(mangleName(fieldRef.name), translateType(fieldRef.`type`)))
- // DummyTree("GInstanceFieldRef") // Id(mangleName(fieldRef.name))
+                */
+                
+                var argNum = -1
+                if (args.length == args.filter(a => a.getType.toString != "java.lang.Object").length) {
+                  functionDefs += fieldRef.name.takeWhile(_ != '$') -> FunctionDec(translateType(args(0).getType), fieldRef.name.takeWhile(_ != '$'), args.map(a => { argNum += 1; LocalValue(NoSymbol, "_arg"+argNum, translateType(a.getType)) }))
+                }
+                  // functionDefs += fieldRef.name.takeWhile(_ != '$') -> FunDec(translateType(args(0).getType.toString), fieldRef.name.takeWhile(_ != '$'), args.map(a => { argNum += 1; Formal(translateType(a.getType.toString), Id("_arg" + argNum))}))
 
+                Kernel.closureFName = fieldRef.name.takeWhile(_ != '$')
+
+                // ClosureCall(Id(mangleName(fieldRef.name.takeWhile(_ != '$'))), args.map(a => translateExp(a, symtab, anonFuns)))
+
+                Apply(Select(Ident(NoSymbol),
+                  Method(mangleName(fieldRef.name.takeWhile(_ != '$')),MethodType(List(LocalValue(NoSymbol,"x",NoType)), NoType))), args.map(a => translateExp(a, symtab, anonFuns)))
+
+                //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
+
+              } 
+              else { /* println(" mangled name::" + mangleName(fieldRef.name)); */ 
+                Ident(LocalValue(NoSymbol, mangleName(fieldRef.name), NoType))
+              }
             }
 
             case GStaticInvoke(method, args) => DummyTree("STATICINVOKE inside INTERFACE INVOKE") // Id("STATICINVOKE inside INTERFACE INVOKE")
