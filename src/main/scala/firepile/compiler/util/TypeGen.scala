@@ -28,7 +28,7 @@ object TypeGen {
   def main(args: Array[String]) = {
     if (args.length != 1) {
       println("usage: TypeGen classname")
-      exit(1)
+      sys.exit(1)
     }
 /*    val cdlist = getSignature(args(0))
 

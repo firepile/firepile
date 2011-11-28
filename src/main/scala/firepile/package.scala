@@ -135,116 +135,17 @@ package object firepile {
   def unloadCompiler = JavaCL.unloadCompiler
 
   // ------------------------------------------------------------------------
-  // TODO: Dist and Effect should be @Deprecated
-  trait Dist {
-    def totalNumberOfItems: Int
-    def numberOfItemsPerGroup: Int = 1
-    override def toString = "Dist {n=" + totalNumberOfItems + "/" + numberOfItemsPerGroup + "}"
-  }
 
   trait HasLength[A] {
     def length(a: A): Int
   }
 
-  type Dist1[A] = Function1[A,Dist]
-  type Dist2[A1,A2] = Function2[A1,A2,Dist]
-  type Dist3[A1,A2,A3] = Function3[A1,A2,A3,Dist]
-
-  class SimpleArrayDist1[T: HasLength] extends Dist1[T] {
-    def apply(a: T) = new Dist {
-      val totalNumberOfItems = implicitly[HasLength[T]].length(a)
-      /*
-      lazy val totalNumberOfItems = {
-        val len = implicitly[HasLength[T]].length(a)
-        val numThreads = numberOfItemsPerGroup
-        (len + numThreads - 1) / numThreads * numThreads
-      }
-      override lazy val numberOfItemsPerGroup: Int = {
-        val len = implicitly[HasLength[T]].length(a)
-        var numThreads = len / 16
-        var i = 1
-        while (numThreads > i)
-          i = i * 2
-        numThreads = i
-        if (numThreads > 256)
-          numThreads = 256
-        numThreads
-      }
-      */
-    }
-  }
 
   def whatIsTypeName[T <: AnyRef](t: T)(implicit m: scala.reflect.Manifest[T]) = t.getClass.getName
 
-  class SimpleArrayDist2[T: HasLength, U: HasLength] extends Dist2[T,U] {
-    def apply(a1: T, a2: U) = new Dist {
-      val totalNumberOfItems = implicitly[HasLength[T]].length(a1) max implicitly[HasLength[U]].length(a2)
-    }
-  }
 
-  class BlockArrayDist1[T: HasLength](n: Int = 32) extends Dist1[T] {
-    def apply(a: T) = new Dist {
-      // Round up to next block size
-      val totalNumberOfItems = (implicitly[HasLength[T]].length(a) + n - 1) / n * n
-      override val numberOfItemsPerGroup = n
-    }
-  }
-
-  // ------------------------------------------------------------------------
-  trait Effect {
-    def outputSizes: List[Int] = Nil
-    def localBufferSizes: List[Int] = Nil
-    override def toString = "Effect {out=" + outputSizes + "}"
-  }
-
-  type Effect1[A] = Function1[A,Effect]
-  type Effect2[A1,A2] = Function2[A1,A2,Effect]
-  type Effect3[A1,A2,A3] = Function3[A1,A2,A3,Effect]
-
-  class SimpleGlobalArrayEffect1[B:FixedSizeMarshal, T: HasLength] extends Effect1[T] {
-    def apply(a: T) = new Effect {
-      override val outputSizes = (implicitly[HasLength[T]].length(a) * fixedSizeMarshal[B].size) :: Nil
-    }
-  }
-
-  class SimpleGlobalArrayEffect2[B:FixedSizeMarshal, T: HasLength, U: HasLength] extends Effect2[T,U] {
-    def apply(a1: T, a2: U) = new Effect {
-      override val outputSizes = ((implicitly[HasLength[T]].length(a1) max implicitly[HasLength[U]].length(a2)) * fixedSizeMarshal[B].size) :: Nil
-    }
-  }
-
-  class SimpleLocalArrayEffect1[A:FixedSizeMarshal, T: HasLength](localSizes: Int*) extends Effect1[T] {
-    def apply(a: T) = new Effect {
-      override val outputSizes = (implicitly[HasLength[T]].length(a) * fixedSizeMarshal[A].size) :: Nil
-      override val localBufferSizes = localSizes.toList
-    }
-  }
-
-  class SimpleLocalArrayWithOutputEffect1[B:FixedSizeMarshal, T: HasLength](numThreads: Int, localSizes:Int*) extends Effect1[T] {
-    def apply(a: T) = new Effect {
-      override val outputSizes = (((implicitly[HasLength[T]].length(a) + numThreads - 1) / numThreads) * fixedSizeMarshal[B].size) :: Nil
-      override val localBufferSizes = localSizes.toList
-    }
-  }
-
-  // ------------------------------------------------------------------------
-  trait Kernel
-  trait Kernel1[A,B] extends Function1[A,B] with Kernel
-  trait Kernel2[A1,A2,B] extends Function2[A1,A2,B] with Kernel
-  trait Kernel3[A1,A2,A3,B] extends Function3[A1,A2,A3,B] with Kernel
-
-  // ------------------------------------------------------------------------
-  // Abuse implicits for writing kernels
-  // Not sure if this is a good idea
   implicit val id1: Id1 = null
   implicit val id2: Id2 = null
   implicit val id3: Id3 = null
-  implicit def localIndexed1[A]: LocalIndexed1[A] = null
-  implicit def localIndexed2[A]: LocalIndexed2[A] = null
-  implicit def localIndexed3[A]: LocalIndexed3[A] = null
-  implicit def blockIndexed1[A]: GroupIndexed1[A] = null
-  implicit def blockIndexed2[A]: GroupIndexed2[A] = null
-  implicit def blockIndexed3[A]: GroupIndexed3[A] = null
 
-  implicit def force[B](f: Future[B]) = f.force
 }

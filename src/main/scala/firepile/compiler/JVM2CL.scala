@@ -1,7 +1,7 @@
 package firepile.compiler
 
 import scala.tools.scalap._
-import scala.tools.scalap.{ Main => Scalap }
+import scala.tools.scalap.{Main => Scalap}
 import scala.tools.scalap.scalax.rules.scalasig._
 
 import scala.collection.mutable.Queue
@@ -14,7 +14,7 @@ import soot.jimple.toolkits.invoke.StaticInliner
 import soot.jimple.toolkits.invoke.StaticMethodBinder
 import soot.options.Options
 import soot.Body
-import soot.{ Unit => SootUnit }
+import soot.{Unit => SootUnit}
 import soot.Scene
 import soot.Value
 import soot.ValueBox
@@ -33,46 +33,46 @@ import soot.grimp.Grimp
 import soot.grimp.GrimpBody
 import soot.grimp.internal.GVirtualInvokeExpr
 import soot.grimp.internal.{GInstanceFieldRef => SootGInstanceFieldRef}
-import soot.{ Type => SootType }
+import soot.{Type => SootType}
 import soot.jimple.Stmt
-import soot.{ VoidType => SootVoidType }
-import soot.{ BooleanType => SootBooleanType }
-import soot.{ ByteType => SootByteType }
-import soot.{ ShortType => SootShortType }
-import soot.{ CharType => SootCharType }
-import soot.{ IntType => SootIntType }
-import soot.{ LongType => SootLongType }
-import soot.{ FloatType => SootFloatType }
-import soot.{ DoubleType => SootDoubleType }
-import soot.{ RefType => SootRefType }
-import soot.{ ArrayType => SootArrayType }
-import soot.{ NullType => SootNullType }
+import soot.{VoidType => SootVoidType}
+import soot.{BooleanType => SootBooleanType}
+import soot.{ByteType => SootByteType}
+import soot.{ShortType => SootShortType}
+import soot.{CharType => SootCharType}
+import soot.{IntType => SootIntType}
+import soot.{LongType => SootLongType}
+import soot.{FloatType => SootFloatType}
+import soot.{DoubleType => SootDoubleType}
+import soot.{RefType => SootRefType}
+import soot.{ArrayType => SootArrayType}
+import soot.{NullType => SootNullType}
 
 import firepile.compiler.util.TypeGen.getSignature
 import firepile.compiler.util.ScalaTypeGen
 import firepile.compiler.util.ScalaTypeGen.{
-  getScalaSignature,
-  getScalaJavaSignature,
-  printClassDef
+getScalaSignature,
+getScalaJavaSignature,
+printClassDef
 }
 import firepile.compiler.util.JavaTypeGen.getJavaSignature
 import firepile.compiler.util.ClassDefs.{
-  ScalaClassDef,
-  ScalaVarDef,
-  NamedTyp,
-  InstTyp
+ScalaClassDef,
+ScalaVarDef,
+NamedTyp,
+InstTyp
 }
 import firepile.compiler.util.TypeFlow.getSupertypes
 import firepile.tree.Trees._
 import firepile.Kernel
-import firepile.tree.Trees.{ Return => CLReturn, Seq => TreeSeq }
+import firepile.tree.Trees.{Return => CLReturn, Seq => TreeSeq}
 import scala.Seq
 import soot.jimple.{
-  FloatConstant,
-  DoubleConstant,
-  IntConstant,
-  LongConstant,
-  StringConstant
+FloatConstant,
+DoubleConstant,
+IntConstant,
+LongConstant,
+StringConstant
 }
 import firepile.compiler.GrimpUnapply._
 import firepile.Marshaling._
@@ -104,19 +104,11 @@ object JVM2CL {
   private val makeCallGraph = true
   private var activeHierarchy: Hierarchy = null
   private var ids = Array(false, false, false)
-  private var argsByIndex = new ListBuffer[(Boolean,Tree)]()
+  private var argsByIndex = new ListBuffer[(Boolean, Tree)]()
 
   setup
 
   def compileRoot(className: String, methodSig: String, argMarshals: List[Marshal[_]], dev: Device = null): List[Tree] = {
-    // println("compiling " + className + "." + methodSig)
-    /*
-    println("arg types: " + argMarshals.map(am => am match {
-        case bbm: BBArrayMarshal[_] => "BB:" + bbm.fixedSizeMarshalMM.manifest
-        case fsm: { def fixedSizeMarshalMM: FixedSizeMarshal[_] } => "FM:" + fsm.fixedSizeMarshalMM.manifest
-        case x => "unknown marshal " + x
-      }))
-    */
 
     if (dev != null && dev.memConfig != null)
       kernelDim = dev.memConfig.globalSize.size
@@ -127,8 +119,8 @@ object JVM2CL {
         case bbm: BBArrayMarshal[_] => {
           argsByIndex += Tuple2(true, translateType(bbm.fixedSizeMarshalMM.manifest.toString))
         }
-        case fsm: { def fixedSizeMarshalMM: FixedSizeMarshal[_] } => argsByIndex += Tuple2(false, translateType(fsm.fixedSizeMarshalMM.manifest.toString))
-        case x => { }
+        case fsm: {def fixedSizeMarshalMM: FixedSizeMarshal[_]} => argsByIndex += Tuple2(false, translateType(fsm.fixedSizeMarshalMM.manifest.toString))
+        case x => {}
       }
     }
 
@@ -143,10 +135,10 @@ object JVM2CL {
       val proc = processWorklist
       // println("after process work list")
 
-     
+
       println("Result CL:")
       for (t <- proc) println(t.toCL)
-      
+
 
       proc
     } catch {
@@ -186,36 +178,6 @@ object JVM2CL {
   }
 
   private def setup = {
-    // java.class.path is broken in Scala, especially when running under sbt
-    //Scene.v.setSootClassPath(Scene.v.defaultClassPath
-    //println("setting up"+System.getProperty("os.name"))
-/*
-    if (System.getProperty("os.name").toLowerCase().startsWith("win"))
-      Scene.v.setSootClassPath(Scene.v.defaultClassPath
-        + ";." + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/firepilesoot.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/firepilesootest.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/soot-2.4.0.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/scalap.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/rt.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/jce.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/jasminsrc-2.4.0.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/scala-compiler.jar"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/target/classes"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/target/testclasses"
-        + ";C:/ScalaWorld/CompleteFirepileCompiler/lib/scala-library.jar")
-    else
-      Scene.v.setSootClassPath(Scene.v.defaultClassPath
-        + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/classes"
-        + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0-local/test-classes"
-        + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/classes"
-        + ":/Users/nystrom/uta/funicular/funicular/firepile/target/scala_2.8.0.RC3/test-classes"
-        + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/classes"
-        + ":/Users/nystrom/firepile/target/scala_2.8.0.RC3/test-classes"
-        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/classes"
-        + ":/Users/dwhite/git3/firepile/target/scala_2.8.0-local/test-classes"
-        + ":/Users/dwhite/opt/scala-2.8.0.final/lib/scala-library.jar"
-        + ":.:tests:examples:tests/VirtualInvoke:bin:lib/soot-2.4.0.jar:/opt/local/share/scala-2.8/lib/scala-library.jar")
-*/
 
     // might be useful if you want to relate back to source code
     Options.v.set_keep_line_number(true)
@@ -235,13 +197,17 @@ object JVM2CL {
   }
 
   def methodName(m: SootMethod): String = mangleName(m.getDeclaringClass.getName + m.getName)
+
   def methodName(m: java.lang.reflect.Method): String = mangleName(m.getDeclaringClass.getName + m.getName)
+
   def methodName(m: SootMethodRef): String = mangleName(m.declaringClass.getName + m.name)
+
   def mangleName(name: String): String = name.replace(' ', '_').replace('$', '_').replace('.', '_')
 
   private implicit def v2tree(v: Value)(implicit iv: (SymbolTable, HashMap[String, Value]) = null): Tree = translateExp(v, iv._1, iv._2)
 
   var next = 0
+
   def freshName(base: String = "tmp") = {
     next += 1
     base + next
@@ -261,12 +227,15 @@ object JVM2CL {
 
   trait Task {
     def run: List[Tree]
+
     def method: SootMethodRef
   }
 
   object CompileMethodTask {
     def apply(m: SootMethod, takesThis: Boolean = false, anonFuns: List[(Int, Value)] = null): CompileMethodTask = CompileMethodTask(m.makeRef, takesThis, anonFuns)
+
     def apply(m: SootMethodRef, takesThis: Boolean): CompileMethodTask = CompileMethodTask(m, takesThis, null)
+
     def apply(m: SootMethodRef): CompileMethodTask = CompileMethodTask(m, false, null)
   }
 
@@ -359,13 +328,15 @@ object JVM2CL {
               var rawTypeName = typ.substring(typ.indexOf('_') + 1, typ.lastIndexOf("Array"))
               if (rawTypeName.contains("unsigned_int")) rawTypeName = "unsigned int"
               typ match {
-                case x if x.startsWith("g") => { // handle the global arrays
+                case x if x.startsWith("g") => {
+                  // handle the global arrays
                   // popArrayStructs += VarDef(StructType(typ), Id(name))
                   popArrayStructs += Assign(Select(Select(Id("_this_kernel"), Id(name)), Id("data")), Id(name + "_data"))
                   popArrayStructs += Assign(Select(Select(Id("_this_kernel"), Id(name)), Id("length")), Id(name + "_len"))
                   List(Formal(MemType("global", PtrType(ValueType(rawTypeName))), name + "_data"), Formal(ConstType(IntType), name + "_len"))
                 }
-                case x if x.startsWith("l") => { // handle the local arrays
+                case x if x.startsWith("l") => {
+                  // handle the local arrays
                   // popArrayStructs += VarDef(StructType(typ), Id(name))
                   popArrayStructs += Assign(Select(Select(Id("_this_kernel"), Id(name)), Id("data")), Id(name + "_data"))
                   popArrayStructs += Assign(Select(Select(Id("_this_kernel"), Id(name)), Id("length")), Id(name + "_len"))
@@ -378,13 +349,13 @@ object JVM2CL {
               popArrayStructs += Assign(Select(Id("_this_kernel"), Id(name)), Id(name))
               List(x)
             }
-            case x@Formal(MemType(_,ValueType(typ)), name) => {
+            case x@Formal(MemType(_, ValueType(typ)), name) => {
               popArrayStructs += Assign(Select(Id("_this_kernel"), Id(name)), Id(name))
               List(x)
             }
             case x => List(x)
           })
-          KernelFunDef(Id(t.name), frmls, TreeSeq(List(VarDef(StructType("kernel_ENV"), Id("_this_kernel"))) :::popArrayStructs.toList), t.body) :: Nil
+          KernelFunDef(Id(t.name), frmls, TreeSeq(List(VarDef(StructType("kernel_ENV"), Id("_this_kernel"))) ::: popArrayStructs.toList), t.body) :: Nil
         }
       }
     }
@@ -494,7 +465,7 @@ object JVM2CL {
     */
 
 
-    val tree = preamble.toList :::  arraystructs.dumpArrayStructs ::: envstructs.dumpEnvStructs ::: preamblePostStructs.toList ::: classtab.dumpClassTable ::: functionDefs.values.toList ::: results.toList
+    val tree = preamble.toList ::: arraystructs.dumpArrayStructs ::: envstructs.dumpEnvStructs ::: preamblePostStructs.toList ::: classtab.dumpClassTable ::: functionDefs.values.toList ::: results.toList
 
     arraystructs.clearArrays
     envstructs.clearEnvs
@@ -541,6 +512,7 @@ object JVM2CL {
   }
 
   def isStatic(flags: Int) = (flags & 0x0008) != 0
+
   def flagsToStr(clazz: Boolean, flags: Int): String = {
     val buffer = new StringBuffer()
     var x: StringBuffer = buffer
@@ -689,7 +661,7 @@ object JVM2CL {
         case PtrType(StructType(n)) if n.equals("firepile_Group") => { }
         case PtrType(StructType(n)) if n.equals("firepile_Item") => { }
         */
-        case _ => params += index -> (id, translateType(typ))
+        case _ => params += index ->(id, translateType(typ))
       }
     }
 
@@ -699,7 +671,7 @@ object JVM2CL {
         case "firepile_Group" => { }
         case "firepile_Item" => { }
         */
-        case _ => params += index -> (Id(name), ValueType(typ))
+        case _ => params += index ->(Id(name), ValueType(typ))
       }
     }
 
@@ -732,11 +704,16 @@ object JVM2CL {
     def addArrayDef(typ: SootType, id: Id, size: Tree) = {
       assert(!locals.contains(id))
       println("------ADD ARRAY DEF")
-      arrays += id -> (translateType(typ), size)
+      arrays += id ->(translateType(typ), size)
     }
 
-    def addInlineParams(ip: List[Tree]) = for (p <- ip) { params(params.size) = (Id(p.asInstanceOf[Formal].name + "_c"), p.asInstanceOf[Formal].typ) }
-    def addInlineParamsNoRename(ip: List[Tree]) = for (p <- ip) { params(params.size) = (Id(p.asInstanceOf[Formal].name), p.asInstanceOf[Formal].typ) }
+    def addInlineParams(ip: List[Tree]) = for (p <- ip) {
+      params(params.size) = (Id(p.asInstanceOf[Formal].name + "_c"), p.asInstanceOf[Formal].typ)
+    }
+
+    def addInlineParamsNoRename(ip: List[Tree]) = for (p <- ip) {
+      params(params.size) = (Id(p.asInstanceOf[Formal].name), p.asInstanceOf[Formal].typ)
+    }
 
     def lastParamIndex = params.size - 1
 
@@ -780,7 +757,7 @@ object JVM2CL {
           // maybe we should also call addClass on list returned from getDirectSubclassesOf(cls)
           val union = UnionDef(Id(mangleName(cls.getName) + "_intr"), VarDef(StructType("Object"), Id("object")) :: Scene.v.getActiveHierarchy.getSubclassesOfIncluding(cls).map(sc => VarDef(StructType(mangleName(sc.getName)), Id("_" + mangleName(sc.getName)))).toList)
 
-          knownClasses += cls -> (struct, union)
+          knownClasses += cls ->(struct, union)
         } catch {
           case e: ClassNotFoundException => {
             println("Class not found: " + e.getMessage)
@@ -798,7 +775,9 @@ object JVM2CL {
       classtable
     }
 
-    def clearClassTable = { knownClasses.clear; enumElements.clear }
+    def clearClassTable = {
+      knownClasses.clear; enumElements.clear
+    }
   }
 
   class ArrayStructs {
@@ -840,22 +819,22 @@ object JVM2CL {
         case _ => throw new RuntimeException("Unknown array type: " + typ)
       }
       if (!structs.contains(typ)) {
-      /*
-        structs += typ -> List(StructDef("g_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(arrayTyp)), Id("data")))),
-          StructDef("l_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(arrayTyp)), Id("data")))),
-          StructDef("c_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(arrayTyp)), Id("data")))),
-          StructDef("p_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
-      }
-      */
+        /*
+          structs += typ -> List(StructDef("g_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("global", PtrType(arrayTyp)), Id("data")))),
+            StructDef("l_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("local", PtrType(arrayTyp)), Id("data")))),
+            StructDef("c_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("constant", PtrType(arrayTyp)), Id("data")))),
+            StructDef("p_" + arrayTyp.name.replaceAll(" ", "_") + "Array", List(VarDef(IntType, Id("length")), VarDef(MemType("private", PtrType(arrayTyp)), Id("data")))))
+        }
+        */
 
-      structs += typ -> List(StructDef(arrayTyp.name.replaceAll(" ", "_") + "_ENV", List[Tree]()))
+        structs += typ -> List(StructDef(arrayTyp.name.replaceAll(" ", "_") + "_ENV", List[Tree]()))
       }
       StructType(arrayTyp.name.replaceAll(" ", "_") + "_ENV")
     }
 
     def append(structTyp: Tree, varr: VarDef) = {
       structs(structTyp).head match {
-        case StructDef(name, vars) => 
+        case StructDef(name, vars) =>
           if (!vars.contains(varr))
             structs(structTyp) = List(StructDef(name, varr :: vars))
         case _ => throw new RuntimeException("Existing environment struct not found")
@@ -864,7 +843,9 @@ object JVM2CL {
 
     def contains(structTyp: Tree, name: String) = {
       structs(structTyp).head match {
-        case StructDef(sName, vars) => vars.exists(v => { v.asInstanceOf[VarDef].name.equals(mangleName(name)) })
+        case StructDef(sName, vars) => vars.exists(v => {
+          v.asInstanceOf[VarDef].name.equals(mangleName(name))
+        })
         case _ => throw new RuntimeException("Existing environment struct not found")
       }
     }
@@ -927,15 +908,17 @@ object JVM2CL {
         case "firepile.Spaces$Point1" => IntType
         case "firepile.Spaces$Id1" => StructType(mangleName(t.toString))
         case "firepile.util.Unsigned$UInt" => ValueType("unsigned int")
-        case "firepile.util.BufferBackedArray$BBArray" =>  
-          if (kernelMethodName.equals("firepile_tests_DCT8x8__anonfun_DCT8x8_1apply")) 
+        case "firepile.util.BufferBackedArray$BBArray" =>
+          if (kernelMethodName.equals("firepile_tests_DCT8x8__anonfun_DCT8x8_1apply"))
             arraystructs.addStruct(ValueType("float"))
           else
-            arraystructs.addStruct(argsByIndex(i)._2) 
+            arraystructs.addStruct(argsByIndex(i)._2)
         case _ => PtrType(StructType(mangleName(t.toString)))
       }
     }
-    case t: SootArrayType => { arraystructs.addStruct(translateType(t.getArrayElementType)) }
+    case t: SootArrayType => {
+      arraystructs.addStruct(translateType(t.getArrayElementType))
+    }
 
     //case t: SootArrayType => PtrType(translateType(t.getArrayElementType))
     case t: SootNullType => PtrType(ValueType("void"))
@@ -943,31 +926,31 @@ object JVM2CL {
     case _ => ValueType(t.toString)
   }
 
-/*
-  private def translateType(memType: String, typ: String, name: String): (Tree, String) = typ match {
+  /*
+    private def translateType(memType: String, typ: String, name: String): (Tree, String) = typ match {
 
-    case "java.lang.String" => (MemType(memType, ValueType("char")), "*" + mangleName(name))
-    case "firepile.util.Unsigned.UInt" => (ValueType("unsigned int"), mangleName(name))
-    case "int" => (ValueType("int"), mangleName(name))
-    case "float" => (ValueType("float"), mangleName(name))
-    case "long" => (ValueType("long"), mangleName(name))
-    case "double" => (MemType(memType, ValueType("double")), mangleName(name))
-    case "float[]" => (MemType(memType, ValueType("float")), "*" + mangleName(name))
-    case "int[]" => (MemType(memType, ValueType("int")), "*" + mangleName(name))
-    case "long[]" => (MemType(memType, ValueType("long")), "*" + mangleName(name))
-    case "double[]" => (MemType(memType, ValueType("double")), "*" + mangleName(name))
+      case "java.lang.String" => (MemType(memType, ValueType("char")), "*" + mangleName(name))
+      case "firepile.util.Unsigned.UInt" => (ValueType("unsigned int"), mangleName(name))
+      case "int" => (ValueType("int"), mangleName(name))
+      case "float" => (ValueType("float"), mangleName(name))
+      case "long" => (ValueType("long"), mangleName(name))
+      case "double" => (MemType(memType, ValueType("double")), mangleName(name))
+      case "float[]" => (MemType(memType, ValueType("float")), "*" + mangleName(name))
+      case "int[]" => (MemType(memType, ValueType("int")), "*" + mangleName(name))
+      case "long[]" => (MemType(memType, ValueType("long")), "*" + mangleName(name))
+      case "double[]" => (MemType(memType, ValueType("double")), "*" + mangleName(name))
 
-    case x => (MemType(memType, ValueType(typ)), mangleName(name))
-  }
-*/
+      case x => (MemType(memType, ValueType(typ)), mangleName(name))
+    }
+  */
 
   private def translateType(memType: String, typ: SootType, name: String, idx: Int): (Tree, String) = translateType(typ, idx) match {
-      case StructType(n) if n.endsWith("Array") => memType match {
-        case "local" => (StructType("l_" + n), mangleName(name))
-        case "global" => (StructType("g_" + n), mangleName(name))
-      }
-      case _ => (ConstType(translateType(typ)), mangleName(name))
-      // case _ => (MemType(memType, translateType(typ)), mangleName(name))
+    case StructType(n) if n.endsWith("Array") => memType match {
+      case "local" => (StructType("l_" + n), mangleName(name))
+      case "global" => (StructType("g_" + n), mangleName(name))
+    }
+    case _ => (ConstType(translateType(typ)), mangleName(name))
+    // case _ => (MemType(memType, translateType(typ)), mangleName(name))
   }
 
   private def translateType(t: ScalaVarDef): Tree = t.fieldScalaType match {
@@ -1095,18 +1078,19 @@ object JVM2CL {
       case _ => None
     }
   }
+
   /*
-  object UnboxCall {
-    def unapply(v: Value) = v match {
-        // scala.runtime.BoxesRunTime.unboxToFloat(Object) : float
-        case GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "unboxToInt", _, _, _), List(value)) =>
-          Some(Select(Cast(ANY_TYPE, translateExp(value)), "i"))
-        case GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "unboxToFloat", _, _, _), List(value)) =>
-          Some(Select(Cast(ANY_TYPE, translateExp(value)), "f"))
-        case _ => None
+    object UnboxCall {
+      def unapply(v: Value) = v match {
+          // scala.runtime.BoxesRunTime.unboxToFloat(Object) : float
+          case GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "unboxToInt", _, _, _), List(value)) =>
+            Some(Select(Cast(ANY_TYPE, translateExp(value)), "i"))
+          case GStaticInvoke(SMethodRef(k @ SClassName("scala.runtime.BoxesRunTime"), "unboxToFloat", _, _, _), List(value)) =>
+            Some(Select(Cast(ANY_TYPE, translateExp(value)), "f"))
+          case _ => None
+      }
     }
-  }
-*/
+  */
   // Split library calls into separate objects.
   // This avoids an OutOfMemory error in scalac.
   object LibraryCall {
@@ -1114,15 +1098,15 @@ object JVM2CL {
       val (symtab, anonFuns) = iv
       val t: Tree = v match {
         // These are just here as examples for matching Array.ofDim.  We need a realy strategy for translating newarray.
-        
+
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "ofDim", _, _, _),
-          List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Int", _, _, _), Nil))) =>
+        List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Int", _, _, _), Nil))) =>
           Call(Id("newIntArray"), List[Tree](size))
 
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "ofDim", _, _, _),
-          List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Float", _, _, _), Nil))) =>
+        List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Float", _, _, _), Nil))) =>
           Call(Id("newFloatArray"), List[Tree](size))
-        
+
         /* case UnboxCall(t) => t */
         case TupleSelect(t) => t
 
@@ -1131,12 +1115,12 @@ object JVM2CL {
 
         // Predef$.MODULE$.floatWrapper(x).abs()
         case GVirtualInvoke(
-          GVirtualInvoke(
-          GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)),
-          SMethodRef(_, "floatWrapper", _, _, _),
-          List(value)),
-          SMethodRef(_, "abs", _, _, _),
-          Nil) =>
+        GVirtualInvoke(
+        GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)),
+        SMethodRef(_, "floatWrapper", _, _, _),
+        List(value)),
+        SMethodRef(_, "abs", _, _, _),
+        Nil) =>
           Call(Id("fabs"), List[Tree](value))
 
         // (float) scala.math.sin((double) x)
@@ -1301,7 +1285,9 @@ object JVM2CL {
           case GInstanceof(op, instTyp) => Id("unimplemented:instanceof")
 
           // IGNORE
-          case GNew(newTyp) => { /* classtab.addClass(new SootClass(newTyp.asInstanceOf[SootType].toString));*/ Id("unimplemented:new") }
+          case GNew(newTyp) => {
+            /* classtab.addClass(new SootClass(newTyp.asInstanceOf[SootType].toString));*/ Id("unimplemented:new")
+          }
 
           // IGNORE
           case GNewArray(newTyp, size) => Id("unimplemented:newarray")
@@ -1389,7 +1375,9 @@ object JVM2CL {
                 val anonFunParams = new ListBuffer[(Int, Value)]()
                 var argCount = 0
                 args.zipWithIndex.foreach {
-                  case (a, argCount) => if (isFunction(a.getType)) { /* println("ADDING ANONFUN AS PARAM: " + a); */ anonFunParams += ((argCount, a)) }
+                  case (a, argCount) => if (isFunction(a.getType)) {
+                    /* println("ADDING ANONFUN AS PARAM: " + a); */ anonFunParams += ((argCount, a))
+                  }
                 }
 
                 // need to find all subclasses of method.getDeclaringClass that override method (i.e., have the same _.getSignature)
@@ -1438,7 +1426,7 @@ object JVM2CL {
                         if (args.length > 0)
                           worklist += CompileMethodTask(m, false, anonFunParams.toList) // Should we be taking "this" here?
                         else
-                          worklist += CompileMethodTask(m, false)  // Should we be taking "this" here?
+                          worklist += CompileMethodTask(m, false) // Should we be taking "this" here?
                         methodReceiversRef += m
                         classtab.addClass(pr)
                       }
@@ -1493,7 +1481,9 @@ object JVM2CL {
                   }
                   */
 
-                    case x => { println("getSignature is returning: " + x); throw new RuntimeException("scala sig for " + declaringClass + " not found -- should not happen") }
+                    case x => {
+                      println("getSignature is returning: " + x); throw new RuntimeException("scala sig for " + declaringClass + " not found -- should not happen")
+                    }
                   }
                 }
 
@@ -1565,22 +1555,22 @@ object JVM2CL {
 
           //g$1.<firepile.Group: scala.collection.immutable.List items()>()::<: int ()>::List()
 
-          case GInterfaceInvoke(base: GVirtualInvokeExpr, SMethodRef(SClassName("scala.collection.SeqLike"), "size", _, _, _), _) => { 
-              // println(" Got Local Size::"); 
-              // Use real base name of firepile_Group
-              // COMMENTED OUT until these are passed around as args
-              /*
-              base.getBase match {
-                case b: soot.grimp.internal.GInstanceFieldRef => return Select(Id(mangleName(b.getField.getName)), Id("size"))
-                case b: Local => return Select(Id(b.getName), Id("size"))
-                case _ => throw new RuntimeException("Getting size of some unknown collection")
-              }
-              */
-              Select(ArrayAccess(Id("item"), IntLit(0)), Id("size"))
+          case GInterfaceInvoke(base: GVirtualInvokeExpr, SMethodRef(SClassName("scala.collection.SeqLike"), "size", _, _, _), _) => {
+            // println(" Got Local Size::");
+            // Use real base name of firepile_Group
+            // COMMENTED OUT until these are passed around as args
+            /*
+            base.getBase match {
+              case b: soot.grimp.internal.GInstanceFieldRef => return Select(Id(mangleName(b.getField.getName)), Id("size"))
+              case b: Local => return Select(Id(b.getName), Id("size"))
+              case _ => throw new RuntimeException("Getting size of some unknown collection")
+            }
+            */
+            Select(ArrayAccess(Id("item"), IntLit(0)), Id("size"))
           }
-/*
-              return Select(Id(base.getBase.asInstanceOf[soot.grimp.internal.GInstanceFieldRef].toString /*getBase.asInstanceOf[Local].getName*/), Id("size")) }
-*/
+          /*
+                        return Select(Id(base.getBase.asInstanceOf[soot.grimp.internal.GInstanceFieldRef].toString /*getBase.asInstanceOf[Local].getName*/), Id("size")) }
+          */
           case GInterfaceInvoke(base, method, args) => base match {
 
             case b: Local => {
@@ -1604,11 +1594,6 @@ object JVM2CL {
                   val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
 
                   var fd: FunDef = null
-                  /*
-              for (applyMethod <- applyMethods) {
-                println("Found apply method: " + applyMethod.getSignature)
-              }
-              */
 
                   fd = compileMethod(applyMethods.head, symtab.level + 1, false, anonFuns)
 
@@ -1617,16 +1602,9 @@ object JVM2CL {
                   worklist += CompileMethodTask(applyMethods.head)
                   ClosureCall(Id(mangleName(closureTyp.toString) + method.name), closureArgs.map(ca => translateExp(ca, symtab, anonFuns)) ::: args.map(a => translateExp(a, symtab, anonFuns)))
 
-                // case _ => Call(Select(b, method.name), args.map(a => translateExp(a, symtab, anonFuns)))
                 case _ => Call(Id(method.name), args.map(a => translateExp(a, symtab, anonFuns)))
               }
 
-              /*
-          if(base.getType.toString.startsWith("scala.Function"))
-            ClosureCall(Id(base.getName), args.map(a => translateExp(a, anonFuns)))
-          else
-            Call(Select(base, method.name), args.map(a => translateExp(a, anonFuns)))
-          */
             }
             case GInstanceFieldRef(instBase, fieldRef) => {
 
@@ -1638,33 +1616,35 @@ object JVM2CL {
               if (fieldRef.`type`.toString.startsWith("scala.Function")) {
                 println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
                 anonFuns.keys.foreach(k => print(k + " "))
-                
+
                 // REFLECT
-/*
-                anonFuns.get(fieldRef.name.takeWhile(_ != '$')) match {
-                  // matched 'this.x$1.apply(args)' where 'x$1' is a captured variable 'x'
-                  // and 'x' is 'new anonfun$1(closureArgs)'
-                  // ->
-                  // anonfun_dollar1_apply(env, args)
-                  // and also translate the body of that method
-                  case Some(GNewInvoke(closureTyp, closureMethod, closureArgs)) => {
-                    // println("CLOSURE METHOD: " + fieldRef.name)
-                    // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
-                    val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
+                /*
+                                anonFuns.get(fieldRef.name.takeWhile(_ != '$')) match {
+                                  // matched 'this.x$1.apply(args)' where 'x$1' is a captured variable 'x'
+                                  // and 'x' is 'new anonfun$1(closureArgs)'
+                                  // ->
+                                  // anonfun_dollar1_apply(env, args)
+                                  // and also translate the body of that method
+                                  case Some(GNewInvoke(closureTyp, closureMethod, closureArgs)) => {
+                                    // println("CLOSURE METHOD: " + fieldRef.name)
+                                    // TODO:  Need to translate methods with java.lang.Object parameters also, can't always just filter them out
+                                    val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals(method.name) && !mn.getParameterType(0).toString.equals("java.lang.Object"))
 
-                for (applyMethod <- applyMethods) 
-                  println("Found apply method: " + applyMethod.getSignature)
+                                for (applyMethod <- applyMethods)
+                                  println("Found apply method: " + applyMethod.getSignature)
 
-                    worklist += CompileMethodTask(applyMethods.head)
-                    ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
-                  }
-                  //case _ => Select(base, mangleName(fieldRef.name)) // TODO: punt
-                  case None => println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name))
-                }
-*/
+                                    worklist += CompileMethodTask(applyMethods.head)
+                                    ClosureCall(Id(mangleName(closureTyp.toString + method.name)), args.map(a => translateExp(a, symtab, anonFuns)))
+                                  }
+                                  //case _ => Select(base, mangleName(fieldRef.name)) // TODO: punt
+                                  case None => println(" mangled name::" + mangleName(fieldRef.name)); Id(mangleName(fieldRef.name))
+                                }
+                */
                 var argNum = -1
                 if (args.length == args.filter(a => a.getType.toString != "java.lang.Object").length)
-                  functionDefs += fieldRef.name.takeWhile(_ != '$') -> FunDec(translateType(args(0).getType.toString), fieldRef.name.takeWhile(_ != '$'), args.map(a => { argNum += 1; Formal(translateType(a.getType.toString), Id("_arg" + argNum))}))
+                  functionDefs += fieldRef.name.takeWhile(_ != '$') -> FunDec(translateType(args(0).getType.toString), fieldRef.name.takeWhile(_ != '$'), args.map(a => {
+                    argNum += 1; Formal(translateType(a.getType.toString), Id("_arg" + argNum))
+                  }))
 
                 Kernel.closureFName = fieldRef.name.takeWhile(_ != '$')
 
@@ -1673,7 +1653,9 @@ object JVM2CL {
                 //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
 
 
-              } else { /* println(" mangled name::" + mangleName(fieldRef.name)); */ Id(mangleName(fieldRef.name)) }
+              } else {
+                /* println(" mangled name::" + mangleName(fieldRef.name)); */ Id(mangleName(fieldRef.name))
+              }
 
             }
 
@@ -1682,42 +1664,42 @@ object JVM2CL {
             //Changes here
             case GStaticFieldRef(_) => Id("static field ref")
             case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Space"), "groups", _, _, _), _) => {
-                var applyM: SootMethod = null
-                for (a <- args) {
-                  // println("Getting SootClass for: " + a.getType.toString)
-                  val sootcls = Scene.v.getSootClass(a.getType.toString)
-                  val applyMethods = sootcls.getMethods.filter(mn => mn.getName.equals("apply")  && !mn.getParameterType(0).toString.equals("java.lang.Object"))
-                  // println("number of methods = " + sootcls.getMethodCount)
+              var applyM: SootMethod = null
+              for (a <- args) {
+                // println("Getting SootClass for: " + a.getType.toString)
+                val sootcls = Scene.v.getSootClass(a.getType.toString)
+                val applyMethods = sootcls.getMethods.filter(mn => mn.getName.equals("apply") && !mn.getParameterType(0).toString.equals("java.lang.Object"))
+                // println("number of methods = " + sootcls.getMethodCount)
 
-                  // println("Apply methods found: " + applyMethods.length)
-                  for (applyMethod <- applyMethods) {
-                    // println("Found method: " + applyMethod.getSignature)
-                    worklist += CompileMethodTask(applyMethod.makeRef)
-                    compileMethod(applyMethod, 0, false, anonFuns)
-                    applyM = applyMethod
-                  }
-
+                // println("Apply methods found: " + applyMethods.length)
+                for (applyMethod <- applyMethods) {
+                  // println("Found method: " + applyMethod.getSignature)
+                  worklist += CompileMethodTask(applyMethod.makeRef)
+                  compileMethod(applyMethod, 0, false, anonFuns)
+                  applyM = applyMethod
                 }
-                // Call group function with group ID struct
-                Call(Id(methodName(applyM)), Id("_group_desc"), Id("_this_kernel"))
+
+              }
+              // Call group function with group ID struct
+              Call(Id(methodName(applyM)), Id("_group_desc"), Id("_this_kernel"))
             }
             case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "items", _, _, _), _) => {
-                var applyM: SootMethod = null
-                for (a <- args) {
-                  // println("Getting SootClass for: " + a.getType.toString)
-                  val sootcls = Scene.v.getSootClass(a.getType.toString)
-                  val applyMethods = sootcls.getMethods.filter(mn => mn.getName.equals("apply")  && !mn.getParameterType(0).toString.equals("java.lang.Object"))
-                  // println("number of methods = " + sootcls.getMethodCount)
+              var applyM: SootMethod = null
+              for (a <- args) {
+                // println("Getting SootClass for: " + a.getType.toString)
+                val sootcls = Scene.v.getSootClass(a.getType.toString)
+                val applyMethods = sootcls.getMethods.filter(mn => mn.getName.equals("apply") && !mn.getParameterType(0).toString.equals("java.lang.Object"))
+                // println("number of methods = " + sootcls.getMethodCount)
 
-                  // println("Apply methods found: " + applyMethods.length)
-                  for (applyMethod <- applyMethods) {
-                    // println("Found method: " + applyMethod.getSignature)
-                    worklist += CompileMethodTask(applyMethod.makeRef)
-                    applyM = applyMethod
-                  }
-
+                // println("Apply methods found: " + applyMethods.length)
+                for (applyMethod <- applyMethods) {
+                  // println("Found method: " + applyMethod.getSignature)
+                  worklist += CompileMethodTask(applyMethod.makeRef)
+                  applyM = applyMethod
                 }
-                Call(Id(methodName(applyM)), Id("_item_desc"), Id("_arg0"), Id("_this_kernel"))
+
+              }
+              Call(Id(methodName(applyM)), Id("_item_desc"), Id("_arg0"), Id("_this_kernel"))
             }
             case x => Id("unsupported interface invoke:" + v.getClass.getName + " :::::: " + v + " --> " + x)
           }
@@ -1728,25 +1710,34 @@ object JVM2CL {
               if (anonFuns.contains(name))
                 translateExp(anonFuns(name), symtab, anonFuns)
               else
-                symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
+                symtab.addLocalVar(typ, Id(mangleName(name)));
+              Id(mangleName(name))
             }
             case _ => {
               if (anonFuns != null && anonFuns.contains(name))
                 translateExp(anonFuns(name), symtab, anonFuns)
               else
-                symtab.addLocalVar(typ, Id(mangleName(name))); Id(mangleName(name))
+                symtab.addLocalVar(typ, Id(mangleName(name)));
+              Id(mangleName(name))
             }
           }
-          case GThisRef(typ) => { symtab.addThisParam(typ, Id("_this")); Id("_this") }
+          case GThisRef(typ) => {
+            symtab.addThisParam(typ, Id("_this")); Id("_this")
+          }
           //case GThisRef(typ) => { Id("_this") }
-          case GParameterRef(typ, index) => { 
-            if (!symtab.kernelMethod) { symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index) }
+          case GParameterRef(typ, index) => {
+            if (!symtab.kernelMethod) {
+              symtab.addParamVar(typ, index, Id("_arg" + index)); Id("_arg" + index)
+            }
             else Id("_this")
           }
           // case GParameterRef(typ, index) => { Id("_this") }
-          case GStaticFieldRef(fieldRef) => { /* classtab.addClass(new SootClass(fieldRef.`type`.toString));*/ Id("unimplemented:staticfield") }
+          case GStaticFieldRef(fieldRef) => {
+            /* classtab.addClass(new SootClass(fieldRef.`type`.toString));*/ Id("unimplemented:staticfield")
+          }
 
-          case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
+          case GInstanceFieldRef(base: Local, fieldRef) => {
+            /* classtab.addClass(new SootClass(base.getName)); */
             //Select(Deref(base), mangleName(fieldRef.name))
             // println(" mangled Name::" + mangleName(fieldRef.name) + "  original::" + fieldRef.name)
             // Look up instance in environment
@@ -1757,7 +1748,7 @@ object JVM2CL {
               Id(mangleName(fieldRef.name))
           }
 
-          case GInstanceFieldRef(base, fieldRef) => { 
+          case GInstanceFieldRef(base, fieldRef) => {
             // println(" base ::" + base + ":::" + fieldRef)
 
             // Look up instance in environment
@@ -1769,21 +1760,6 @@ object JVM2CL {
           }
 
           case GArrayRef(base, index) => ArrayAccess(Select((translateExp(base, symtab, anonFuns)), "data"), translateExp(index, symtab, anonFuns))
-
-/*
-          case GArrayRef(base, index) => {
-            //println(" Array Access::"+ base+"::"+index); 
-
-            base match {
-
-              case GInstanceFieldRef(instBase, fieldRef) => { println("Different Inside Array Access::" + instBase + "::" + fieldRef.name); Id(mangleName(fieldRef.name) + "[" + (translateExp(index, symtab, anonFuns)).toCL + "]") }
-
-              case _ => Id(mangleName((translateExp(base, symtab, anonFuns)).toCL) + "[" + (translateExp(index, symtab, anonFuns)).toCL + "]")
-              //case _ =>  ArrayAccess(translateExp(base, symtab, anonFuns), index)
-            }
-
-          }
-*/
 
           case v => Id("translateExp:unsupported:" + v.getClass.getName)
 
@@ -1799,89 +1775,79 @@ object JVM2CL {
       // don't assume the local is named "id"
       // handle Id2, Id3, ...r1.
 
-      case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => { /* println(" Got barrier here::");*/ return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE"))) }
+      case GVirtualInvoke(_, SMethodRef(SClassName(_), "barrier", _, _, _), _) => {
+        /* println(" Got barrier here::");*/ return Some(Call(Id("barrier"), Id("CLK_LOCAL_MEM_FENCE")))
+      }
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => base match {
-                case b: soot.grimp.internal.GInstanceFieldRef => {
-                  if (args.size > 0) {
-                    return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
-                  }
-                  else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),IntLit(0)), Id("id")))
-                }
-                case b: Local => {
-                  if (args.size > 0) {
-                    return Some(Select(ArrayAccess(Id(b.getName),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
-                  }
-                  else return Some(Select(ArrayAccess(Id(b.getName),IntLit(0)), Id("id")))
-                }
+        case b: soot.grimp.internal.GInstanceFieldRef => {
+          if (args.size > 0) {
+            return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
+          }
+          else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)), IntLit(0)), Id("id")))
+        }
+        case b: Local => {
+          if (args.size > 0) {
+            return Some(Select(ArrayAccess(Id(b.getName), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
+          }
+          else return Some(Select(ArrayAccess(Id(b.getName), IntLit(0)), Id("id")))
+        }
 
-                case _ => throw new RuntimeException("Getting size of some unknown collection")
+        case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => base match {
-                case b: soot.grimp.internal.GInstanceFieldRef => {
-                  if (args.size > 0) {
-                    return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
-                  }
-                  else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),IntLit(0)), Id("globalId")))
-                }
-                case b: Local => {
-                  if (args.size > 0) {
-                    return Some(Select(ArrayAccess(Id(b.getName),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
-                  }
-                  else return Some(Select(ArrayAccess(Id(b.getName),IntLit(0)), Id("globalId")))
-                }
+        case b: soot.grimp.internal.GInstanceFieldRef => {
+          if (args.size > 0) {
+            return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
+          }
+          else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)), IntLit(0)), Id("globalId")))
+        }
+        case b: Local => {
+          if (args.size > 0) {
+            return Some(Select(ArrayAccess(Id(b.getName), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
+          }
+          else return Some(Select(ArrayAccess(Id(b.getName), IntLit(0)), Id("globalId")))
+        }
 
-                case _ => throw new RuntimeException("Getting size of some unknown collection")
+        case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
       /*
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => { println(" Got Item here::"); if (args.size > 0) return Some(Call(Id("get_local_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("id"))) }
       */
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { 
-          /* println(" Got Group here::");*/ 
-          if (args.size > 0) {
-            val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
-            return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id"))) 
-          }
-          else 
-            return Some(Select(ArrayAccess(Id("_group_desc"),IntLit(0)) , Id("id"))) 
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => {
+        /* println(" Got Group here::");*/
+        if (args.size > 0) {
+          val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
+          return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
+        }
+        else
+          return Some(Select(ArrayAccess(Id("_group_desc"), IntLit(0)), Id("id")))
       }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { 
-          /* println(" Got Group here::");*/ 
-          if (args.size > 0) {
-            val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
-            return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("size"))) 
-          }
-          else 
-            return Some(Select(ArrayAccess(Id("_group_desc"),IntLit(0)) , Id("size"))) 
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => {
+        /* println(" Got Group here::");*/
+        if (args.size > 0) {
+          val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
+          return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("size")))
+        }
+        else
+          return Some(Select(ArrayAccess(Id("_group_desc"), IntLit(0)), Id("size")))
       }
-      // case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { /* println(" Got Group here::");*/ if (args.size > 0) return Some(Call(Id("get_group_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("id"))) }
-      // case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { /* println(" Got Global Size here::");*/ if (args.size > 0) return Some(Call(Id("get_global_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_group_desc"), Id("size"))) }
-      /*
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => { println(" Got Global ID here::"); if (args.size > 0) return Some(Call(Id("get_global_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("globalId"))) }
-      case GVirtualInvoke(base: Local, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => { println(" Got Local size here::"); if (args.size > 0) return Some(Call(Id("get_local_size"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id(base.getName), Id("size"))) }
-      */
-      /*
-      case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => base match {
-                case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("globalId")))
-                case b: Local => return Some(Select(Deref(Id(b.getName)), Id("globalId")))
-                case _ => throw new RuntimeException("Getting size of some unknown collection")
-      }
-      */
+
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => base match {
-                case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("size")))
-                case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
-                case _ => throw new RuntimeException("Getting size of some unknown collection")
+        case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("size")))
+        case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
+        case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
 
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.util.BufferBackedArray$BBArray"), "update", _, _, _), args) => base match {
-                case b: soot.grimp.internal.GInstanceFieldRef => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getField.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)), translateExp(args(1), symtab, anonFuns)))
-                case b: Local => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)), translateExp(args(1), symtab, anonFuns)))
-                case _ => throw new RuntimeException("Getting size of some unknown collection")
+        case b: soot.grimp.internal.GInstanceFieldRef => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"), Id(mangleName(b.getField.getName))), Id("data")), translateExp(args(0), symtab, anonFuns)), translateExp(args(1), symtab, anonFuns)))
+        case b: Local => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"), Id(mangleName(b.getName))), Id("data")), translateExp(args(0), symtab, anonFuns)), translateExp(args(1), symtab, anonFuns)))
+        case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
 
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.util.BufferBackedArray$BBArray"), "apply", _, _, _), args) => base match {
-                case b: soot.grimp.internal.GInstanceFieldRef => Some(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getField.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)))
-                case b: Local => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"),Id(mangleName(b.getName))), Id("data")), translateExp(args(0),symtab,anonFuns)), translateExp(args(1), symtab, anonFuns)))
-                case _ => throw new RuntimeException("Getting size of some unknown collection")
+        case b: soot.grimp.internal.GInstanceFieldRef => Some(ArrayAccess(Select(Select(Id("_this_kernel"), Id(mangleName(b.getField.getName))), Id("data")), translateExp(args(0), symtab, anonFuns)))
+        case b: Local => Some(Assign(ArrayAccess(Select(Select(Id("_this_kernel"), Id(mangleName(b.getName))), Id("data")), translateExp(args(0), symtab, anonFuns)), translateExp(args(1), symtab, anonFuns)))
+        case _ => throw new RuntimeException("Getting size of some unknown collection")
       }
 
 
@@ -1891,6 +1857,7 @@ object JVM2CL {
 
     //None
   }
+
   private def translateUnits(units: List[SootUnit], result: List[Tree], symtab: SymbolTable, anonFuns: HashMap[String, Value]): List[Tree] = {
     implicit val iv: (SymbolTable, HashMap[String, Value]) = (symtab, anonFuns)
     units match {
@@ -1901,52 +1868,54 @@ object JVM2CL {
               case PtrType(StructType(n)) if n.equals("firepile_Group") => TreeSeq()
               case PtrType(StructType(n)) if n.equals("firepile_Item") => TreeSeq()
             */
-              case _ => {
-                // create kernel environment struct
-                envstructs.addStruct(ValueType("kernel"))
-                left match {
-                  case l: Local if !(l.getName.equals("this") || l.getName.equals("l0"))=> envstructs.append(ValueType("kernel"), VarDef(translateType(left.getType), mangleName(l.getName)))
-                  case l: Local => { }
-                  case _ => throw new RuntimeException("Some identity type other than local being added to env struct")
-                }
-                Eval(Assign(left, right))
+            case _ => {
+              // create kernel environment struct
+              envstructs.addStruct(ValueType("kernel"))
+              left match {
+                case l: Local if !(l.getName.equals("this") || l.getName.equals("l0")) => envstructs.append(ValueType("kernel"), VarDef(translateType(left.getType), mangleName(l.getName)))
+                case l: Local => {}
+                case _ => throw new RuntimeException("Some identity type other than local being added to env struct")
               }
+              Eval(Assign(left, right))
+            }
           }
           case GAssignStmt(left: Local, GNewArray(typ: SootArrayType, size)) => {
-            symtab.locals -= Id(left.getName); symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, symtab, anonFuns)); TreeSeq()
+            symtab.locals -= Id(left.getName);
+            symtab.addArrayDef(typ.getElementType, Id(left.getName), translateExp(size, symtab, anonFuns));
+            TreeSeq()
           }
           case GAssignStmt(left: Local, right) => {
             // println(" Level 2::" + left.getName + " -> " + right)
-              right match {
-                // BBArray.ofDim
-                case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
-                  println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
-                  Kernel.localArgs.add((left.getName, left.getType, Kernel.blocks))
-                  val fieldType = translateType(left.getType) match {
-                    case ft: StructType => StructType("l_" + mangleName(ft.name))
-                    case x => x
-                  }
-                  envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
-                  TreeSeq()
+            right match {
+              // BBArray.ofDim
+              case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
+                println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
+                Kernel.localArgs.add((left.getName, left.getType, Kernel.blocks))
+                val fieldType = translateType(left.getType) match {
+                  case ft: StructType => StructType("l_" + mangleName(ft.name))
+                  case x => x
                 }
-                // Array.ofDim
-                case GCast(GVirtualInvoke(_, method, args), typ) => {
-                  args.head match {
-                    case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
-                      // println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
-                      Kernel.localArgs.add((left.getName, typ, Kernel.blocks))
-                      val fieldType = translateType(typ) match {
-                        case ft: StructType => StructType("l_" + mangleName(ft.name))
-                        case x => x
-                      }
-                      envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
-                      TreeSeq()
-                    }
-                    case _ => TreeSeq()
-                  }
-                }
-                case _ => Eval(Assign(left, right))
+                envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
+                TreeSeq()
               }
+              // Array.ofDim
+              case GCast(GVirtualInvoke(_, method, args), typ) => {
+                args.head match {
+                  case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
+                    // println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
+                    Kernel.localArgs.add((left.getName, typ, Kernel.blocks))
+                    val fieldType = translateType(typ) match {
+                      case ft: StructType => StructType("l_" + mangleName(ft.name))
+                      case x => x
+                    }
+                    envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
+                    TreeSeq()
+                  }
+                  case _ => TreeSeq()
+                }
+              }
+              case _ => Eval(Assign(left, right))
+            }
           }
           case GAssignStmt(left, right) => Eval(Assign(left, right))
 
@@ -1957,97 +1926,54 @@ object JVM2CL {
             Kernel.level = 3;
             // return List(TreeSeq())
             CLReturn
-          } 
+          }
           case GReturnVoid() => CLReturn
           case GReturn(returned) if Kernel.level == 2 => {
             // println(" Changing to Level 3 ")
             Kernel.level = 3;
             // return List(TreeSeq())
             CLReturn
-          } 
+          }
           case GReturn(returned) => returned match {
             // TODO: Maybe remove this????
             case ni@GNewInvoke(closureTyp, closureMethod, closureArgs) => {
-            /*
-              if (Kernel.level == 1) {
-                println("Changing to Level 2")
-                Kernel.level = 2
-              }
-            */
-                for (i <- 0 until closureArgs.length) {
-                  closureArgs(i) match {
-                    case GInstanceFieldRef(instBase, fieldRef) => { 
-                      // println(" Global Variable from inst field ref " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
-                      Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
-                      envstructs.addStruct(ValueType("kernel"))
-                      val fieldType = translateType(fieldRef.`type`, i) match {
-                        case ft: StructType => StructType("g_" + mangleName(ft.name))
-                        case x => x
-                      }
-                      envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
+              for (i <- 0 until closureArgs.length) {
+                closureArgs(i) match {
+                  case GInstanceFieldRef(instBase, fieldRef) => {
+                    // println(" Global Variable from inst field ref " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
+                    Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`, i))
+                    envstructs.addStruct(ValueType("kernel"))
+                    val fieldType = translateType(fieldRef.`type`, i) match {
+                      case ft: StructType => StructType("g_" + mangleName(ft.name))
+                      case x => x
                     }
-                    case GStaticInvoke(SMethodRef(SClassName(_), name, _, _, _), args) => {
-                      for (j <- args) {
-                        j match {
-                          case GInstanceFieldRef(instBase, fieldRef) => { 
-                            // println(" Global Variable from static invoke with instance field ref arg " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
-                            Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
-                            envstructs.addStruct(ValueType("kernel"))
-                            val fieldType = translateType(fieldRef.`type`, i) match {
-                              case ft: StructType => StructType("g_" + mangleName(ft.name))
-                              case x => x
-                            }
-                            envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
-                          }
-                          case _ => {}
-                        }
-                      }
-                    }
-                    case _ => {}
+                    envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
                   }
+                  case GStaticInvoke(SMethodRef(SClassName(_), name, _, _, _), args) => {
+                    for (j <- args) {
+                      j match {
+                        case GInstanceFieldRef(instBase, fieldRef) => {
+                          // println(" Global Variable from static invoke with instance field ref arg " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
+                          Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`, i))
+                          envstructs.addStruct(ValueType("kernel"))
+                          val fieldType = translateType(fieldRef.`type`, i) match {
+                            case ft: StructType => StructType("g_" + mangleName(ft.name))
+                            case x => x
+                          }
+                          envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
+                        }
+                        case _ => {}
+                      }
+                    }
+                  }
+                  case _ => {}
                 }
-//                return List(TreeSeq())
-//              }
-             
-            // println("closureType = " + closureTyp.toString + " closureMethod = " + closureMethod.name)
-            CLReturn
+              }
+
+              // println("closureType = " + closureTyp.toString + " closureMethod = " + closureMethod.name)
+              CLReturn
               //translateExp(ni, symtab, anonFuns)
 
-/*
-              val applyMethods = closureTyp.getSootClass.getMethods.filter(mn => mn.getName.equals("apply"))
- 
-              for (applyMethod <- applyMethods) {
-                println("Found apply method: " + applyMethod.getSignature)
-              }
-
-
-              var fd: FunDef = null
-              if (applyMethods.length > 0)
-                fd = compileMethod(applyMethods.head, symtab.level + 1, false, anonFuns)
-              else
-                fd = compileMethod(closureMethod.resolve, symtab.level + 1, false, anonFuns)
-
-              // Add closure formals to calling function params
-              symtab.addInlineParams(fd.formals.map(p => p match {
-                case Formal(StructType(s), name) if s.endsWith("Array") => Formal(StructType("l" + s.substring(1)), name)
-                case x => x
-              }))
-
-              // Add closure function to worklist that takes ENV struct
-              worklist += CompileMethodTree(FunDef(fd.typ, fd.name, Formal(PtrType(StructType(symtab.methodName + "_EnvX")), Id("this")) :: fd.formals.map(f =>
-                f match {
-                  case Formal(StructType(s), name) if s.endsWith("Array") => Formal(StructType("l" + s.substring(1)), name)
-                  case x => x
-                }), fold({
-                case StructType(s) if s.endsWith("Array") => StructType("l" + s.substring(1))
-                case t => t
-              })(fd.body)))
-
-              envstructs.structs += ValueType(symtab.methodName + "_EnvX") -> List(StructDef(Id(symtab.methodName + "_EnvX"), closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => VarDef(translateType(ca.getType), Id(mangleName(ca.asInstanceOf[Local].getName))))))
-
-              TreeSeq(VarDef(StructType(symtab.methodName + "_EnvX"), Id("this")) :: closureArgs.filter(ca => ca.isInstanceOf[Local]).map(ca => Assign(Select(Id("this"), Id(mangleName(ca.asInstanceOf[Local].getName))), Id(mangleName(ca.asInstanceOf[Local].getName)))) :::
-                List(ClosureCall(Id(mangleName(closureTyp.toString) + "apply"), Ref(Id("this")) :: fd.formals.map(fp => Id(fp.asInstanceOf[Formal].name + "_c")))))
-              */
             }
 
             case GVirtualInvoke(base, method, args) => translateExp(returned, symtab, anonFuns)
@@ -2088,17 +2014,19 @@ object JVM2CL {
           case GLookupSwitchStmt(key: Local, lookupVals: List[Value], targets: List[Stmt], defaultTarget) => {
             val valsWithTargets: List[(Value, SootUnit)] = lookupVals.zip(targets)
             Switch(translateExp(key, symtab, anonFuns), valsWithTargets.map(vt => Case(translateExp(vt._1, symtab, anonFuns), GoTo(translateLabel(vt._2, symtab)))) ::: List(Default(GoTo(translateLabel(defaultTarget, symtab)))))
-            // Switch(Id(key.getName), valsWithTargets.map(vt => Case(translateExp(vt._1, anonFuns), TreeSeq(translateUnits(List(vt._2), Nil)))) ::: List(Default(TreeSeq(translateUnits(List(defaultTarget), Nil)))))
-            //Id("switch unsupported")
           }
           // IGNORE
           case GThrow(op) => Id("throw unsupported")
           case GExitMonitor(op) => Id("monitors unsupported")
           case GEnterMonitor(op) => Id("monitors unsupported")
 
-          case GStaticInvoke(method, args) => { /* println("GstaticInvoke::" + method + "::" + args); */ args.map(a => translateExp(a, symtab, anonFuns)).head }
+          case GStaticInvoke(method, args) => {
+            args.map(a => translateExp(a, symtab, anonFuns)).head
+          }
 
-          case _ => { println("huh " + u); Id("unsupported: " + u) }
+          case _ => {
+            println("huh " + u); Id("unsupported: " + u)
+          }
         }
 
         translateUnits(us, result ::: List[Tree](tree), symtab, anonFuns)
@@ -2138,25 +2066,10 @@ object JVM2CL {
 
           val classesInPkg = getClassesInPackage(t.getSootClass.getPackageName)
 
-          for (c <- classesInPkg) {
-            // println("Class found: " + c.getName + ", adding to Scene")
-            // Scene.v.addBasicClass(c.getName, SootClass.HIERARCHY)
-            //Scene.v.loadBasicClasses
-            //for (m <- Scene.v.loadClass(c.getName, SootClass.HIERARCHY).methodIterator)
-            //  println(c.getName + " has method " + m.getName)
-            // Scene.v.loadClass(c.getName, SootClass.HIERARCHY)
-            
-            // Scene.v.addBasicClass(c.getName, SootClass.SIGNATURES)
-           
-            
-            // Scene.v.tryLoadClass(c.getName, SootClass.HIERARCHY)
-            // Scene.v.tryLoadClass(c.getName, SootClass.SIGNATURES)
-            // Scene.v.tryLoadClass(c.getName, SootClass.BODIES)
-            Scene.v.forceResolve(c.getName, SootClass.BODIES) 
-            // soot.SootResolver.v.resolveClass(c.getName, SootClass.SIGNATURES) 
-          }
+          for (c <- classesInPkg)
+            Scene.v.forceResolve(c.getName, SootClass.BODIES)
 
-          val H = Scene.v.getActiveHierarchy          
+          val H = Scene.v.getActiveHierarchy
 
           val queue = new Queue[SootClass]()
           queue += t.getSootClass
@@ -2180,16 +2093,7 @@ object JVM2CL {
               result += c
             }
 
-            // queue ++= H.getDirectSubclassesOf(c).asInstanceOf[java.util.List[SootClass]]toList
-            // println("Getting subclasses of " + c.getName + " through package name " + c.getPackageName)
-
-
             queue ++= H.getSubclassesOf(c).asInstanceOf[java.util.List[SootClass]].toList
-
-            /*
-            for (i <- queue)
-              println("Subclass found: " + i)
-            */
           }
 
           if (result.isEmpty)
@@ -2210,10 +2114,6 @@ object JVM2CL {
     if (takesThis)
       paramTree += Formal(symtab.thisParam._2, symtab.thisParam._1)
 
-    /*
-    if (symtab.params.size == 0)
-      println("\n\n PARAM SIZE of " + mangleName(m.getDeclaringClass.getName + m.getName) + " is 0\n\n")
-    */
 
     for (i <- 0 until symtab.params.size /* m.getParameterCount */ ) {
       symtab.params.get(i) match {
@@ -2225,7 +2125,6 @@ object JVM2CL {
     // Check "this" position for group or item struct types to add appropriate formals 
     paramTree.headOption match {
       case Some(Formal(PtrType(StructType("firepile_Group")), _)) => {
-        // println("THIS IS THE Group Method")
         paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
         varTree += ArrayDef(Id("_item_desc"), StructType("firepile_Item"), IntLit(kernelDim))
         for (i <- 0 until kernelDim) {
@@ -2243,7 +2142,7 @@ object JVM2CL {
       case _ => {}
     }
 
-    if (symtab.kernelMethod) { 
+    if (symtab.kernelMethod) {
       for (i <- Kernel.globalArgs) {
         val (t: Tree, s: String) = translateType("global", i._2, i._1, i._3)
         paramTree += Formal(t, s)
@@ -2253,12 +2152,12 @@ object JVM2CL {
         val (t: Tree, s: String) = translateType("local", i._2, i._1, -1)
         paramTree += Formal(t, s)
       }
-      
+
       // println("#### globalArgs = " + Kernel.globalArgs.length)
       // println("#### localArgs = " + Kernel.localArgs.length)
     }
 
-    
+
 
     for ((id: Id, typ: Tree) <- symtab.locals)
       varTree += VarDef(typ, id)
@@ -2319,12 +2218,12 @@ object JVM2CL {
         var _class: java.lang.Class[_] = null
 
         try {
-          _class = java.lang.Class.forName(pkgName + "." + fileName.substring(0, fileName.length-6))
+          _class = java.lang.Class.forName(pkgName + "." + fileName.substring(0, fileName.length - 6))
         }
         catch {
           case e: ExceptionInInitializerError => {
-       	  _class = java.lang.Class.forName(pkgName + '.' + fileName.substring(0, fileName.length-6),
-            false, Thread.currentThread.getContextClassLoader)
+            _class = java.lang.Class.forName(pkgName + '.' + fileName.substring(0, fileName.length - 6),
+              false, Thread.currentThread.getContextClassLoader)
           }
         }
         classes += _class

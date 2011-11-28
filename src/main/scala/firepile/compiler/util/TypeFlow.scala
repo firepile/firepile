@@ -38,7 +38,7 @@ object TypeFlow {
   def main(args: Array[String]) = {
     if (args.length != 2) {
       println("usage: TypeFlow className methodSig")
-      exit(1)
+      sys.exit(1)
     }
 
     var className = args(0)
@@ -375,9 +375,11 @@ object TypeFlow {
         case NamedTyp(n: String) => matchBasicType(n)
         case InstTyp(base: NamedTyp, args: List[NamedTyp]) if base.name == "scala.Array" => "[" + matchBasicType(args.head.name)
         case InstTyp(base: NamedTyp, _) => matchBasicType(base.name)
+        case _ => "NULL"
       }).mkString + ")" + matchBasicType(method.returnScalaType match {
                                   case NamedTyp(name) => name
-                                  case InstTyp(NamedTyp(name), _) => name })
+                                  case InstTyp(NamedTyp(name), _) => name
+                                  case _ => "NULL"})
 
     }
 
@@ -447,6 +449,7 @@ object TypeFlow {
       case NamedTyp(name) => getSupertypes(getScalaSignature(name))
       case InstTyp(base, _) => getSupertypes(base)
       case ParamTyp(name, vr) => List(new ParamTyp(name, vr), new ParamTyp("scala.Any", vr))
+      case _ => throw new RuntimeException("ScalaTyp not matched")
     }
 
     def getSupertypes(bottom: List[ScalaClassDef]): List[ScalaType] = {
@@ -501,7 +504,8 @@ object TypeFlow {
                                                     case _ => false }) match {
                                                       case Some(t) => t._2
                                                       case None => s 
-                                                    } 
+                                                    }
+            case _ => throw new RuntimeException("ScalaTyp not matched")
           }
 
         def matchFormalToActual(t: ScalaType) = t match {
@@ -528,6 +532,7 @@ object TypeFlow {
           case x: NamedTyp => typ2 match {
             case y: NamedTyp => commonAncestor(typ1 :: getSupertypes(x), typ2 :: getSupertypes(y.name))
             case InstTyp(base: NamedTyp, args: List[ScalaType]) => lub(x, base)
+            case _ => throw new RuntimeException("ScalaType not matched")
           }
           case InstTyp(base1: NamedTyp, args1: List[ScalaType]) => typ2 match {
             case y: NamedTyp => lub(base1, y)
@@ -555,13 +560,16 @@ object TypeFlow {
               superTypeMatchingArgs match {
                 case InstTyp(base, args) => new InstTyp(base, argPairs.map(na => na._2))
                 case x: NamedTyp => x
+                case _ => throw new RuntimeException("ScalaType not matched")
               }
             }
+            case _ => throw new RuntimeException("ScalaType not matched")
           }
           case ParamTyp(name: String, typVar: TYPEVARIANT) => typ2 match {
             case y: NamedTyp => lub(y, typ1)
             case y: InstTyp => lub(y, typ1)
             case y: ParamTyp => if(name.equals(y.name)) return y else commonAncestor(getSupertypes(typ1), getSupertypes(y))
+            case _ => throw new RuntimeException("ScalaType not matched")
           }
           case _ => typ1
         }
@@ -593,10 +601,12 @@ object TypeFlow {
     val matching = (getScalaSignature(base.asInstanceOf[NamedTyp].name).head.scalatype :: getSupertypes(base)).find(st => st match {
       case InstTyp(base, scArgs) => { println("scArgs = " + scArgs); (scArgs zip args).filter(s => s._1 == s._2).length == scArgs.length }
       case x: NamedTyp => true
+      case _ => throw new RuntimeException("ScalaType not matched")
     })
    
     println("getSupertypeWithMatchingArgs(" + base + ", " + args + ") = " + matching)
-    matching match { case Some(x: ScalaType) => x }
+    matching match { case Some(x: ScalaType) => x
+                     case None => throw new RuntimeException("ScalaType not matched")}
   }
 
   private def distinct[A](list: List[A]): List[A] = list.reverse.distinct.reverse 

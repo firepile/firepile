@@ -1,12 +1,17 @@
 package firepile
 
+
+
 import firepile.util.BufferBackedArray._
-import firepile.Marshaling._
-import firepile.Spaces._
 import firepile.tree.Trees._
 import firepile.Implicits._
 
 import soot.{Type => SootType}
+
+import com.nativelibs4java.opencl.JavaCL
+import com.nativelibs4java.opencl.library.OpenCLLibrary._
+import com.nativelibs4java.util.JNAUtils.toNS
+import com.sun.jna.Native
 
 import com.nativelibs4java.opencl.CLMem
 import com.nativelibs4java.opencl.CLKernel
@@ -14,8 +19,6 @@ import com.nativelibs4java.opencl.CLEvent
 import com.nativelibs4java.opencl.CLByteBuffer
 
 import compiler.JVM2CL.compileRoot
-import compiler.JVM2CL.compileMethod
-import compiler.JVM2CL.mangleName
 import compiler.JVM2CL.methodName
 
 import java.util.ArrayList
@@ -24,12 +27,6 @@ import scala.collection.JavaConversions._
 
 import scala.collection.mutable.ArrayBuffer
 import firepile.Marshaling._
-
-import com.nativelibs4java.opencl.JavaCL
-import com.nativelibs4java.opencl.library.OpenCLLibrary
-import com.nativelibs4java.opencl.library.OpenCLLibrary._
-import com.nativelibs4java.util.JNAUtils.toNS
-import com.sun.jna.Native
 
 // TODO: remove most of this.
 
@@ -61,38 +58,16 @@ object Compiler {
 
       case Some(x: java.lang.reflect.Method) => {
         Some((methodName(x), compileRoot(src.getClass.getName, Compiler.signature(x), argMarshals, dev).reverse))
-/*
-        compileMethod(src.getClass.getName, Compiler.signature(x))
-        val lMethod = findLocalMethod(src.getClass.getName)
-
-        lMethod match {
-          case Some((x: java.lang.reflect.Method, cname2: String)) => {
-            compileMethod(cname2, Compiler.signature(x))
-            val kernelMethod = findKernelMethod(cname2)
-            kernelMethod match {
-              case Some((x: java.lang.reflect.Method, cname3: String)) => {
-                return Some((methodName(x), compileRoot(cname3, Compiler.signature(x)).reverse))
-              }
-              case None => { println(" Not able to find the Kernel Code !!!"); return None }
-            }
-          }
-          case None => { println(" Not able to find the method with Local variables !!!"); return None }
-        }
-*/
       }
       case None => { println(" Not able to find the method with Global variables !!!"); return None }
     }
-    //treeList.add(compileRoot(k3.getName, Compiler.signature(m)).reverse)
 
   }
 
   def findGlobalMethod(cname1: String, arity: Int): Option[java.lang.reflect.Method] = {
-    println("findGlobalMethod start")
     val k1 = Class.forName(cname1)
     for (m <- k1.getDeclaredMethods) {
-      //println(" m.getName::" + m.getName + "  :: arity::" + m.getParameterTypes.length)
-      // println(" return type name::" + m.getReturnType.getName)
-      if (m.getReturnType.getName.startsWith("scala.Tuple" + arity)) {
+      if (m.getReturnType.getName.startsWith("scala.Tuple" + arity)) {  // Should no longer be needed
         return Some(m)
       }
     }
@@ -101,8 +76,6 @@ object Compiler {
   }
 
   def findLocalMethod(c1: String): Option[(java.lang.reflect.Method, String)] = {
-    println("findLocalMethod start")
-
     var i = 1
     while (true) {
       try {
@@ -116,15 +89,13 @@ object Compiler {
               return Some((m, cname))
         }
       } catch {
-        case e: ClassNotFoundException => { if (i >= 100) return (None) }
-        case e: SecurityException => { if (i >= 100) return (None) }
-        //case  _ => {println(" General Exception"); if(i>=100) return(None) } 
+        case e: ClassNotFoundException => { if (i >= 100) return None }
+        case e: SecurityException => { if (i >= 100) return None }
 
       }
       i += 1
     }
 
-    //println("findLocalMethod end")
     None
   }
 
@@ -146,9 +117,8 @@ object Compiler {
         }
 
       } catch {
-        case e: ClassNotFoundException => { if (i >= 100) return (None) }
-        case e: SecurityException => { if (i >= 100) return (None) }
-        //case  _ => {if(i>=100) return(None)} 
+        case e: ClassNotFoundException => { if (i >= 100) return None }
+        case e: SecurityException => { if (i >= 100) return None }
 
       }
       i += 1
@@ -661,16 +631,6 @@ object Compiler {
       }, "From GPU")
 
   }
-/*
-  def get[A,B,C](t: Tuple3[A,B,C], i: Int) = {
-    i match {
-      case 0 => t._1 
-      case 1 => t._2
-      case 2 => t._3
-      case _ => println(" Wrong Index !!!"); null
-   }
-  }
-*/
  
 
   def compileNew[A1, A2, A3, A4](a: A1, b: A2, c: A3, d: A4, kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], dev: Device) = {
@@ -760,101 +720,8 @@ object Compiler {
   }
 
   def compileNew[A1, A2, A3, A4, A5](a: A1, b: A2, c: A3, d: A4, e: A5, kernName: String, tree: String)(implicit ma1: Marshal[A1], ma2: Marshal[A2], ma3: Marshal[A3], ma4: Marshal[A4], ma5: Marshal[A5], dev: Device) = {
-
-/*
-    val transA1 = implicitly[Marshal[A1]]
-    val transA2 = implicitly[Marshal[A2]]
-    val transA3 = implicitly[Marshal[A3]]
-    val transA4 = implicitly[Marshal[A4]]
-    val transA5 = implicitly[Marshal[A5]]
-    val sizeA1 = transA1.sizes(1).head
-    val sizeA2 = transA2.sizes(1).head
-    val sizeA3 = transA3.sizes(1).head
-    val sizeA4 = transA4.sizes(1).head
-    val sizeA5 = transA5.sizes(1).head
-*/
     val kernBin = firepile.gpu.buildProgramSrc(kernName, tree)
-/*
-    var bufA1: ByteBuffer = transA1.toBuffer(a).head
-    var bufA2: ByteBuffer = null
-    var bufA3: ByteBuffer = null
-    var bufA4: ByteBuffer = null
-    var bufA5: ByteBuffer = null
-    var bufA1CLBuf: CLByteBuffer = null
-    var bufA2CLBuf: CLByteBuffer = null
-    var bufA3CLBuf: CLByteBuffer = null
-    var bufA4CLBuf: CLByteBuffer = null
-    var bufA5CLBuf: CLByteBuffer = null
 
-    time({
-      bufA2 = transA2.toBuffer(b).head
-      bufA3 = transA3.toBuffer(c).head
-      bufA4 = transA4.toBuffer(d).head
-      bufA5 = transA5.toBuffer(e).head
-
-      bufA2CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA2, true)
-      bufA3CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA3, true)
-      bufA4CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA4, true)
-      bufA5CLBuf = dev.context.createByteBuffer(CLMem.Usage.Input, bufA5, true)
-    }, "Copy to GPU")
-
-    val numItemsA1 = transA1.sizes(a).head / sizeA1
-    val numItemsA2 = transA2.sizes(b).head / sizeA2
-    val numItemsA3 = transA3.sizes(c).head / sizeA3
-    val numItemsA4 = transA4.sizes(d).head / sizeA4
-    val numItemsA5 = transA5.sizes(e).head / sizeA5
-    val bufA1capacity = transA1.sizes(a).head
-
-    bufA1CLBuf = dev.context.createByteBuffer(CLMem.Usage.Output, bufA1capacity)
-
-    // println("Output buffer capacity: " + bufA1capacity)
-
-    val threads = (if (numItemsA2 < dev.maxThreads * 2) scala.math.pow(2, scala.math.ceil(scala.math.log(numItemsA2) / scala.math.log(2))) else dev.maxThreads).toInt
-
-    // START TIMING CODE
-
-    time({
-      kernBin.setArg(0, bufA1CLBuf) // InvalidArgSize when passing straight ByteBuffer but ok with CLByteBuffer
-      kernBin.setArg(1, bufA2CLBuf)
-      kernBin.setArg(2, bufA3CLBuf)
-      if (!Kernel.globalArgs.get(3)._2.equals("int"))
-        kernBin.setArg(3, bufA4CLBuf)
-      else
-        kernBin.setArg(3, d.asInstanceOf[Int])
-      if (!Kernel.globalArgs.get(3)._2.equals("int"))
-        kernBin.setArg(3, bufA4CLBuf)
-      else
-        kernBin.setArg(4, e.asInstanceOf[Int])
-
-      //kernBin.setLocalArg(3, threads * sizeA1)
-
-      if (dev.memConfig == null) {
-
-        println(" Dev memConfig is null")
-        // kernBin.setLocalArg(3, threads * sizeA1)
-        kernBin.enqueueNDRange(dev.queue, Array[Int](numItemsA1 * threads), Array[Int](threads))
-      } else {
-
-        // println(" Setting default arguments ")
-        // kernBin.setLocalArg(3, dev.memConfig.localMemSize * sizeA2)
-        kernBin.enqueueNDRange(dev.queue, Array[Int](dev.memConfig.globalSize), Array[Int](dev.memConfig.localSize))
-      }
-
-      //kernBin.enqueueNDRange(dev.queue, Array[Int](threads * numItemsA1 ), Array[Int](threads))
-      dev.queue.finish
-    }, "GPU", numIterations)
-
-    val bufOut = allocDirectBuffer(bufA1capacity)
-
-    time({
-      bufA1CLBuf.read(dev.queue, bufOut, true)
-
-      bufOut.rewind
-
-      // [NN] maybe need to copy?  but, probably not
-      Array.copy(transA1.fromBuffer(List(bufOut)).asInstanceOf[AnyRef], 0, a.asInstanceOf[AnyRef], 0, numItemsA1)
-    }, "From GPU")
-  */
     a
   }
 
@@ -1121,92 +988,9 @@ object Compiler {
   // val k2 = dev.compile( ... GPUArray.blockReduce(.., _+_) )
   // 
 
-  /*
-  @Deprecated
-  def f2bbarrayMapk1[A,B](f: A => B)(implicit ma: FixedSizeMarshal[A], mb: FixedSizeMarshal[B], dev: Device): BBArrayMapKernel1[A,B] = {
-    val kernelName = freshName("theKernel")
-    val src = compileMapKernel1(f, kernelName)
-    println(src)
-    implicit val Ma = ma.manifest
-    implicit val Mb = mb.manifest
-    implicit val ama = implicitly[BBArrayMarshal[A]]
-    implicit val amb = implicitly[BBArrayMarshal[B]]
-    val kernel = dev.compile1[BBArray[A], BBArray[B]](kernelName, src,
-                                                         new SimpleArrayDist1[BBArray[A]],
-                                                         new SimpleGlobalArrayEffect1[B,BBArray[A]])
-    new BBArrayMapKernel1[A,B] {
-      def apply(a: BBArray[A]) = kernel(a)
-    }
-  }
-
-  @Deprecated
-  def f2bbarrayMapk2[A1,A2,B](f: (A1,A2) => B)(implicit ma1: FixedSizeMarshal[A1], ma2: FixedSizeMarshal[A2], mb: FixedSizeMarshal[B], dev: Device): BBArrayMapKernel2[A1,A2,B] = {
-    val kernelName = freshName("theKernel")
-    val src = compileMapKernel2(f, kernelName)
-    println(src)
-    implicit val Ma1 = ma1.manifest
-    implicit val Ma2 = ma2.manifest
-    implicit val Mb = mb.manifest
-    implicit val ama1 = implicitly[BBArrayMarshal[A1]]
-    implicit val ama2 = implicitly[BBArrayMarshal[A2]]
-    implicit val amb = implicitly[BBArrayMarshal[B]]
-    val kernel = dev.compile2[BBArray[A1], BBArray[A2], BBArray[B]](kernelName, src,
-                                                         new SimpleArrayDist2[BBArray[A1], BBArray[A2]],
-                                                         new SimpleGlobalArrayEffect2[B,BBArray[A1],BBArray[A2]])
-    new BBArrayMapKernel2[A1,A2,B] {
-      def apply(a1: BBArray[A1], a2: BBArray[A2]) = kernel(a1, a2)
-    }
-  }
-
-  @Deprecated
-  def f2bbarrayReducek1[A](f: (A,A) => A)(implicit ma: FixedSizeMarshal[A], dev: Device): BBArrayReduceKernel1[A] = {
-    val kernelName = freshName("theKernel")
-    val src = compileReduceKernel1(f, kernelName)
-    println(src)
-    implicit val ama = implicitly[BBArrayMarshal[A]]
-    val numThreads = 128 // dev.device.localMemSize.toInt / 4
-    println("numThreads = " + numThreads)
-    val d = new BlockArrayDist1[BBArray[A]](numThreads)
-    val e = new SimpleLocalArrayWithOutputEffect1[A,BBArray[A]](numThreads, numThreads * fixedSizeMarshal[A].size)
-    val kernel = dev.compile1[BBArray[A], BBArray[A]](kernelName, src, d, e)
-
-    new BBArrayReduceKernel1[A] {
-      def apply(a: BBArray[A]) = new Future[A] {
-
-        println(d(a))
-        println(e(a))
-
-        lazy val future: Future[BBArray[A]] = kernel(a).start
-        def run: Unit = future
-
-        def finish: A = {
-          val result = future.force
-          println("reduce result = " + result)
-          result.reduceLeft(f)
-        }
-      }
-    }
-  }
-
-  @Deprecated
-  def f2bbarrayLocalReducek1[A,B,L](f: BBArray[A] => GroupIndexed1[B] => (Id1, LocalIndexed1[L]) => Unit)(implicit ml: FixedSizeMarshal[L], ma: FixedSizeMarshal[A], mb: FixedSizeMarshal[B], dev: Device): BBArrayLocalReduceKernel1[A,B] = {
-    val kernelName = freshName("theKernel")
-    val src = compileReduceKernel1(f, kernelName)
-    println(src)
-    implicit val ama = implicitly[BBArrayMarshal[A]]
-    val numThreads = 128 // dev.device.localMemSize.toInt / 4
-    println("numThreads = " + numThreads)
-    val d = new BlockArrayDist1[BBArray[A]](numThreads)
-    // size of the local buffer is numThreads * sizeof(L)
-    val e = new SimpleLocalArrayWithOutputEffect1[B,BBArray[A]](numThreads, numThreads * fixedSizeMarshal[L].size)
-    val kernel = dev.compile1[BBArray[A], BBArray[B]](kernelName, src, d, e)
-    new BBArrayLocalReduceKernel1[A,B] {
-      def apply(a: BBArray[A]) = kernel(a)
-    }
-  }
-  */
 }
 
+/*
 object Compose {
   /*
   (x,y).zipWith(f).reduce(g)
@@ -1320,3 +1104,4 @@ object Compose {
     protected def kernelSrc(trees: List[Tree]): String
   }
 }
+*/

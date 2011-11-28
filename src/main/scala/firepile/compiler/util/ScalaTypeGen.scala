@@ -26,13 +26,13 @@ object ScalaTypeGen {
   def main(args: Array[String]) = {
     if (args.length != 1) {
       println("usage: ScalaTypeGen classname")
-      exit(1)
+      sys.exit(1)
     }
     val cdlist = getScalaSignature(args(0))
 
     if (cdlist == Nil) {
       println("Class Def List is null")
-      exit(1)
+      sys.exit(1)
     }
 
     printClassDef(cdlist)
@@ -57,9 +57,11 @@ object ScalaTypeGen {
 
     def getFormals(str: String): List[ScalaType] = sigToType(str) match {
       case MTyp(_, ts, _) => ts
+      case _ => null
     }
     def getReturn(str: String): ScalaType = sigToType(str) match {
       case MTyp(_, _, t) => t
+      case _ => null
     }
 
     def nameToClass(str: String) = str.replace('/', '.')
@@ -244,6 +246,7 @@ object ScalaTypeGen {
                   }.toList).filter(_.isInstanceOf[ScalaVarDef]))
               }
               case MyClassDef(innerModifiers: List[Modifier], innerName: String, innerClasstype: String, innerSelfType: Type, selfScalaType: ScalaType, innerFields: List[ScalaVarDef], innerChildren: List[MySymbol]) => innerClasses += getClassDef(child.asInstanceOf[MyClassDef]); null
+              case _ => null
             }
           }.toList).filter(_.isInstanceOf[ScalaMethodDef]), (selfType match {
             case TypeRefType(prefix: Type, symbol: Symbol, typeRefs: Seq[Type]) => typeRefs.map { i => scalaType(i) }.toList
