@@ -131,7 +131,7 @@ val sizeA2 = transA2.sizes(1).head
  */
 
   def spawnF[A, B, C](block: => (A, B, C))(implicit m1: Marshal[A], m2: Marshal[B], m3: Marshal[C], dev: Device, e: Function2[_,_,_] = null) = {
-    println("in Spawn3")
+    // println("in Spawn3")
     val fvals = block
     val fbody = () => block
   
@@ -144,9 +144,13 @@ val sizeA2 = transA2.sizes(1).head
     if (e != null) {
       f_in = implicitly[Function2[_,_,_]]
 
-      println("type of f is: " + whatIsTypeName(f_in))
+      // println("type of f is: " + whatIsTypeName(f_in))
 
-      closureTree = JVM2Reflect.compileRoot(whatIsTypeName(f_in), "apply", List(m1, m2, m3))
+      closureTree = JVM2Reflect.compileMethod(whatIsTypeName(f_in), "apply").map(t => firepile.tree.Reflect2CL.toCLTree(t)).filter(t => t.isInstanceOf[FunDef])
+      /*
+      for (ct <- closureTree)
+        println("CLOSURE TREE: " + ct)
+      */
     }
 
 
@@ -158,20 +162,21 @@ val sizeA2 = transA2.sizes(1).head
     
     case Some((kernName: String, treeList: List[Tree])) => {
                                                        val kernStr = new StringBuffer()
-                                                       // println(" name ::" + kernName + "::\n")
+                                                       // println("\n\n name ::" + kernName + "::\n")
                                                        for (t: Tree <- treeList.reverse)
                                                          kernStr.append(t.toCL)
                                                         
                                                        if (closureTree != null) {
                                                          val rewrittenClosureTree = closureTree match {
                                                            case FunDef(retType, name, params, body) :: Nil => FunDef(retType, Kernel.closureFName, params, body)
+                                                           case FunDef(retType, name, params, body) :: fs => FunDef(retType, Kernel.closureFName, params, body)
                                                            case _ => throw new RuntimeException("closureTree doesn't contain a FunDef")
                                                          }
 
                                                          kernStr.append(rewrittenClosureTree.toCL)
                                                        }
 
-                                                       println("Final kernel code: \n" + kernStr.toString)
+                                                       // println("Final kernel code: \n" + kernStr.toString)
                                                        
                                                        
                                                        firepile.Compiler.compileNew(fvals,kernName,kernStr.toString, dev) //(m1,m2,m3,dev) 

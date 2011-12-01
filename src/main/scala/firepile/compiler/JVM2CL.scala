@@ -35,44 +35,44 @@ import soot.grimp.internal.GVirtualInvokeExpr
 import soot.grimp.internal.{GInstanceFieldRef => SootGInstanceFieldRef}
 import soot.{Type => SootType}
 import soot.jimple.Stmt
-import soot.{VoidType => SootVoidType}
-import soot.{BooleanType => SootBooleanType}
-import soot.{ByteType => SootByteType}
-import soot.{ShortType => SootShortType}
-import soot.{CharType => SootCharType}
-import soot.{IntType => SootIntType}
-import soot.{LongType => SootLongType}
-import soot.{FloatType => SootFloatType}
-import soot.{DoubleType => SootDoubleType}
-import soot.{RefType => SootRefType}
-import soot.{ArrayType => SootArrayType}
-import soot.{NullType => SootNullType}
+import soot.{ VoidType => SootVoidType }
+import soot.{ BooleanType => SootBooleanType }
+import soot.{ ByteType => SootByteType }
+import soot.{ ShortType => SootShortType }
+import soot.{ CharType => SootCharType }
+import soot.{ IntType => SootIntType }
+import soot.{ LongType => SootLongType }
+import soot.{ FloatType => SootFloatType }
+import soot.{ DoubleType => SootDoubleType }
+import soot.{ RefType => SootRefType }
+import soot.{ ArrayType => SootArrayType }
+import soot.{ NullType => SootNullType }
 
 import firepile.compiler.util.TypeGen.getSignature
 import firepile.compiler.util.ScalaTypeGen
 import firepile.compiler.util.ScalaTypeGen.{
-getScalaSignature,
-getScalaJavaSignature,
-printClassDef
+  getScalaSignature,
+  getScalaJavaSignature,
+  printClassDef
 }
 import firepile.compiler.util.JavaTypeGen.getJavaSignature
 import firepile.compiler.util.ClassDefs.{
-ScalaClassDef,
-ScalaVarDef,
-NamedTyp,
-InstTyp
+  ScalaClassDef,
+  ScalaVarDef,
+  NamedTyp,
+  InstTyp
 }
 import firepile.compiler.util.TypeFlow.getSupertypes
 import firepile.tree.Trees._
 import firepile.Kernel
-import firepile.tree.Trees.{Return => CLReturn, Seq => TreeSeq}
+import firepile.tree.Trees.{ Return => CLReturn, Seq => TreeSeq, ArrayDef => CLArrayDef }
 import scala.Seq
 import soot.jimple.{
-FloatConstant,
-DoubleConstant,
-IntConstant,
-LongConstant,
-StringConstant
+  FloatConstant,
+  DoubleConstant,
+  IntConstant,
+  LongConstant,
+  StringConstant
 }
 import firepile.compiler.GrimpUnapply._
 import firepile.Marshaling._
@@ -104,7 +104,7 @@ object JVM2CL {
   private val makeCallGraph = true
   private var activeHierarchy: Hierarchy = null
   private var ids = Array(false, false, false)
-  private var argsByIndex = new ListBuffer[(Boolean, Tree)]()
+  private var argsByIndex = new ListBuffer[(Boolean,Tree)]()
 
   setup
 
@@ -119,8 +119,8 @@ object JVM2CL {
         case bbm: BBArrayMarshal[_] => {
           argsByIndex += Tuple2(true, translateType(bbm.fixedSizeMarshalMM.manifest.toString))
         }
-        case fsm: {def fixedSizeMarshalMM: FixedSizeMarshal[_]} => argsByIndex += Tuple2(false, translateType(fsm.fixedSizeMarshalMM.manifest.toString))
-        case x => {}
+        case fsm: { def fixedSizeMarshalMM: FixedSizeMarshal[_] } => argsByIndex += Tuple2(false, translateType(fsm.fixedSizeMarshalMM.manifest.toString))
+        case x => { }
       }
     }
 
@@ -135,10 +135,10 @@ object JVM2CL {
       val proc = processWorklist
       // println("after process work list")
 
-
+     
       println("Result CL:")
       for (t <- proc) println(t.toCL)
-
+      
 
       proc
     } catch {
@@ -1100,13 +1100,13 @@ object JVM2CL {
         // These are just here as examples for matching Array.ofDim.  We need a realy strategy for translating newarray.
 
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "ofDim", _, _, _),
-        List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Int", _, _, _), Nil))) =>
+          List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Int", _, _, _), Nil))) =>
           Call(Id("newIntArray"), List[Tree](size))
 
         case GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "ofDim", _, _, _),
-        List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Float", _, _, _), Nil))) =>
+          List(size, GVirtualInvoke(GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)), SMethodRef(_, "Float", _, _, _), Nil))) =>
           Call(Id("newFloatArray"), List[Tree](size))
-
+        
         /* case UnboxCall(t) => t */
         case TupleSelect(t) => t
 
@@ -1115,12 +1115,12 @@ object JVM2CL {
 
         // Predef$.MODULE$.floatWrapper(x).abs()
         case GVirtualInvoke(
-        GVirtualInvoke(
-        GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)),
-        SMethodRef(_, "floatWrapper", _, _, _),
-        List(value)),
-        SMethodRef(_, "abs", _, _, _),
-        Nil) =>
+          GVirtualInvoke(
+          GStaticFieldRef(SFieldRef(_, "MODULE$", _, _)),
+          SMethodRef(_, "floatWrapper", _, _, _),
+          List(value)),
+          SMethodRef(_, "abs", _, _, _),
+          Nil) =>
           Call(Id("fabs"), List[Tree](value))
 
         // (float) scala.math.sin((double) x)
@@ -1614,9 +1614,9 @@ object JVM2CL {
               // Handle accessing captured variables.  Assumes captured variable 'x' is 'this.x$1'
               // TODO: eliminate (if possible) the assumptions here about the naming conventions of variables.
               if (fieldRef.`type`.toString.startsWith("scala.Function")) {
-                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " in ")
+                println("======= LOOKING FOR fieldRef: " + fieldRef.name + " of type " + fieldRef.`type`.toString + " in ")
                 anonFuns.keys.foreach(k => print(k + " "))
-
+                
                 // REFLECT
                 /*
                                 anonFuns.get(fieldRef.name.takeWhile(_ != '$')) match {
@@ -1652,9 +1652,9 @@ object JVM2CL {
 
                 //} else Select(base, mangleName(fieldRef.name)) // TODO: punt
 
-
-              } else {
-                /* println(" mangled name::" + mangleName(fieldRef.name)); */ Id(mangleName(fieldRef.name))
+              } 
+              else { /* println(" mangled name::" + mangleName(fieldRef.name)); */ 
+                Id(mangleName(fieldRef.name)) 
               }
 
             }
@@ -1736,8 +1736,7 @@ object JVM2CL {
             /* classtab.addClass(new SootClass(fieldRef.`type`.toString));*/ Id("unimplemented:staticfield")
           }
 
-          case GInstanceFieldRef(base: Local, fieldRef) => {
-            /* classtab.addClass(new SootClass(base.getName)); */
+          case GInstanceFieldRef(base: Local, fieldRef) => { /* classtab.addClass(new SootClass(base.getName)); */
             //Select(Deref(base), mangleName(fieldRef.name))
             // println(" mangled Name::" + mangleName(fieldRef.name) + "  original::" + fieldRef.name)
             // Look up instance in environment
@@ -1797,15 +1796,15 @@ object JVM2CL {
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "globalId", _, _, _), args) => base match {
         case b: soot.grimp.internal.GInstanceFieldRef => {
           if (args.size > 0) {
-            return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
+            return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
           }
-          else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)), IntLit(0)), Id("globalId")))
+          else return Some(Select(ArrayAccess(Id(mangleName(b.getField.getName)),IntLit(0)), Id("globalId")))
         }
         case b: Local => {
           if (args.size > 0) {
-            return Some(Select(ArrayAccess(Id(b.getName), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
+            return Some(Select(ArrayAccess(Id(b.getName),Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("globalId")))
           }
-          else return Some(Select(ArrayAccess(Id(b.getName), IntLit(0)), Id("globalId")))
+          else return Some(Select(ArrayAccess(Id(b.getName),IntLit(0)), Id("globalId")))
         }
 
         case _ => throw new RuntimeException("Getting size of some unknown collection")
@@ -1813,25 +1812,24 @@ object JVM2CL {
       /*
       case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Item"), "id", _, _, _), args) => { println(" Got Item here::"); if (args.size > 0) return Some(Call(Id("get_local_id"), Id(translateExp(args.head, symtab, anonFuns).toCL))) else return Some(Select(Id("_item_desc"), Id("id"))) }
       */
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => {
-        /* println(" Got Group here::");*/
-        if (args.size > 0) {
-          val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
-          return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id")))
-        }
-        else
-          return Some(Select(ArrayAccess(Id("_group_desc"), IntLit(0)), Id("id")))
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "id", _, _, _), args) => { 
+          /* println(" Got Group here::");*/ 
+          if (args.size > 0) {
+            val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
+            return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("id"))) 
+          }
+          else 
+            return Some(Select(ArrayAccess(Id("_group_desc"),IntLit(0)) , Id("id"))) 
       }
-      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => {
-        /* println(" Got Group here::");*/
-        if (args.size > 0) {
-          val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
-          return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("size")))
-        }
-        else
-          return Some(Select(ArrayAccess(Id("_group_desc"), IntLit(0)), Id("size")))
+      case GVirtualInvoke(_, SMethodRef(SClassName("firepile.Group"), "size", _, _, _), args) => { 
+          /* println(" Got Group here::");*/ 
+          if (args.size > 0) {
+            val dim = translateExp(args.head, symtab, anonFuns).toCL.toInt
+            return Some(Select(ArrayAccess(Id("_group_desc"), Id(translateExp(args.head, symtab, anonFuns).toCL)), Id("size"))) 
+          }
+          else 
+            return Some(Select(ArrayAccess(Id("_group_desc"),IntLit(0)) , Id("size"))) 
       }
-
       case GVirtualInvoke(base, SMethodRef(SClassName("firepile.Item"), "size", _, _, _), args) => base match {
         case b: soot.grimp.internal.GInstanceFieldRef => return Some(Select(Deref(Id(mangleName(b.getField.getName))), Id("size")))
         case b: Local => return Some(Select(Deref(Id(b.getName)), Id("size")))
@@ -1886,36 +1884,36 @@ object JVM2CL {
           }
           case GAssignStmt(left: Local, right) => {
             // println(" Level 2::" + left.getName + " -> " + right)
-            right match {
-              // BBArray.ofDim
-              case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
-                println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
-                Kernel.localArgs.add((left.getName, left.getType, Kernel.blocks))
-                val fieldType = translateType(left.getType) match {
-                  case ft: StructType => StructType("l_" + mangleName(ft.name))
-                  case x => x
-                }
-                envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
-                TreeSeq()
-              }
-              // Array.ofDim
-              case GCast(GVirtualInvoke(_, method, args), typ) => {
-                args.head match {
-                  case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
-                    // println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
-                    Kernel.localArgs.add((left.getName, typ, Kernel.blocks))
-                    val fieldType = translateType(typ) match {
-                      case ft: StructType => StructType("l_" + mangleName(ft.name))
-                      case x => x
-                    }
-                    envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
-                    TreeSeq()
+              right match {
+                // BBArray.ofDim
+                case GVirtualInvoke(base, SMethodRef(_, "ofDim", _, _, _), _) => {
+                  println(" Setting local variable::" + left.getName + "::" + left.getType.toString + "::" + Kernel.blocks)
+                  Kernel.localArgs.add((left.getName, left.getType, Kernel.blocks))
+                  val fieldType = translateType(left.getType) match {
+                    case ft: StructType => StructType("l_" + mangleName(ft.name))
+                    case x => x
                   }
-                  case _ => TreeSeq()
+                  envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
+                  TreeSeq()
                 }
+                // Array.ofDim
+                case GCast(GVirtualInvoke(_, method, args), typ) => {
+                  args.head match {
+                    case GInterfaceInvoke(GVirtualInvoke(_, SMethodRef(_, "items", _, _, _), args), SMethodRef(_, "size", _, _, _), _) => {
+                      // println(" Setting local variable::" + left.getName + "::" + typ.toString + "::" + Kernel.blocks)
+                      Kernel.localArgs.add((left.getName, typ, Kernel.blocks))
+                      val fieldType = translateType(typ) match {
+                        case ft: StructType => StructType("l_" + mangleName(ft.name))
+                        case x => x
+                      }
+                      envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(left.getName)))
+                      TreeSeq()
+                    }
+                    case _ => TreeSeq()
+                  }
+                }
+                case _ => Eval(Assign(left, right))
               }
-              case _ => Eval(Assign(left, right))
-            }
           }
           case GAssignStmt(left, right) => Eval(Assign(left, right))
 
@@ -1926,53 +1924,51 @@ object JVM2CL {
             Kernel.level = 3;
             // return List(TreeSeq())
             CLReturn
-          }
+          } 
           case GReturnVoid() => CLReturn
           case GReturn(returned) if Kernel.level == 2 => {
             // println(" Changing to Level 3 ")
             Kernel.level = 3;
             // return List(TreeSeq())
             CLReturn
-          }
+          } 
           case GReturn(returned) => returned match {
             // TODO: Maybe remove this????
             case ni@GNewInvoke(closureTyp, closureMethod, closureArgs) => {
-              for (i <- 0 until closureArgs.length) {
-                closureArgs(i) match {
-                  case GInstanceFieldRef(instBase, fieldRef) => {
-                    // println(" Global Variable from inst field ref " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
-                    Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`, i))
-                    envstructs.addStruct(ValueType("kernel"))
-                    val fieldType = translateType(fieldRef.`type`, i) match {
-                      case ft: StructType => StructType("g_" + mangleName(ft.name))
-                      case x => x
+                for (i <- 0 until closureArgs.length) {
+                  closureArgs(i) match {
+                    case GInstanceFieldRef(instBase, fieldRef) => { 
+                      // println(" Global Variable from inst field ref " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
+                      Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
+                      envstructs.addStruct(ValueType("kernel"))
+                      val fieldType = translateType(fieldRef.`type`, i) match {
+                        case ft: StructType => StructType("g_" + mangleName(ft.name))
+                        case x => x
+                      }
+                      envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
                     }
-                    envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
-                  }
-                  case GStaticInvoke(SMethodRef(SClassName(_), name, _, _, _), args) => {
-                    for (j <- args) {
-                      j match {
-                        case GInstanceFieldRef(instBase, fieldRef) => {
-                          // println(" Global Variable from static invoke with instance field ref arg " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
-                          Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`, i))
-                          envstructs.addStruct(ValueType("kernel"))
-                          val fieldType = translateType(fieldRef.`type`, i) match {
-                            case ft: StructType => StructType("g_" + mangleName(ft.name))
-                            case x => x
+                    case GStaticInvoke(SMethodRef(SClassName(_), name, _, _, _), args) => {
+                      for (j <- args) {
+                        j match {
+                          case GInstanceFieldRef(instBase, fieldRef) => { 
+                            // println(" Global Variable from static invoke with instance field ref arg " + instBase + " :::" + fieldRef.name + ":::" + fieldRef.`type`.toString)
+                            Kernel.globalArgs.add((fieldRef.name, fieldRef.`type`,i))
+                            envstructs.addStruct(ValueType("kernel"))
+                            val fieldType = translateType(fieldRef.`type`, i) match {
+                              case ft: StructType => StructType("g_" + mangleName(ft.name))
+                              case x => x
+                            }
+                            envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
                           }
-                          envstructs.append(ValueType("kernel"), VarDef(fieldType, mangleName(fieldRef.name)))
+                          case _ => {}
                         }
-                        case _ => {}
                       }
                     }
+                    case _ => {}
                   }
-                  case _ => {}
                 }
-              }
 
-              // println("closureType = " + closureTyp.toString + " closureMethod = " + closureMethod.name)
               CLReturn
-              //translateExp(ni, symtab, anonFuns)
 
             }
 
@@ -2126,7 +2122,7 @@ object JVM2CL {
     paramTree.headOption match {
       case Some(Formal(PtrType(StructType("firepile_Group")), _)) => {
         paramTree += Formal(StructType("kernel_ENV"), Id("_this_kernel"))
-        varTree += ArrayDef(Id("_item_desc"), StructType("firepile_Item"), IntLit(kernelDim))
+        varTree += CLArrayDef(Id("_item_desc"), StructType("firepile_Item"), IntLit(kernelDim))
         for (i <- 0 until kernelDim) {
           varTree += Assign(Select(ArrayAccess(Id("_item_desc"), IntLit(i)), Id("id")), Call(Id("get_local_id"), IntLit(i)))
           varTree += Assign(Select(ArrayAccess(Id("_item_desc"), IntLit(i)), Id("size")), Call(Id("get_local_size"), IntLit(i)))
@@ -2142,7 +2138,7 @@ object JVM2CL {
       case _ => {}
     }
 
-    if (symtab.kernelMethod) {
+    if (symtab.kernelMethod) { 
       for (i <- Kernel.globalArgs) {
         val (t: Tree, s: String) = translateType("global", i._2, i._1, i._3)
         paramTree += Formal(t, s)
@@ -2165,7 +2161,7 @@ object JVM2CL {
     // kernel methods need to populate group/item structs, later these may become parts of 
     // environments of global and item
     if (symtab.kernelMethod) {
-      varTree += ArrayDef(Id("_group_desc"), StructType("firepile_Group"), IntLit(kernelDim))
+      varTree += CLArrayDef(Id("_group_desc"), StructType("firepile_Group"), IntLit(kernelDim))
       for (i <- 0 until kernelDim) {
         varTree += Assign(Select(ArrayAccess(Id("_group_desc"), IntLit(i)), Id("id")), Call(Id("get_group_id"), IntLit(i)))
         varTree += Assign(Select(ArrayAccess(Id("_group_desc"), IntLit(i)), Id("size")), Call(Id("get_global_size"), IntLit(i)))
@@ -2174,7 +2170,7 @@ object JVM2CL {
 
 
     for (((id: Id), (typ: Tree, size: IntLit)) <- symtab.arrays)
-      varTree += ArrayDef(id, typ, size)
+      varTree += CLArrayDef(id, typ, size)
 
     FunDef(translateType(m.getReturnType), Id(methodName(m)), paramTree.toList, (varTree.toList ::: result).toArray: _*)
   }
